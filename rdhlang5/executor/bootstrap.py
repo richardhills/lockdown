@@ -17,7 +17,11 @@ class ObjectDictWrapper(object):
         for k, v in data.items():
             self.__dict__[k] = v
 
-def create_root_flow_manager():
+def create_no_escape_flow_manager():
+    frame_manager = FrameManager()
+    return FlowManager(None, None, {}, frame_manager)
+
+def create_application_flow_manager():
     frame_manager = FrameManager()
     return FlowManager("exit", { "out": AnyType()}, {}, frame_manager, top_level=True)
 
@@ -27,9 +31,9 @@ def bootstrap_function(data, context=None, check_safe_exit=False):
     break_managers = defaultdict(list)
 
     with ExitStack() as stack:
-        break_manager = stack.enter_context(create_root_flow_manager())
-        function = prepare(data, context, break_manager)
+        function = prepare(data, context, create_no_escape_flow_manager())
 
+        break_manager = stack.enter_context(create_application_flow_manager())
         break_managers["exit"].append(break_manager)
 
         function_break_types = function.get_type().break_types

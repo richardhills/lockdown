@@ -52,20 +52,21 @@ class FlowManager(object):
         self.callback = callback
         self.top_level = top_level
 
-        if "out" not in our_break_types:
+        if our_break_types and "out" not in our_break_types:
             raise FatalError()
 
-        if "in" in our_break_types and not callback:
+        if our_break_types and "in" in our_break_types and not callback:
             raise FatalError()
 
         self._result = MISSING
         self._restart_continuation = MISSING
 
-        if not isinstance(our_break_types, dict):
+        if our_break_types and not isinstance(our_break_types, dict):
             raise FatalError()
 
         self.allowed_break_types = defaultdict(list, allowed_break_types)
-        self.allowed_break_types[our_break_mode].append(our_break_types)
+        if our_break_types:
+            self.allowed_break_types[our_break_mode].append(our_break_types)
 
     def start(self):
         if not self.callback:

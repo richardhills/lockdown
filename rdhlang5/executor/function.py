@@ -7,6 +7,7 @@ from rdhlang5_types.default_composite_types import DEFAULT_OBJECT_TYPE
 from rdhlang5_types.exceptions import FatalError
 from rdhlang5_types.managers import get_type_of_value
 from rdhlang5_types.object_types import RDHObjectType, RDHObject
+from rdhlang5.executor.flow_control import FlowManager
 
 
 def enrich_break_type(data):
@@ -43,7 +44,7 @@ def prepare(data, outer_context, flow_manager):
         mode: [enrich_break_type(break_type) for break_type in break_types] for mode, break_types in static.break_types.__dict__.items()
     }
 
-    actual_break_types_for_modes = code.get_break_types(context)
+    actual_break_types_for_modes = code.get_break_types(context, flow_manager)
 
     actual_break_types_for_modes.pop("value", None)
 

@@ -23,8 +23,8 @@ def evaluate(opcode, context, break_manager):
     return new_break_manager.result
 
 
-def get_expression_break_types(expression, context):
-    other_break_types = expression.get_break_types(context)
+def get_expression_break_types(expression, context, flow_manager):
+    other_break_types = expression.get_break_types(context, flow_manager)
     value_break_types = other_break_types.pop("value", MISSING)
     return value_break_types, other_break_types
 
@@ -59,7 +59,7 @@ class Opcode(object):
     __metaclass__ = ABCMeta
 
     @abstractmethod
-    def get_break_types(self, context):
+    def get_break_types(self, context, flow_manager):
         raise NotImplementedError()
 
     @abstractmethod
@@ -68,7 +68,7 @@ class Opcode(object):
 
 
 class Nop(Opcode):
-    def get_break_types(self, context):
+    def get_break_types(self, context, flow_manager):
         break_types = BreakTypesFactory()
         break_types.add("value", NoValueType())
         return break_types.build()
@@ -83,7 +83,7 @@ class LiteralOp(Opcode):
         self.value = data.value
         self.type = get_type_of_value(self.value)
 
-    def get_break_types(self, context):
+    def get_break_types(self, context, flow_manager):
         break_types = BreakTypesFactory()
         break_types.add("value", self.type)
         return break_types.build()
@@ -96,12 +96,12 @@ class ObjectTemplateOp(Opcode):
         super(ObjectTemplateOp, self).__init__(data, visitor)
         self.opcodes = { key: enrich_opcode(opcode, visitor) for key, opcode in data.opcodes.items() }
 
-    def get_break_types(self, context):
+    def get_break_types(self, context, flow_manager):
         break_types = BreakTypesFactory()
 
         sub_types = {}
         for key, opcode in self.opcodes.items():
-            value_type, other_break_types = get_expression_break_types(opcode, context)
+            value_type, other_break_types = get_expression_break_types(opcode, context, flow_manager)
             break_types.merge(other_break_types)
             sub_types[key] = flatten_out_types(value_type)
 
@@ -122,12 +122,12 @@ class ListTemplateOp(Opcode):
         super(ListTemplateOp, self).__init__(data, visitor)
         self.opcodes = [ enrich_opcode(opcode, visitor) for opcode in data.opcodes ]
 
-    def get_break_types(self, context):
+    def get_break_types(self, context, flow_manager):
         break_types = BreakTypesFactory()
 
         sub_types = []
         for opcode in self.opcodes:
-            value_type, other_break_types = get_expression_break_types(opcode, context)
+            value_type, other_break_types = get_expression_break_types(opcode, context, flow_manager)
             break_types.merge(other_break_types)
             sub_types.append(flatten_out_types(value_type))
 
@@ -163,7 +163,7 @@ def get_context_type(context):
     return context_manager._context_type
 
 class ContextOp(Opcode):
-    def get_break_types(self, context):
+    def get_break_types(self, context, flow_manager):
         break_types = BreakTypesFactory()
         break_types.add("value", get_context_type(context))
         return break_types.build()
@@ -179,15 +179,15 @@ class DereferenceOp(Opcode):
         self.of = enrich_opcode(data.of, visitor)
         self.reference = enrich_opcode(data.reference, visitor)
 
-    def get_break_types(self, context):
+    def get_break_types(self, context, flow_manager):
         break_types = BreakTypesFactory()
 
-        reference_types, reference_break_types = get_expression_break_types(self.reference, context)
+        reference_types, reference_break_types = get_expression_break_types(self.reference, context, flow_manager)
         break_types.merge(reference_break_types)
         if reference_types is not MISSING:
             reference_types = flatten_out_types(reference_types)
 
-        of_types, of_break_types = get_expression_break_types(self.of, context)
+        of_types, of_break_types = get_expression_break_types(self.of, context, flow_manager)
         break_types.merge(of_break_types)
         if of_types is not MISSING:
             of_types = flatten_out_types(of_types)
@@ -243,15 +243,15 @@ class AdditionOp(Opcode):
         self.lvalue = enrich_opcode(self.data.lvalue, visitor)
         self.rvalue = enrich_opcode(self.data.rvalue, visitor)
 
-    def get_break_types(self, context):
+    def get_break_types(self, context, flow_manager):
         break_types = BreakTypesFactory()
 
-        lvalue_type, lvalue_break_types = get_expression_break_types(self.lvalue, context)
+        lvalue_type, lvalue_break_types = get_expression_break_types(self.lvalue, context, flow_manager)
         if lvalue_type is not MISSING:
             lvalue_type = flatten_out_types(lvalue_type)
         break_types.merge(lvalue_break_types)
 
-        rvalue_type, rvalue_break_types = get_expression_break_types(self.rvalue, context)
+        rvalue_type, rvalue_break_types = get_expression_break_types(self.rvalue, context, flow_manager)
         if rvalue_type is not MISSING:
             rvalue_type = flatten_out_types(rvalue_type)
         break_types.merge(rvalue_break_types)
@@ -299,16 +299,14 @@ class TransformOp(Opcode):
             self.restart = self.data.restart
             self.restart_type = enrich_opcode(self.data.restart_type, visitor)
 
-    def get_break_types(self, context):
+    def get_break_types(self, context, flow_manager):
         break_types = BreakTypesFactory()
 
         if self.restart:
-            from rdhlang5.executor.bootstrap import create_root_flow_manager
-            # Not sure whether to create a root flow manager, or somehow pass one through in get_break_types...
-            restart_type = enrich_type(evaluate(self.restart_type, context, create_root_flow_manager()))
+            restart_type = enrich_type(evaluate(self.restart_type, context, flow_manager))
 
         if self.expression:
-            expression_break_types = self.expression.get_break_types(context)
+            expression_break_types = self.expression.get_break_types(context, flow_manager)
             if self.input in expression_break_types:
                 expression_break_types[self.output] = expression_break_types.pop(self.input)
                 if self.restart:
@@ -346,12 +344,12 @@ class CommaOp(Opcode):
         super(CommaOp, self).__init__(data, visitor)
         self.opcodes = [ enrich_opcode(o, visitor) for o in data.opcodes ]
 
-    def get_break_types(self, context):
+    def get_break_types(self, context, flow_manager):
         break_types = BreakTypesFactory()
         value_type = NoValueType()
 
         for opcode in self.opcodes:
-            value_type, other_break_types = get_expression_break_types(opcode, context)
+            value_type, other_break_types = get_expression_break_types(opcode, context, flow_manager)
             break_types.merge(other_break_types)
 
         break_types.merge({ "value": value_type })

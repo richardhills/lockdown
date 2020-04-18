@@ -2,7 +2,7 @@ from unittest import main
 from unittest.case import TestCase
 
 from rdhlang5.executor.bootstrap import bootstrap_function, prepare, \
-    create_root_flow_manager
+    create_application_flow_manager, create_no_escape_flow_manager
 from rdhlang5.executor.raw_code_factories import function_lit, literal_op, \
     no_value_type, return_op, int_type, addition_op, dereference_op, context_op, \
     comma_op, yield_op, any_type, build_break_types
@@ -132,7 +132,7 @@ class TestComma(TestCase):
 
     def test_restart_comma(self):
         context = RDHObject({})
-        flow_manager = create_root_flow_manager()
+        flow_manager = create_application_flow_manager()
 
         func = prepare(
             function_lit(
@@ -143,7 +143,7 @@ class TestComma(TestCase):
                     yield_op(literal_op("second"), int_type)
                 ))
             ),
-            context, flow_manager
+            context, create_no_escape_flow_manager()
         )
 
         first_yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: func.invoke(NO_VALUE, context, new_fm))
@@ -159,14 +159,14 @@ class TestComma(TestCase):
 class TestContinuations(TestCase):
     def test_single_restart(self):
         context = RDHObject({})
-        flow_manager = create_root_flow_manager()
+        flow_manager = create_application_flow_manager()
 
         func = prepare(
             function_lit(
                 no_value_type, build_break_types(any_type, yield_types={ "out": any_type, "in": int_type }),
                 return_op(addition_op(yield_op(literal_op("hello"), int_type), literal_op(40)))
             ),
-            context, flow_manager
+            context, create_no_escape_flow_manager()
         )
 
         yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: func.invoke(NO_VALUE, context, new_fm))
@@ -179,14 +179,14 @@ class TestContinuations(TestCase):
 
     def test_repeated_restart(self):
         context = RDHObject({})
-        flow_manager = create_root_flow_manager()
+        flow_manager = create_application_flow_manager()
 
         func = prepare(
             function_lit(
                 no_value_type, build_break_types(int_type, yield_types={ "out": any_type, "in": int_type }),
                 return_op(addition_op(yield_op(literal_op("first"), int_type), yield_op(literal_op("second"), int_type)))
             ),
-            context, flow_manager
+            context, create_no_escape_flow_manager()
         )
 
         first_yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: func.invoke(NO_VALUE, context, new_fm))
@@ -201,14 +201,14 @@ class TestContinuations(TestCase):
 
     def test_repeated_restart_with_outer_return_handling(self):
         context = RDHObject({})
-        flow_manager = create_root_flow_manager()
+        flow_manager = create_application_flow_manager()
 
         func = prepare(
             function_lit(
                 no_value_type, build_break_types(int_type, yield_types={ "out": any_type, "in": int_type }),
                 return_op(addition_op(yield_op(literal_op("first"), int_type), yield_op(literal_op("second"), int_type)))
             ),
-            context, flow_manager
+            context, create_no_escape_flow_manager()
         )
 
         with flow_manager.capture("return", { "out": AnyType() }) as returner:
@@ -224,14 +224,14 @@ class TestContinuations(TestCase):
 
     def test_repeated_restart_while_using_restart_values(self):
         context = RDHObject({})
-        flow_manager = create_root_flow_manager()
+        flow_manager = create_application_flow_manager()
 
         func = prepare(
             function_lit(
                 no_value_type, build_break_types(any_type, yield_types={ "out": any_type, "in": int_type }),
                 return_op(addition_op(yield_op(literal_op(30), int_type), yield_op(literal_op(10), int_type)))
             ),
-            context, flow_manager
+            context, create_no_escape_flow_manager()
         )
 
         first_yielder = flow_manager.capture(
