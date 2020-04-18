@@ -1,0 +1,2 @@
+class PreparationException(Exception):
+    pass
