@@ -31,9 +31,7 @@ def prepare(data, outer_context, flow_manager):
         })
     }, bind=RDHObjectType({
         "outer": get_context_type(outer_context),
-        "types": RDHObjectType({
-            "outer": AnyType()
-        })
+        "types": DEFAULT_OBJECT_TYPE
     }))
 
     static = evaluate(enrich_opcode(data.static, None), context, flow_manager)
@@ -43,6 +41,17 @@ def prepare(data, outer_context, flow_manager):
     declared_break_types = {
         mode: [enrich_break_type(break_type) for break_type in break_types] for mode, break_types in static.break_types.__dict__.items()
     }
+
+    context = RDHObject({
+        "outer": outer_context,
+        "types": RDHObject({
+            "outer": get_context_type(outer_context),
+            "argument": argument_type
+        })
+    }, bind=RDHObjectType({
+        "outer": get_context_type(outer_context),
+        "types": DEFAULT_OBJECT_TYPE
+    }))
 
     actual_break_types_for_modes = code.get_break_types(context, flow_manager)
 
@@ -86,15 +95,19 @@ class PreparedFunction(object):
 
     def invoke(self, argument, outer_context, break_manager):
         if not self.argument_type.is_copyable_from(get_type_of_value(argument)):
+            self.argument_type.is_copyable_from(get_type_of_value(argument))
             raise FatalError()
 
         new_context = RDHObject({
             "outer": outer_context,
+            "argument": argument,
             "types": RDHObject({
                 "outer": get_context_type(outer_context)
             }, bind=DEFAULT_OBJECT_TYPE)
         }, bind=RDHObjectType({
-            "outer": get_context_type(outer_context)
+            "argument": self.argument_type,
+            "outer": get_context_type(outer_context),
+            "types": DEFAULT_OBJECT_TYPE
         }))
 
         evaluate(self.code, new_context, break_manager)

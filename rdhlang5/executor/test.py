@@ -156,6 +156,18 @@ class TestComma(TestCase):
 
         self.assertEquals(returner.result, 42)
 
+class TestArguments(TestCase):
+    def test_simple_return_argument(self):
+        func = function_lit(
+            int_type, build_break_types(int_type),
+            return_op(dereference_op(context_op(), literal_op("argument")))
+        )
+
+        result = bootstrap_function(func, argument=42, check_safe_exit=True)
+
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 42)
+
 class TestContinuations(TestCase):
     def test_single_restart(self):
         context = RDHObject({})

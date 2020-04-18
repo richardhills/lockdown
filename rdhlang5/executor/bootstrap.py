@@ -17,15 +17,20 @@ class ObjectDictWrapper(object):
         for k, v in data.items():
             self.__dict__[k] = v
 
+
 def create_no_escape_flow_manager():
     frame_manager = FrameManager()
     return FlowManager(None, None, {}, frame_manager)
+
 
 def create_application_flow_manager():
     frame_manager = FrameManager()
     return FlowManager("exit", { "out": AnyType()}, {}, frame_manager, top_level=True)
 
-def bootstrap_function(data, context=None, check_safe_exit=False):
+
+def bootstrap_function(data, argument=None, context=None, check_safe_exit=False):
+    if argument is None:
+        argument = NO_VALUE
     if context is None:
         context = RDHObject({}, bind=DEFAULT_OBJECT_TYPE)
     break_managers = defaultdict(list)
@@ -45,7 +50,7 @@ def bootstrap_function(data, context=None, check_safe_exit=False):
                 break_manager = stack.enter_context(break_manager.capture(mode, break_type.__dict__, top_level=True))
                 break_managers[mode].append(break_manager)
 
-        function.invoke(NO_VALUE, context, break_manager)
+        function.invoke(argument, context, break_manager)
 
     for mode, break_managers in break_managers.items():
         for break_manager in break_managers:
