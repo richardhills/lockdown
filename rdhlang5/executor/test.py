@@ -5,11 +5,13 @@ from rdhlang5.executor.bootstrap import bootstrap_function, prepare, \
     create_application_flow_manager, create_no_escape_flow_manager
 from rdhlang5.executor.raw_code_factories import function_lit, literal_op, \
     no_value_type, return_op, int_type, addition_op, dereference_op, context_op, \
-    comma_op, yield_op, any_type, build_break_types
+    comma_op, yield_op, any_type, build_break_types, assignment_op, nop, \
+    object_template_op, object_type
 from rdhlang5_types.core_types import AnyType, IntegerType
 from rdhlang5_types.default_composite_types import DEFAULT_OBJECT_TYPE, \
     rich_composite_type
 from rdhlang5_types.list_types import RDHList, RDHListType
+from rdhlang5_types.managers import get_manager
 from rdhlang5_types.object_types import RDHObject, RDHObjectType
 from rdhlang5_types.utils import NO_VALUE
 
@@ -156,6 +158,162 @@ class TestComma(TestCase):
 
         self.assertEquals(returner.result, 42)
 
+class TestTemplates(TestCase):
+    def test_return(self):
+        result = bootstrap_function(
+            function_lit(
+                no_value_type, build_break_types(object_type({ "foo": int_type })),
+                comma_op(
+                    return_op(object_template_op({ "foo": literal_op(42) }))
+                )
+            ),
+            check_safe_exit=True
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertTrue(isinstance(result.value, RDHObject))
+        get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
+        self.assertEquals(result.value.foo, 42)
+
+    def test_nested_return(self):
+        result = bootstrap_function(
+            function_lit(
+                no_value_type, build_break_types(object_type({ "foo": object_type({ "bar": int_type }) })),
+                comma_op(
+                    return_op(object_template_op({ "foo": object_template_op({ "bar": literal_op(42) }) }))
+                )
+            ),
+            check_safe_exit=True
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertTrue(isinstance(result.value, RDHObject))
+        get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
+        self.assertEquals(result.value.foo.bar, 42)
+
+    def test_return_with_dereference(self):
+        result = bootstrap_function(
+            function_lit(
+                int_type, build_break_types(object_type({ "foo": int_type, "bar": int_type })),
+                comma_op(
+                    return_op(object_template_op({ "foo": literal_op(42), "bar": dereference_op(context_op(), literal_op("argument")) }))
+                )
+            ),
+            argument=42,
+            check_safe_exit=True
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertTrue(isinstance(result.value, RDHObject))
+        get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
+        self.assertEquals(result.value.foo, 42)
+        self.assertEquals(result.value.bar, 42)
+
+class TestLocals(TestCase):
+    def test_initialization(self):
+        result = bootstrap_function(
+            function_lit(
+                no_value_type, build_break_types(int_type), int_type, literal_op(42),
+                comma_op(
+                    return_op(dereference_op(context_op(), literal_op("local")))
+                )
+            ),
+            check_safe_exit=True
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 42)
+
+    def test_initialization_from_argument(self):
+        result = bootstrap_function(
+            function_lit(
+                int_type, build_break_types(int_type), int_type, dereference_op(context_op(), literal_op("argument")),
+                comma_op(
+                    return_op(dereference_op(context_op(), literal_op("local")))
+                )
+            ),
+            argument=123,
+            check_safe_exit=True
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 123)
+
+    def test_restart_into_local_initialization(self):
+        context = RDHObject({})
+        flow_manager = create_application_flow_manager()
+
+        func = prepare(
+            function_lit(
+                no_value_type, build_break_types(any_type, yield_types={ "out": any_type, "in": int_type }),
+                int_type, yield_op(literal_op("hello"), int_type),
+                return_op(dereference_op(context_op(), literal_op("local")))
+            ),
+            context, create_no_escape_flow_manager()
+        )
+
+        yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: func.invoke(NO_VALUE, context, new_fm))
+
+        self.assertEquals(yielder.result, "hello")
+
+        returner = flow_manager.capture("return", { "out": AnyType() }, lambda new_fm: yielder.restart_continuation.invoke(32, context, new_fm))
+
+        self.assertEquals(returner.result, 32)
+
+    def test_restart_into_local_initialization_and_code(self):
+        context = RDHObject({})
+        flow_manager = create_application_flow_manager()
+
+        func = prepare(
+            function_lit(
+                no_value_type, build_break_types(any_type, yield_types={ "out": any_type, "in": int_type }),
+                int_type, yield_op(literal_op("first"), int_type),
+                return_op(addition_op(dereference_op(context_op(), literal_op("local")), yield_op(literal_op("second"), int_type)))
+            ),
+            context, create_no_escape_flow_manager()
+        )
+
+        first_yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: func.invoke(NO_VALUE, context, new_fm))
+        self.assertEquals(first_yielder.result, "first")
+        second_yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: first_yielder.restart_continuation.invoke(40, context, new_fm))
+        self.assertEquals(second_yielder.result, "second")
+
+        returner = flow_manager.capture("return", { "out": AnyType() }, lambda new_fm: second_yielder.restart_continuation.invoke(2, context, new_fm))
+
+        self.assertEquals(returner.result, 42)
+
+class TestAssignment(TestCase):
+    def test_assignment(self):
+        result = bootstrap_function(
+            function_lit(
+                no_value_type, build_break_types(int_type), int_type, literal_op(0),
+                comma_op(
+                    assignment_op(context_op(), literal_op("local"), literal_op(42)),
+                    return_op(dereference_op(context_op(), literal_op("local")))
+                )
+            ),
+            check_safe_exit=True
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 42)
+
+    def test_assignment_from_argument(self):
+        result = bootstrap_function(
+            function_lit(
+                int_type, build_break_types(int_type), int_type, literal_op(0),
+                comma_op(
+                    assignment_op(context_op(), literal_op("local"), dereference_op(context_op(), literal_op("argument"))),
+                    return_op(dereference_op(context_op(), literal_op("local")))
+                )
+            ),
+            argument=43,
+            check_safe_exit=True
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 43)
+
 class TestArguments(TestCase):
     def test_simple_return_argument(self):
         func = function_lit(
@@ -167,6 +325,18 @@ class TestArguments(TestCase):
 
         self.assertEquals(result.mode, "return")
         self.assertEquals(result.value, 42)
+
+    def test_doubler(self):
+        func = function_lit(
+            int_type, build_break_types(int_type),
+            return_op(addition_op(dereference_op(context_op(), literal_op("argument")), dereference_op(context_op(), literal_op("argument"))))
+        )
+
+        result = bootstrap_function(func, argument=21, check_safe_exit=True)
+
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 42)
+
 
 class TestContinuations(TestCase):
     def test_single_restart(self):

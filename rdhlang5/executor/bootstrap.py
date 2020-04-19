@@ -8,6 +8,7 @@ from rdhlang5.executor.function import prepare
 from rdhlang5_types.core_types import AnyType
 from rdhlang5_types.default_composite_types import DEFAULT_OBJECT_TYPE
 from rdhlang5_types.exceptions import FatalError
+from rdhlang5_types.managers import get_manager
 from rdhlang5_types.object_types import RDHObject
 from rdhlang5_types.utils import NO_VALUE
 
@@ -32,7 +33,9 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False)
     if argument is None:
         argument = NO_VALUE
     if context is None:
-        context = RDHObject({}, bind=DEFAULT_OBJECT_TYPE)
+        context = RDHObject({})
+
+    get_manager(context).add_composite_type(DEFAULT_OBJECT_TYPE)
     break_managers = defaultdict(list)
 
     with ExitStack() as stack:
@@ -55,7 +58,6 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False)
     for mode, break_managers in break_managers.items():
         for break_manager in break_managers:
             if break_manager.has_result:
-                print "{}: {}".format(mode, break_manager.result)
                 return munchify({
                     "mode": mode,
                     "value": break_manager.result

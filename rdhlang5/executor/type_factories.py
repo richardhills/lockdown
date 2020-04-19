@@ -8,7 +8,7 @@ from rdhlang5_types.object_types import RDHObjectType, RDHObject
 TYPES = {
     "Any": lambda data: AnyType(),
     "Object": lambda data: RDHObjectType({
-        name: enrich_type(type) for name, type in data["properties"].items()
+        name: enrich_type(type) for name, type in data.properties.__dict__.items()
     }),
     "List": lambda data: RDHListType(
         [ enrich_type(type) for type in data["entry_types"] ],

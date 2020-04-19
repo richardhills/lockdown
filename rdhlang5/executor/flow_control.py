@@ -4,6 +4,7 @@ from rdhlang5.utils import MISSING
 from rdhlang5_types.core_types import Type
 from rdhlang5_types.exceptions import FatalError
 from rdhlang5_types.managers import get_type_of_value
+from rdhlang5_types.utils import InternalMarker
 
 
 class BreakException(Exception):
@@ -38,11 +39,13 @@ class BreakTypesFactory(object):
 
     def merge(self, break_types):
         for mode, break_types in break_types.items():
+            if isinstance(break_types, InternalMarker):
+                pass
             if len(break_types) > 0:
                 self.result[mode].extend(break_types)
 
     def build(self):
-        return self.result
+        return dict(self.result)
 
 class FlowManager(object):
     def __init__(self, our_break_mode, our_break_types, allowed_break_types, frame_manager, top_level=False, callback=None):

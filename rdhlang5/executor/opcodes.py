@@ -6,11 +6,11 @@ from rdhlang5.executor.type_factories import enrich_type
 from rdhlang5.utils import MISSING
 from rdhlang5_types.composites import CompositeType
 from rdhlang5_types.core_types import NoValueType, IntegerType, UnitType, Const, \
-    AnyType, CrystalValueCanNotBeGenerated, merge_types, unwrap_types
+    AnyType, CrystalValueCanNotBeGenerated, merge_types, unwrap_types, Type
 from rdhlang5_types.default_composite_types import DEFAULT_OBJECT_TYPE, \
     DEFAULT_LIST_TYPE
 from rdhlang5_types.exceptions import FatalError, InvalidDereferenceKey, \
-    InvalidDereferenceType
+    InvalidDereferenceType, InvalidAssignmentType, InvalidAssignmentKey
 from rdhlang5_types.list_types import RDHListType, RDHList
 from rdhlang5_types.managers import get_type_of_value, get_manager
 from rdhlang5_types.object_types import RDHObjectType, RDHObject
@@ -25,11 +25,29 @@ def evaluate(opcode, context, break_manager):
 
 def get_expression_break_types(expression, context, flow_manager):
     other_break_types = expression.get_break_types(context, flow_manager)
+
+    if not isinstance(other_break_types, dict):
+        raise FatalError()
+    for mode, break_types in other_break_types.items():
+        if not isinstance(mode, str):
+            raise FatalError()
+        if not isinstance(break_types, (list, tuple)):
+            raise FatalError()
+        for break_type in break_types:
+            if not isinstance(break_type, dict):
+                raise FatalError()
+            if "out" not in break_type:
+                raise FatalError()
+            if not isinstance(break_type["out"], Type):
+                raise FatalError()
+            if "in" in break_type and not isinstance(break_type["in"], Type):
+                raise FatalError()
+
     value_break_types = other_break_types.pop("value", MISSING)
     return value_break_types, other_break_types
 
 def flatten_out_types(break_types):
-    return merge_types([b["out"] for b in  break_types], "super")
+    return merge_types([b["out"] for b in break_types], "super")
 
 class TypeErrorFactory(object):
     def __init__(self, message=None):
@@ -74,7 +92,7 @@ class Nop(Opcode):
         return break_types.build()
 
     def jump(self, context, manager):
-        return manager.value(NO_VALUE)
+        return manager.value(NO_VALUE, self)
 
 
 class LiteralOp(Opcode):
@@ -99,13 +117,20 @@ class ObjectTemplateOp(Opcode):
     def get_break_types(self, context, flow_manager):
         break_types = BreakTypesFactory()
 
-        sub_types = {}
+        property_types = {}
+        crystal_initial_value = {}
+
         for key, opcode in self.opcodes.items():
             value_type, other_break_types = get_expression_break_types(opcode, context, flow_manager)
             break_types.merge(other_break_types)
-            sub_types[key] = flatten_out_types(value_type)
+            value_type = flatten_out_types(value_type)
 
-        break_types.add("value", RDHObjectType(sub_types, AnyType()))
+            try:
+                crystal_initial_value[key] = value_type.get_crystal_value()
+            except CrystalValueCanNotBeGenerated:
+                property_types[key] = value_type
+
+        break_types.add("value", RDHObjectType(property_types, AnyType(), initial_data=RDHObject(crystal_initial_value)))
 
         return break_types.build()
 
@@ -115,7 +140,7 @@ class ObjectTemplateOp(Opcode):
             for key, opcode in self.opcodes.items():
                 result[key], _ = frame.step(key, lambda: evaluate(opcode, context, flow_manager))
 
-        return flow_manager.value(RDHObject(result, bind=DEFAULT_OBJECT_TYPE), self)
+        return flow_manager.value(RDHObject(result), self)
 
 class ListTemplateOp(Opcode):
     def __init__(self, data, visitor):
@@ -142,7 +167,7 @@ class ListTemplateOp(Opcode):
                 new_value, _ = frame.step(index, lambda: evaluate(opcode, context, flow_manager))
                 result.append(new_value)
 
-        return flow_manager.value(RDHList(result, bind=DEFAULT_LIST_TYPE), self)
+        return flow_manager.value(RDHList(result), self)
 
 def get_context_type(context):
     context_manager = get_manager(context)
@@ -193,6 +218,7 @@ class DereferenceOp(Opcode):
             of_types = flatten_out_types(of_types)
 
         if reference_types is MISSING or of_types is MISSING:
+            # Is this necessary? If they don't return values, they must return errors anyway...
             break_types.add("exception", self.INVALID_DEREFERENCE.get_type())
         else:
             for reference_type in unwrap_types(reference_types):
@@ -234,6 +260,84 @@ class DereferenceOp(Opcode):
                 raise flow_manager.exception(self.INVALID_DEREFERENCE(), self)
             except InvalidDereferenceKey:
                 raise flow_manager.exception(self.INVALID_DEREFERENCE(), self)
+
+class AssignmentOp(Opcode):
+    INVALID_LVALUE = TypeErrorFactory("AssignmentOp: invalid_lvalue")
+    INVALID_RVALUE = TypeErrorFactory("AssignmentOp: invalid_rvalue")
+    INVALID_ASSIGNMENT = TypeErrorFactory("AssignmentOp: invalid_assignment")
+
+    def __init__(self, data, visitor):
+        self.of = enrich_opcode(data.of, visitor)
+        self.reference = enrich_opcode(data.reference, visitor)
+        self.rvalue = enrich_opcode(data.rvalue, visitor)
+
+    def get_break_types(self, context, flow_manager):
+        break_types = BreakTypesFactory()
+
+        reference_types, reference_break_types = get_expression_break_types(self.reference, context, flow_manager)
+        break_types.merge(reference_break_types)
+        if reference_types is not MISSING:
+            reference_types = flatten_out_types(reference_types)
+
+        of_types, of_break_types = get_expression_break_types(self.of, context, flow_manager)
+        break_types.merge(of_break_types)
+        if of_types is not MISSING:
+            of_types = flatten_out_types(of_types)
+
+        rvalue_type, rvalue_break_types = get_expression_break_types(self.rvalue, context, flow_manager)
+        break_types.merge(rvalue_break_types)
+        if rvalue_type is not MISSING:
+            rvalue_type = flatten_out_types(rvalue_type)
+
+        if reference_types is not MISSING and of_types is not MISSING and rvalue_type is not MISSING:
+            for reference_type in unwrap_types(reference_types):
+                try:
+                    reference = reference_type.get_crystal_value()
+                except CrystalValueCanNotBeGenerated:
+                    reference = None
+    
+                for of_type in unwrap_types(of_types):
+                    micro_op = None
+                    if isinstance(of_type, CompositeType) and reference is not None:
+                        micro_op = of_type.get_micro_op_type(("set", reference))
+
+                    if micro_op:
+                        if not micro_op.type.is_copyable_from(rvalue_type):
+                            break_types.add("exception", self.INVALID_RVALUE.get_type())
+
+                        break_types.add("value", NoValueType())
+
+                        if micro_op.type_error or micro_op.key_error:
+                            break_types.add("exception", self.INVALID_ASSIGNMENT.get_type())
+                    else:
+                        break_types.add("exception", self.INVALID_LVALUE.get_type())
+
+        return break_types.build()
+
+    def jump(self, context, flow_manager):
+        with flow_manager.get_next_frame(self) as frame:
+            of, _ = frame.step("of", lambda: evaluate(self.of, context, flow_manager))
+            reference, _ = frame.step("reference", lambda: evaluate(self.reference, context, flow_manager))
+            rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, flow_manager))
+
+            manager = get_manager(of)
+            default_type = manager.default_type
+
+            try:
+                micro_op_type = manager.get_micro_op_type(default_type, ("set", reference))
+                if micro_op_type:
+                    if not micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
+                        raise flow_manager.exception(self.INVALID_RVALUE(), self)
+
+                    micro_op = micro_op_type.create(of, default_type)
+                    return flow_manager.value(micro_op.invoke(rvalue), self)
+
+                raise flow_manager.exception(self.INVALID_LVALUE(), self)
+            except InvalidAssignmentType:
+                raise flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
+            except InvalidAssignmentKey:
+                raise flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
+
 
 class AdditionOp(Opcode):
     MISSING_INTEGERS = TypeErrorFactory("Addition: missing_integers")
@@ -346,13 +450,16 @@ class CommaOp(Opcode):
 
     def get_break_types(self, context, flow_manager):
         break_types = BreakTypesFactory()
-        value_type = NoValueType()
+        value_type = [{ "out": NoValueType() }]
 
         for opcode in self.opcodes:
             value_type, other_break_types = get_expression_break_types(opcode, context, flow_manager)
             break_types.merge(other_break_types)
+            if value_type is MISSING:
+                break
 
-        break_types.merge({ "value": value_type })
+        if value_type is not MISSING:
+            break_types.merge({ "value": value_type })
 
         return break_types.build()
 
@@ -365,12 +472,14 @@ class CommaOp(Opcode):
         return flow_manager.value(value, self)
 
 OPCODES = {
+    "nop": Nop,
     "transform": TransformOp,
     "literal": LiteralOp,
     "object_template": ObjectTemplateOp,
     "list_template": ListTemplateOp,
     "addition": AdditionOp,
     "dereference": DereferenceOp,
+    "assignment": AssignmentOp,
     "context": ContextOp,
     "comma": CommaOp
 }
