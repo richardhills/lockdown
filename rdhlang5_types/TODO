@@ -1,0 +1,7 @@
+. default lists
+. python dictionaries (DONE)
+. move array length to manager (DONE)
+. recursive references
+. write bind/unbind methods for lists (DONE)
+. guard all micro ops methods to bind to right underlying type (DONE)
+. delete RDHObjectType and other Composite type extensions, replace with functions (DONE)

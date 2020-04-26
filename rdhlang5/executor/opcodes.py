@@ -1,26 +1,31 @@
 from abc import abstractmethod, ABCMeta
 
 from rdhlang5.executor.exceptions import PreparationException
-from rdhlang5.executor.flow_control import BreakTypesFactory
+from rdhlang5.executor.flow_control import BreakTypesFactory#
 from rdhlang5.executor.type_factories import enrich_type
 from rdhlang5.utils import MISSING
 from rdhlang5_types.composites import CompositeType
 from rdhlang5_types.core_types import NoValueType, IntegerType, UnitType, Const, \
-    AnyType, CrystalValueCanNotBeGenerated, merge_types, unwrap_types, Type
+    AnyType, merge_types, unwrap_types, Type, \
+    AllowedValuesNotAvailable, BooleanType
 from rdhlang5_types.default_composite_types import DEFAULT_OBJECT_TYPE, \
-    DEFAULT_LIST_TYPE
+    DEFAULT_LIST_TYPE, rich_composite_type
+from rdhlang5_types.dict_types import DictGetterType, DictSetterType, \
+    DictWildcardGetterType, DictWildcardSetterType, RDHDict
 from rdhlang5_types.exceptions import FatalError, InvalidDereferenceKey, \
     InvalidDereferenceType, InvalidAssignmentType, InvalidAssignmentKey
 from rdhlang5_types.list_types import RDHListType, RDHList
 from rdhlang5_types.managers import get_type_of_value, get_manager
-from rdhlang5_types.object_types import RDHObjectType, RDHObject
+from rdhlang5_types.object_types import RDHObjectType, RDHObject, \
+    ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
+    ObjectWildcardSetterType
 from rdhlang5_types.utils import NO_VALUE
 
 
-def evaluate(opcode, context, break_manager):
-    with break_manager.capture("value", { "out": AnyType() }) as new_break_manager:
-        opcode.jump(context, new_break_manager)
-    return new_break_manager.result
+def evaluate(opcode, context, flow_manager):
+    with flow_manager.capture("value", { "out": AnyType() }) as new_flow_manager:
+        opcode.jump(context, new_flow_manager)
+    return new_flow_manager.result
 
 
 def get_expression_break_types(expression, context, flow_manager):
@@ -34,7 +39,7 @@ def get_expression_break_types(expression, context, flow_manager):
         if not isinstance(break_types, (list, tuple)):
             raise FatalError()
         for break_type in break_types:
-            if not isinstance(break_type, dict):
+            if not isinstance(break_type, (dict, RDHDict)):
                 raise FatalError()
             if "out" not in break_type:
                 raise FatalError()
@@ -117,20 +122,36 @@ class ObjectTemplateOp(Opcode):
     def get_break_types(self, context, flow_manager):
         break_types = BreakTypesFactory()
 
-        property_types = {}
-        crystal_initial_value = {}
+        micro_ops = {}
+        initial_data = {}
 
         for key, opcode in self.opcodes.items():
             value_type, other_break_types = get_expression_break_types(opcode, context, flow_manager)
             break_types.merge(other_break_types)
             value_type = flatten_out_types(value_type)
 
-            try:
-                crystal_initial_value[key] = value_type.get_crystal_value()
-            except CrystalValueCanNotBeGenerated:
-                property_types[key] = value_type
+            micro_ops[("get", key)] = ObjectGetterType(key, value_type, False, False)
+            micro_ops[("set", key)] = ObjectSetterType(key, AnyType(), False, False)
 
-        break_types.add("value", RDHObjectType(property_types, AnyType(), initial_data=RDHObject(crystal_initial_value)))
+            initial_value = MISSING
+
+            if isinstance(value_type, CompositeType) and value_type.initial_data:
+                initial_value = value_type.initial_data
+
+            try:
+                allowed_values = value_type.get_allowed_values()
+                if len(allowed_values) == 1:
+                    initial_value = allowed_values[0]
+            except AllowedValuesNotAvailable:
+                pass
+
+            if initial_value is not MISSING:
+                initial_data[key] = initial_value
+
+        micro_ops[("get-wildcard", )] = ObjectWildcardGetterType(rich_composite_type, True, False)
+        micro_ops[("set-wildcard", )] = ObjectWildcardSetterType(rich_composite_type, True, True)
+
+        break_types.add("value", CompositeType(micro_ops, initial_data=initial_data, is_revconst=True))
 
         return break_types.build()
 
@@ -141,6 +162,56 @@ class ObjectTemplateOp(Opcode):
                 result[key], _ = frame.step(key, lambda: evaluate(opcode, context, flow_manager))
 
         return flow_manager.value(RDHObject(result), self)
+
+class DictTemplateOp(Opcode):
+    def __init__(self, data, visitor):
+        super(DictTemplateOp, self).__init__(data, visitor)
+        self.opcodes = { key: enrich_opcode(opcode, visitor) for key, opcode in data.opcodes.items() }
+
+    def get_break_types(self, context, flow_manager):
+        break_types = BreakTypesFactory()
+
+        micro_ops = {}
+        initial_data = {}
+
+        for key, opcode in self.opcodes.items():
+            value_type, other_break_types = get_expression_break_types(opcode, context, flow_manager)
+            break_types.merge(other_break_types)
+            value_type = flatten_out_types(value_type)
+
+            micro_ops[("get", key)] = DictGetterType(key, value_type, False, False)
+            micro_ops[("set", key)] = DictSetterType(key, AnyType(), False, False)
+
+            initial_value = MISSING
+
+            if isinstance(value_type, CompositeType) and value_type.initial_data:
+                initial_value = value_type.initial_data
+
+            try:
+                allowed_values = value_type.get_allowed_values()
+                if len(allowed_values) == 1:
+                    initial_value = allowed_values[0]
+            except AllowedValuesNotAvailable:
+                pass
+
+            if initial_value is not MISSING:
+                initial_data[key] = initial_value
+
+        micro_ops[("get-wildcard", )] = DictWildcardGetterType(rich_composite_type, True, False)
+        micro_ops[("set-wildcard", )] = DictWildcardSetterType(rich_composite_type, True, True)
+
+        break_types.add("value", CompositeType(micro_ops, initial_data=initial_data, is_revconst=True))
+
+        return break_types.build()
+
+    def jump(self, context, flow_manager):
+        with flow_manager.get_next_frame(self) as frame:
+            result = {}
+            for key, opcode in self.opcodes.items():
+                result[key], _ = frame.step(key, lambda: evaluate(opcode, context, flow_manager))
+
+        return flow_manager.value(RDHDict(result), self)
+
 
 class ListTemplateOp(Opcode):
     def __init__(self, data, visitor):
@@ -217,27 +288,26 @@ class DereferenceOp(Opcode):
         if of_types is not MISSING:
             of_types = flatten_out_types(of_types)
 
-        if reference_types is MISSING or of_types is MISSING:
-            # Is this necessary? If they don't return values, they must return errors anyway...
-            break_types.add("exception", self.INVALID_DEREFERENCE.get_type())
-        else:
+        if reference_types is not MISSING and of_types is not MISSING:
+            completely_safe = True
             for reference_type in unwrap_types(reference_types):
                 try:
-                    reference = reference_type.get_crystal_value()
-                except CrystalValueCanNotBeGenerated:
-                    reference = None
-    
-                for of_type in unwrap_types(of_types):
-                    micro_op = None
-                    if isinstance(of_type, CompositeType) and reference is not None:
-                        micro_op = of_type.get_micro_op_type(("get", reference))
+                    for reference in reference_type.get_allowed_values():
+                        for of_type in unwrap_types(of_types):
+                            micro_op = None
+                            if isinstance(of_type, CompositeType):
+                                micro_op = of_type.get_micro_op_type(("get", reference))
 
-                    if micro_op:
-                        break_types.add("value", micro_op.type)
-                        if micro_op.type_error or micro_op.key_error:
-                            break_types.add("exception", self.INVALID_DEREFERENCE.get_type())
-                    else:
-                        break_types.add("exception", self.INVALID_DEREFERENCE.get_type())
+                            if micro_op:
+                                break_types.add("value", micro_op.type)
+                                if micro_op.type_error or micro_op.key_error:
+                                    completely_safe = False
+                            else:
+                                completely_safe = False
+                except AllowedValuesNotAvailable:
+                    completely_safe = False
+            if not completely_safe:
+                break_types.add("exception", self.INVALID_DEREFERENCE.get_type())
 
         return break_types.build()
 
@@ -292,25 +362,24 @@ class AssignmentOp(Opcode):
         if reference_types is not MISSING and of_types is not MISSING and rvalue_type is not MISSING:
             for reference_type in unwrap_types(reference_types):
                 try:
-                    reference = reference_type.get_crystal_value()
-                except CrystalValueCanNotBeGenerated:
-                    reference = None
-    
-                for of_type in unwrap_types(of_types):
-                    micro_op = None
-                    if isinstance(of_type, CompositeType) and reference is not None:
-                        micro_op = of_type.get_micro_op_type(("set", reference))
-
-                    if micro_op:
-                        if not micro_op.type.is_copyable_from(rvalue_type):
-                            break_types.add("exception", self.INVALID_RVALUE.get_type())
-
-                        break_types.add("value", NoValueType())
-
-                        if micro_op.type_error or micro_op.key_error:
-                            break_types.add("exception", self.INVALID_ASSIGNMENT.get_type())
-                    else:
-                        break_types.add("exception", self.INVALID_LVALUE.get_type())
+                    for reference in reference_type.get_allowed_values():    
+                        for of_type in unwrap_types(of_types):
+                            micro_op = None
+                            if isinstance(of_type, CompositeType) and reference is not None:
+                                micro_op = of_type.get_micro_op_type(("set", reference))
+        
+                            if micro_op:
+                                if not micro_op.type.is_copyable_from(rvalue_type):
+                                    break_types.add("exception", self.INVALID_RVALUE.get_type())
+        
+                                break_types.add("value", NoValueType())
+        
+                                if micro_op.type_error or micro_op.key_error:
+                                    break_types.add("exception", self.INVALID_ASSIGNMENT.get_type())
+                            else:
+                                break_types.add("exception", self.INVALID_LVALUE.get_type())
+                except AllowedValuesNotAvailable:
+                    break_types.add("exception", self.INVALID_LVALUE.get_type())
 
         return break_types.build()
 
@@ -338,49 +407,50 @@ class AssignmentOp(Opcode):
             except InvalidAssignmentKey:
                 raise flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
 
+def BinaryIntegerOp(name, func, result_type):
+    class _BinaryIntegerOp(Opcode):
+        MISSING_INTEGERS = TypeErrorFactory("{}: missing_integers".format(name))
 
-class AdditionOp(Opcode):
-    MISSING_INTEGERS = TypeErrorFactory("Addition: missing_integers")
+        def __init__(self, data, visitor):
+            super(_BinaryIntegerOp, self).__init__(data, visitor)
+            self.lvalue = enrich_opcode(self.data.lvalue, visitor)
+            self.rvalue = enrich_opcode(self.data.rvalue, visitor)
 
-    def __init__(self, data, visitor):
-        super(AdditionOp, self).__init__(data, visitor)
-        self.lvalue = enrich_opcode(self.data.lvalue, visitor)
-        self.rvalue = enrich_opcode(self.data.rvalue, visitor)
+        def get_break_types(self, context, flow_manager):
+            break_types = BreakTypesFactory()
 
-    def get_break_types(self, context, flow_manager):
-        break_types = BreakTypesFactory()
+            lvalue_type, lvalue_break_types = get_expression_break_types(self.lvalue, context, flow_manager)
+            if lvalue_type is not MISSING:
+                lvalue_type = flatten_out_types(lvalue_type)
+            break_types.merge(lvalue_break_types)
 
-        lvalue_type, lvalue_break_types = get_expression_break_types(self.lvalue, context, flow_manager)
-        if lvalue_type is not MISSING:
-            lvalue_type = flatten_out_types(lvalue_type)
-        break_types.merge(lvalue_break_types)
+            rvalue_type, rvalue_break_types = get_expression_break_types(self.rvalue, context, flow_manager)
+            if rvalue_type is not MISSING:
+                rvalue_type = flatten_out_types(rvalue_type)
+            break_types.merge(rvalue_break_types)
 
-        rvalue_type, rvalue_break_types = get_expression_break_types(self.rvalue, context, flow_manager)
-        if rvalue_type is not MISSING:
-            rvalue_type = flatten_out_types(rvalue_type)
-        break_types.merge(rvalue_break_types)
+            int_type = IntegerType()
 
-        int_type = IntegerType()
+            if lvalue_type is not MISSING and rvalue_type is not MISSING:
+                break_types.add("value", result_type)
+            if not int_type.is_copyable_from(lvalue_type) or not int_type.is_copyable_from(rvalue_type):
+                break_types.add("exception", self.MISSING_INTEGERS.get_type())
 
-        if lvalue_type is not MISSING and rvalue_type is not MISSING:
-            break_types.add("value", int_type)
-        if not int_type.is_copyable_from(lvalue_type) or not int_type.is_copyable_from(rvalue_type):
-            break_types.add("exception", self.MISSING_INTEGERS.get_type())
+            return break_types.build()
 
-        return break_types.build()
+        def jump(self, context, break_manager):
+            with break_manager.get_next_frame(self) as frame:
+                lvalue, _ = frame.step("lvalue", lambda: evaluate(self.lvalue, context, break_manager))
+                if not isinstance(lvalue, int):
+                    break_manager.exception(self.MISSING_INTEGERS(), self)
+    
+                rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, break_manager))
+                if not isinstance(rvalue, int):
+                    break_manager.exception(self.MISSING_INTEGERS(), self)
 
-    def jump(self, context, break_manager):
-        with break_manager.get_next_frame(self) as frame:
-            lvalue, _ = frame.step("lvalue", lambda: evaluate(self.lvalue, context, break_manager))
-            if not isinstance(lvalue, int):
-                break_manager.exception(self.MISSING_INTEGERS(), self)
+            return break_manager.value(func(lvalue, rvalue), self)
 
-            rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, break_manager))
-            if not isinstance(rvalue, int):
-                break_manager.exception(self.MISSING_INTEGERS(), self)
-
-        return break_manager.value(lvalue + rvalue, self)
-
+    return _BinaryIntegerOp
 
 class TransformOp(Opcode):
     def __init__(self, data, visitor):
@@ -471,24 +541,190 @@ class CommaOp(Opcode):
 
         return flow_manager.value(value, self)
 
+class LoopOp(Opcode):
+    def __init__(self, data, visitor):
+        self.code = enrich_opcode(data.code, visitor)
+
+    def get_break_types(self, context, flow_manager):
+        _, other_break_types = get_expression_break_types(self.code, context, flow_manager)
+        return other_break_types
+
+    def jump(self, context, flow_manager):
+        while True:
+            evaluate(self.code, context, flow_manager)
+
+class ConditionalOp(Opcode):
+    def __init__(self, data, visitor):
+        self.condition = enrich_opcode(data.condition, visitor)
+        self.when_true = enrich_opcode(data.when_true, visitor)
+        self.when_false = enrich_opcode(data.when_false, visitor)
+
+    def get_break_types(self, context, flow_manager):
+        break_types = BreakTypesFactory()
+
+        condition_type, condition_break_types = get_expression_break_types(self.condition, context, flow_manager)
+        when_true_type, when_true_break_types = get_expression_break_types(self.when_true, context, flow_manager)
+        when_false_type, when_false_break_types = get_expression_break_types(self.when_false, context, flow_manager)
+
+        if BooleanType().is_copyable_from(condition_type):
+            # TODO be more liberal
+            raise FatalError()
+
+        # TODO throw away one branch if condition_type can't be true of false
+        break_types.merge(condition_break_types)
+        break_types.merge(when_true_break_types)
+        break_types.merge(when_false_break_types)
+
+        if condition_type is not MISSING:
+            condition_type = flatten_out_types(condition_type)
+            if when_true_type is not MISSING:
+                when_true_type = flatten_out_types(when_true_type)
+                break_types.add("value", when_true_type)
+            if when_false_type is not MISSING:
+                when_false_type = flatten_out_types(when_false_type)
+                break_types.add("value", when_false_type)
+
+        return break_types.build()
+
+    def jump(self, context, flow_manager):
+        with flow_manager.get_next_frame(self) as frame:
+            condition, _ = frame.step("condition", lambda: evaluate(self.condition, context, flow_manager))
+
+            if condition is True:
+                result, _ = frame.step("result", lambda: evaluate(self.when_true, context, flow_manager))
+            elif condition is False:
+                result, _ = frame.step("result", lambda: evaluate(self.when_false, context, flow_manager))
+            else:
+                # be more liberal
+                raise FatalError()
+
+            return flow_manager.value(result, self)
+
+class PrepareOp(Opcode):
+    def __init__(self, data, visitor):
+        self.code = enrich_opcode(data.code, visitor)
+
+    def get_break_types(self, context, flow_manager):
+        break_types = BreakTypesFactory()
+
+        function_data = evaluate(self.code, context, flow_manager)
+
+        from rdhlang5.executor.function import prepare
+
+        function = prepare(function_data, context, flow_manager)
+
+        break_types.add("value", function.get_type())
+
+        return break_types.build()
+
+    def jump(self, context, flow_manager):
+        function_data = evaluate(self.code, context, flow_manager)
+
+        from rdhlang5.executor.function import prepare
+
+        function = prepare(function_data, context, flow_manager)
+
+        flow_manager.value(function, self)
+
+class InvokeOp(Opcode):
+    def __init__(self, data, visitor):
+        self.function = enrich_opcode(data.function, visitor)
+        self.argument = enrich_opcode(data.argument, visitor)
+
+    def get_break_types(self, context, flow_manager):
+        break_types = BreakTypesFactory()
+
+        function_type, other_function_break_types = get_expression_break_types(self.function, context, flow_manager)
+
+        if function_type is MISSING:
+            # Be more liberal
+            raise FatalError()
+
+        function_type = flatten_out_types(function_type)
+
+        # TODO: check argument type
+
+        break_types.merge(function_type.break_types)
+        break_types.merge(other_function_break_types)
+
+        return break_types.build()
+
+    def jump(self, context, flow_manager):
+        function = evaluate(self.function, context, flow_manager)
+        argument = evaluate(self.argument, context, flow_manager)
+        # TODO: check argument type
+
+        # Not sure if the value break mode should be naked here...
+        function.invoke(argument, context, flow_manager)
+
+        raise FatalError()
+
+class MatchOp(Opcode):
+    NO_MATCH = TypeErrorFactory("Match: no_match")
+
+    def __init__(self, data, visitor):
+        self.value = enrich_opcode(data.value, visitor)
+        self.matchers = [ enrich_opcode(m, visitor) for m in data.matchers ]
+
+    def get_break_types(self, context, flow_manager):
+        break_types = BreakTypesFactory()
+        value_type, value_break_types = get_expression_break_types(self.value, context, flow_manager)
+
+        break_types.merge(value_break_types)
+
+        for matcher in self.matchers:
+            matcher_function_type, matcher_break_types = get_expression_break_types(matcher, context, flow_manager)
+            matcher_function_type = flatten_out_types(matcher_function_type)
+
+            break_types.merge(matcher_break_types)
+            break_types.merge(matcher_function_type.break_types)
+
+            if matcher_function_type.argument_type.is_copyable_from(value_type):
+                break
+        else:
+            break_types.add("exception", self.NO_MATCH.get_type())
+
+        return break_types.build()
+
+    def jump(self, context, flow_manager):
+        with flow_manager.get_next_frame(self) as frame:
+            value, _ = frame.step("value", lambda: evaluate(self.value, context, flow_manager))
+            value_type = get_type_of_value(value)
+
+            for index, matcher in enumerate(self.matchers):
+                matcher_function, _ = frame.step(index, lambda: evaluate(matcher, context, flow_manager))
+                if matcher_function.argument_type.is_copyable_from(value_type):
+                    matcher_function.invoke(value, context, flow_manager)
+            else:
+                flow_manager.exception(self.NO_MATCH(), self)
+
+        raise FatalError()
+
 OPCODES = {
     "nop": Nop,
     "transform": TransformOp,
     "literal": LiteralOp,
     "object_template": ObjectTemplateOp,
+    "dict_template": DictTemplateOp,
     "list_template": ListTemplateOp,
-    "addition": AdditionOp,
+    "addition": BinaryIntegerOp("Addition", lambda lvalue, rvalue: lvalue + rvalue, IntegerType()),
+    "equality": BinaryIntegerOp("Equality", lambda lvalue, rvalue: lvalue == rvalue, BooleanType()),
     "dereference": DereferenceOp,
     "assignment": AssignmentOp,
     "context": ContextOp,
-    "comma": CommaOp
+    "comma": CommaOp,
+    "loop": LoopOp,
+    "conditional": ConditionalOp,
+    "prepare": PrepareOp,
+    "invoke": InvokeOp,
+    "match": MatchOp
 }
 
 
 def enrich_opcode(data, visitor):
     if visitor:
         data = visitor(data)
-    
+
     opcode = getattr(data, "opcode", MISSING)
     if opcode is MISSING:
         raise PreparationException("No opcode found in {}".format(data))

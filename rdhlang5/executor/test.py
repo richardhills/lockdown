@@ -6,7 +6,9 @@ from rdhlang5.executor.bootstrap import bootstrap_function, prepare, \
 from rdhlang5.executor.raw_code_factories import function_lit, literal_op, \
     no_value_type, return_op, int_type, addition_op, dereference_op, context_op, \
     comma_op, yield_op, any_type, build_break_types, assignment_op, nop, \
-    object_template_op, object_type
+    object_template_op, object_type, unit_type, loop_op, condition_op, \
+    equality_op, inferred_type, infer_all, invoke_op, prepare_op, function_type, \
+    dereference, prepared_function, unbound_dereference, match_op
 from rdhlang5_types.core_types import AnyType, IntegerType
 from rdhlang5_types.default_composite_types import DEFAULT_OBJECT_TYPE, \
     rich_composite_type
@@ -19,13 +21,13 @@ from rdhlang5_types.utils import NO_VALUE
 class TestPreparedFunction(TestCase):
     def test_basic_function(self):
         func = function_lit(
-            no_value_type, build_break_types(no_value_type, exception_type=any_type), literal_op(42)
+            no_value_type, build_break_types(value_type=int_type), literal_op(42)
         )
 
         result = bootstrap_function(func)
-        
-        self.assertEquals(result.mode, "exception")
-        self.assertEquals(result.value.type, "TypeError")
+
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 42)
 
 
     def test_basic_function_return(self):
@@ -191,10 +193,10 @@ class TestTemplates(TestCase):
         get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
         self.assertEquals(result.value.foo.bar, 42)
 
-    def test_return_with_dereference(self):
+    def test_return_with_dereference1(self):
         result = bootstrap_function(
             function_lit(
-                int_type, build_break_types(object_type({ "foo": int_type, "bar": int_type })),
+                int_type, build_break_types(object_type({ "foo": unit_type(42), "bar": any_type })),
                 comma_op(
                     return_op(object_template_op({ "foo": literal_op(42), "bar": dereference_op(context_op(), literal_op("argument")) }))
                 )
@@ -208,6 +210,71 @@ class TestTemplates(TestCase):
         get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
         self.assertEquals(result.value.foo, 42)
         self.assertEquals(result.value.bar, 42)
+
+    def test_return_with_dereference2(self):
+        result = bootstrap_function(
+            function_lit(
+                int_type, build_break_types(object_type({ "foo": unit_type(42), "bar": int_type })),
+                comma_op(
+                    return_op(object_template_op({ "foo": literal_op(42), "bar": dereference_op(context_op(), literal_op("argument")) }))
+                )
+            ),
+            argument=42,
+            check_safe_exit=True
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertTrue(isinstance(result.value, RDHObject))
+        get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
+        self.assertEquals(result.value.foo, 42)
+        self.assertEquals(result.value.bar, 42)
+
+    def test_return_with_dereference3(self):
+        result = bootstrap_function(
+            function_lit(
+                int_type, build_break_types(object_type({ "foo": int_type, "bar": any_type })),
+                comma_op(
+                    return_op(object_template_op({ "foo": literal_op(42), "bar": dereference_op(context_op(), literal_op("argument")) }))
+                )
+            ),
+            argument=42,
+            check_safe_exit=True
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertTrue(isinstance(result.value, RDHObject))
+        get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
+        self.assertEquals(result.value.foo, 42)
+        self.assertEquals(result.value.bar, 42)
+
+    def test_return_with_dereference4(self):
+        result = bootstrap_function(
+            function_lit(
+                int_type, build_break_types(object_type({ "foo": any_type, "bar": any_type })),
+                comma_op(
+                    return_op(object_template_op({ "foo": literal_op(42), "bar": dereference_op(context_op(), literal_op("argument")) }))
+                )
+            ),
+            argument=42,
+            check_safe_exit=True
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertTrue(isinstance(result.value, RDHObject))
+        get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
+        self.assertEquals(result.value.foo, 42)
+        self.assertEquals(result.value.bar, 42)
+
+    def test_return_with_dereference5(self):
+        with self.assertRaises(Exception):
+            bootstrap_function(
+                function_lit(
+                    int_type, build_break_types(object_type({ "foo": any_type, "bar": unit_type(42) })),
+                    return_op(object_template_op({ "foo": literal_op(42), "bar": dereference_op(context_op(), literal_op("argument")) }))
+                ),
+                argument=42,
+                check_safe_exit=True
+            )
 
 class TestLocals(TestCase):
     def test_initialization(self):
@@ -337,6 +404,325 @@ class TestArguments(TestCase):
         self.assertEquals(result.mode, "return")
         self.assertEquals(result.value, 42)
 
+class TestConditional(TestCase):
+    def test_basic_truth(self):
+        result = bootstrap_function(
+            function_lit(
+                no_value_type, build_break_types(int_type),
+                return_op(condition_op(literal_op(True), literal_op(34), literal_op(53)))
+            ), check_safe_exit=True
+        )
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 34)
+
+    def test_basic_false(self):
+        result = bootstrap_function(
+            function_lit(
+                no_value_type, build_break_types(int_type),
+                return_op(condition_op(literal_op(False), literal_op(34), literal_op(53)))
+            ), check_safe_exit=True
+        )
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 53)
+
+
+class TestLoops(TestCase):
+    def test_immediate_return(self):
+        result = bootstrap_function(
+            function_lit(
+                no_value_type, build_break_types(int_type),
+                loop_op(return_op(literal_op(42)))
+            ), check_safe_exit=True
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 42)
+
+    def test_count_then_return(self):
+        result = bootstrap_function(
+            function_lit(
+                no_value_type, build_break_types(int_type), int_type, literal_op(0),
+                loop_op(
+                    comma_op(
+                        assignment_op(
+                            context_op(), literal_op("local"),
+                            addition_op(dereference_op(context_op(), literal_op("local")), literal_op(1))
+                        ),
+                        condition_op(equality_op(
+                            dereference_op(context_op(), literal_op("local")), literal_op(42)
+                        ), return_op(dereference_op(context_op(), literal_op("local"))), nop)
+                    )
+                )
+            ), check_safe_exit=True
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 42)
+
+class TestInferredBreakTypes(TestCase):
+    def test_basic_inferrence(self):
+        result = bootstrap_function(
+            function_lit(
+                no_value_type, build_break_types(inferred_type),
+                return_op(literal_op(42))
+            ), check_safe_exit=True
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 42)
+
+    def test_infer_all(self):
+        result = bootstrap_function(
+            function_lit(
+                no_value_type, infer_all(), return_op(literal_op(42))
+            ), check_safe_exit=True
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 42)
+
+    def test_infer_exception(self):
+        result = bootstrap_function(
+            function_lit(
+                no_value_type, infer_all(), addition_op(literal_op("hello"), literal_op(5))
+            )
+        )
+
+        self.assertEquals(result.mode, "exception")
+        self.assertEquals(result.value.type, "TypeError")
+
+    def test_without_infer_exception_fails(self):
+        with self.assertRaises(Exception):
+            bootstrap_function(
+                function_lit(
+                    no_value_type, build_break_types(int_type), addition_op(literal_op("hello"), literal_op(5))
+                )
+            )
+
+class TestFunctionPreparation(TestCase):
+    def test_basic(self):
+        result = bootstrap_function(
+            function_lit(
+                no_value_type, build_break_types(int_type),
+                return_op(invoke_op(prepare_op(literal_op(function_lit(
+                    no_value_type, build_break_types(int_type), return_op(literal_op(42))
+                )))))
+            )
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 42)
+
+class TestFunctionInvocation(TestCase):
+    def test_basic(self):
+        result = bootstrap_function(
+            function_lit(
+                no_value_type, build_break_types(int_type),
+                function_type(no_value_type, build_break_types(int_type)),
+                prepare_op(literal_op(function_lit(
+                    no_value_type, build_break_types(int_type), return_op(literal_op(42))
+                ))),
+                return_op(invoke_op(dereference_op(context_op(), literal_op("local"))))
+            ), check_safe_exit=True
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 42)
+
+    def test_basic_with_inferred_types(self):
+        result = bootstrap_function(
+            function_lit(
+                no_value_type, infer_all(),
+                function_type(no_value_type, build_break_types(int_type)),
+                prepare_op(literal_op(function_lit(
+                    no_value_type, infer_all(), return_op(literal_op(42))
+                ))),
+                return_op(invoke_op(dereference_op(context_op(), literal_op("local"))))
+            ), check_safe_exit=True
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 42)
+
+    def test_basic_with_inferred_local_type(self):
+        result = bootstrap_function(
+            function_lit(
+                no_value_type, infer_all(),
+                inferred_type,
+                prepare_op(literal_op(function_lit(
+                    no_value_type, infer_all(), return_op(literal_op(42))
+                ))),
+                return_op(invoke_op(dereference_op(context_op(), literal_op("local"))))
+            ), check_safe_exit=True
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 42)
+
+class TestUnboundReference(TestCase):
+    def test_unbound_reference_to_arguments(self):
+        result = bootstrap_function(
+            function_lit(
+                object_type({ "foo": int_type, "bar": int_type }), infer_all(),
+                return_op(addition_op(
+                    unbound_dereference("foo"), unbound_dereference("bar")
+                ))
+            ), check_safe_exit=True, argument=RDHObject({ "foo": 39, "bar": 3 })
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 42)
+
+    def test_unbound_reference_to_locals(self):
+        result = bootstrap_function(
+            function_lit(
+                no_value_type, infer_all(),
+                object_type({ "foo": int_type, "bar": int_type }),
+                object_template_op({ "foo": literal_op(39), "bar": literal_op(3) }),
+                return_op(addition_op(
+                    unbound_dereference("foo"), unbound_dereference("bar")
+                ))
+            ), check_safe_exit=True
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 42)
+
+    def test_unbound_reference_to_locals_and_arguments(self):
+        result = bootstrap_function(
+            function_lit(
+                object_type({ "foo": int_type }), infer_all(),
+                object_type({ "bar": int_type }),
+                object_template_op({ "bar": literal_op(3) }),
+                return_op(addition_op(
+                    unbound_dereference("foo"), unbound_dereference("bar")
+                ))
+            ), check_safe_exit=True, argument=RDHObject({ "foo": 39 })
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 42)
+
+class TestMatch(TestCase):
+    def test_interesting(self):
+        func = function_lit(
+            any_type, infer_all(),
+            match_op(
+                dereference("argument"), [
+                    prepared_function(
+                        object_type({
+                            "foo": int_type
+                        }),
+                        return_op(addition_op(dereference("argument.foo"), literal_op(3)))
+                    ),
+                    prepared_function(
+                        any_type,
+                        return_op(literal_op("invalid"))
+                    )
+                ]
+            )
+        )
+
+        result = bootstrap_function(
+            func, check_safe_exit=True, argument=RDHObject({ "foo": 39 })
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 42)
+
+        result = bootstrap_function(
+            func, check_safe_exit=True, argument=RDHObject({ "foo": "hello" })
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, "invalid")
+
+    def test_to_string_from_int(self):
+        func = function_lit(
+            any_type,
+            return_op(
+                match_op(
+                    dereference("argument"), [
+                        prepared_function(
+                            unit_type(1),
+                            literal_op("one")
+                        ),
+                        prepared_function(
+                            unit_type(2),
+                            literal_op("two")
+                        ),
+                        prepared_function(
+                            unit_type(3),
+                            literal_op("three")
+                        ),
+                        prepared_function(
+                            unit_type(4),
+                            literal_op("four")
+                        ),
+                        prepared_function(
+                            any_type,
+                            literal_op("invalid")
+                        )
+                    ]
+                )
+            )
+        )
+
+        result = bootstrap_function(func, check_safe_exit=True, argument=1)
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, "one")
+        result = bootstrap_function(func, check_safe_exit=True, argument=2)
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, "two")
+        result = bootstrap_function(func, check_safe_exit=True, argument=3)
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, "three")
+        result = bootstrap_function(func, check_safe_exit=True, argument=4)
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, "four")
+        result = bootstrap_function(func, check_safe_exit=True, argument=5)
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, "invalid")
+
+class TestUtilityMethods(TestCase):
+    def test_misc1(self):
+        result = bootstrap_function(
+            function_lit(
+                no_value_type, infer_all(),
+                object_type({ "foo": int_type, "bar": int_type }),
+                object_template_op({ "foo": literal_op(39), "bar": literal_op(3) }),
+                return_op(addition_op(
+                    dereference("local.foo"), dereference("local.bar")
+                ))
+            ), check_safe_exit=True
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 42)
+
+    def test_misc2(self):
+        result = bootstrap_function(
+            function_lit(
+                no_value_type, infer_all(),
+                inferred_type,
+                prepared_function(
+                    object_type({ "foo": int_type, "bar": int_type }),
+                    return_op(addition_op(
+                        dereference("argument.foo"), dereference("argument.bar")
+                    ))
+                ),
+                return_op(invoke_op(
+                    dereference("local"),
+                    object_template_op({ "foo": literal_op(39), "bar": literal_op(3) }),
+                ))
+            ), check_safe_exit=True
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 42)
+
+    def test_fizzbuzz(self):
+        pass
 
 class TestContinuations(TestCase):
     def test_single_restart(self):

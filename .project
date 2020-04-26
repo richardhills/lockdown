@@ -3,7 +3,6 @@
 	<name>rdhlang5</name>
 	<comment></comment>
 	<projects>
-		<project>rdhlang5types</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>

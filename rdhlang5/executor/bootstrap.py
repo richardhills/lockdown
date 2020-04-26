@@ -28,6 +28,8 @@ def create_application_flow_manager():
     frame_manager = FrameManager()
     return FlowManager("exit", { "out": AnyType()}, {}, frame_manager, top_level=True)
 
+class BootstrapException(Exception):
+    pass
 
 def bootstrap_function(data, argument=None, context=None, check_safe_exit=False):
     if argument is None:
@@ -48,9 +50,9 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False)
 
         for mode, break_types in function_break_types.items():
             if mode not in ("exit", "return") and check_safe_exit:
-                raise FatalError()
+                raise BootstrapException("break mode {}: {} not safe".format(mode, break_types))
             for break_type in break_types:
-                break_manager = stack.enter_context(break_manager.capture(mode, break_type.__dict__, top_level=True))
+                break_manager = stack.enter_context(break_manager.capture(mode, break_type, top_level=True))
                 break_managers[mode].append(break_manager)
 
         function.invoke(argument, context, break_manager)
