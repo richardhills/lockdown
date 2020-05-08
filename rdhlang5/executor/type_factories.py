@@ -1,14 +1,12 @@
 from rdhlang5.executor.exceptions import PreparationException
-from rdhlang5.executor.flow_control import BreakTypesFactory
 from rdhlang5.executor.function_type import FunctionType, enrich_break_type
-from rdhlang5_types.composites import InferredType
-from rdhlang5_types.core_types import AnyType, OneOfType, IntegerType, \
-    NoValueType, StringType, UnitType, BooleanType, Const
-from rdhlang5_types.default_composite_types import DEFAULT_DICT_TYPE
-from rdhlang5_types.dict_types import RDHDict
-from rdhlang5_types.exceptions import FatalError
-from rdhlang5_types.list_types import RDHListType
-from rdhlang5_types.object_types import RDHObjectType, RDHObject
+from rdhlang5.type_system.composites import InferredType
+from rdhlang5.type_system.core_types import UnitType, OneOfType, Const, AnyType, \
+    IntegerType, BooleanType, NoValueType, StringType
+from rdhlang5.type_system.default_composite_types import DEFAULT_DICT_TYPE
+from rdhlang5.type_system.dict_types import RDHDict
+from rdhlang5.type_system.list_types import RDHListType
+from rdhlang5.type_system.object_types import RDHObjectType, RDHObject
 
 
 def build_function_type(data):

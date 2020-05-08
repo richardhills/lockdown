@@ -1,12 +1,11 @@
-from rdhlang5_types.composites import CompositeType
-from rdhlang5_types.core_types import OneOfType, AnyType
-from rdhlang5_types.dict_types import DictWildcardGetterType, \
-    DictWildcardSetterType, RDHDictType
-from rdhlang5_types.list_types import ListWildcardGetterType, \
+from rdhlang5.type_system.core_types import OneOfType, AnyType
+from rdhlang5.type_system.dict_types import RDHDictType, DictWildcardGetterType, \
+    DictWildcardSetterType
+from rdhlang5.type_system.list_types import RDHListType, ListWildcardGetterType, \
     ListWildcardSetterType, ListInsertType, ListWildcardDeletterType, \
-    ListWildcardInsertType, RDHListType
-from rdhlang5_types.object_types import  ObjectWildcardGetterType, \
-    ObjectWildcardSetterType, RDHObjectType
+    ListWildcardInsertType
+from rdhlang5.type_system.object_types import RDHObjectType, \
+    ObjectWildcardGetterType, ObjectWildcardSetterType
 
 
 DEFAULT_OBJECT_TYPE = RDHObjectType({}, None)

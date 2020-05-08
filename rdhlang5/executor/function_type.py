@@ -1,6 +1,4 @@
-from rdhlang5_types.core_types import Type
-from rdhlang5_types.dict_types import RDHDict
-from rdhlang5_types.object_types import RDHObject
+from rdhlang5.type_system.core_types import Type
 
 
 def enrich_break_type(data):

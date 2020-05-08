@@ -1,11 +1,12 @@
 from collections import defaultdict
 import weakref
 
-from rdhlang5_types.core_types import unwrap_types, Type, AnyType, OneOfType
-from rdhlang5_types.exceptions import FatalError, MicroOpTypeConflict
-from rdhlang5_types.managers import get_manager
-from rdhlang5_types.micro_ops import MicroOpType, MicroOp, merge_micro_op_types
-from pip._internal import self_outdated_check
+from rdhlang5.type_system.core_types import Type, unwrap_types, AnyType, \
+    OneOfType
+from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict
+from rdhlang5.type_system.managers import get_manager
+from rdhlang5.type_system.micro_ops import merge_micro_op_types, MicroOpType, \
+    MicroOp
 
 
 class InferredType(Type):
@@ -144,7 +145,7 @@ def bind_type_to_value(source, key, type, value):
     if not isinstance(value, Composite):
         return
     
-    from rdhlang5_types.list_types import RDHListType
+    from rdhlang5.type_system.list_types import RDHListType
     if isinstance(type, RDHListType):
         pass
     manager = get_manager(value)

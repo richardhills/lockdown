@@ -11,13 +11,13 @@ from rdhlang5.executor.raw_code_factories import function_lit, literal_op, \
     equality_op, inferred_type, infer_all, invoke_op, prepare_op, function_type, \
     dereference, prepared_function, unbound_dereference, match_op, one_of_type, \
     string_type, bool_type, try_catch_op, throw_op, const_string_type
-from rdhlang5_types.core_types import AnyType, IntegerType, StringType
-from rdhlang5_types.default_composite_types import DEFAULT_OBJECT_TYPE, \
+from rdhlang5.type_system.core_types import IntegerType, AnyType, StringType
+from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     rich_composite_type
-from rdhlang5_types.list_types import RDHList, RDHListType
-from rdhlang5_types.managers import get_manager
-from rdhlang5_types.object_types import RDHObject, RDHObjectType
-from rdhlang5_types.utils import NO_VALUE
+from rdhlang5.type_system.list_types import RDHList, RDHListType
+from rdhlang5.type_system.managers import get_manager
+from rdhlang5.type_system.object_types import RDHObject, RDHObjectType
+from rdhlang5.utils import NO_VALUE
 
 
 class TestPreparedFunction(TestCase):

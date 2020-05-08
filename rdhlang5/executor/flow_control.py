@@ -1,10 +1,9 @@
 from _collections import defaultdict
 
-from rdhlang5.utils import MISSING
-from rdhlang5_types.core_types import Type
-from rdhlang5_types.exceptions import FatalError
-from rdhlang5_types.managers import get_type_of_value
-from rdhlang5_types.utils import InternalMarker
+from rdhlang5.type_system.core_types import Type
+from rdhlang5.type_system.exceptions import FatalError
+from rdhlang5.type_system.managers import get_type_of_value
+from rdhlang5.utils import MISSING, InternalMarker
 
 
 class BreakException(Exception):

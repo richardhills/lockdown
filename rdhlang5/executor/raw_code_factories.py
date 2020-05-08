@@ -1,10 +1,7 @@
-from rdhlang5.utils import spread_dict
-from rdhlang5_types.default_composite_types import DEFAULT_OBJECT_TYPE
-from rdhlang5_types.dict_types import RDHDict
-from rdhlang5_types.exceptions import FatalError
-from rdhlang5_types.list_types import RDHList
-from rdhlang5_types.object_types import RDHObject, RDHObjectType
-from rdhlang5.executor.opcodes import InvokeOp
+from rdhlang5.type_system.dict_types import RDHDict
+from rdhlang5.type_system.exceptions import FatalError
+from rdhlang5.type_system.list_types import RDHList
+from rdhlang5.type_system.object_types import RDHObject
 
 
 def check_is_opcode(data):

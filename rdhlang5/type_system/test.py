@@ -1,18 +1,18 @@
 from unittest import main
 from unittest.case import TestCase
 
-from rdhlang5_types.composites import CompositeType, InferredType
-from rdhlang5_types.core_types import IntegerType, UnitType, StringType, AnyType, \
-    Const, BooleanType, OneOfType
-from rdhlang5_types.default_composite_types import DEFAULT_OBJECT_TYPE, \
+from rdhlang5.type_system.composites import CompositeType, InferredType
+from rdhlang5.type_system.core_types import IntegerType, UnitType, StringType, \
+    AnyType, Const, OneOfType, BooleanType
+from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     rich_composite_type
-from rdhlang5_types.dict_types import RDHDictType, DictGetterType
-from rdhlang5_types.exceptions import MicroOpTypeConflict
-from rdhlang5_types.list_types import SPARSE_ELEMENT, RDHListType, RDHList
-from rdhlang5_types.managers import get_manager, get_type_of_value
-from rdhlang5_types.object_types import ObjectGetterType, ObjectSetterType, \
-    ObjectDeletterType, RDHObject, DefaultDictType, \
-    RDHObjectType, PythonObjectType
+from rdhlang5.type_system.dict_types import DictGetterType
+from rdhlang5.type_system.exceptions import MicroOpTypeConflict
+from rdhlang5.type_system.list_types import RDHListType, RDHList, SPARSE_ELEMENT
+from rdhlang5.type_system.managers import get_manager, get_type_of_value
+from rdhlang5.type_system.object_types import ObjectGetterType, ObjectSetterType, \
+    ObjectDeletterType, RDHObjectType, PythonObjectType, RDHObject, \
+    DefaultDictType
 
 
 class TestObject(object):

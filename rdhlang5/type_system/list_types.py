@@ -1,15 +1,14 @@
 from _abcoll import MutableSequence
 from collections import OrderedDict
 
-from rdhlang5_types.composites import DefaultFactoryType, CompositeType, \
-    Composite, CompositeObjectManager, bind_type_to_value, unbind_type_to_value, \
-    InferredType
-from rdhlang5_types.core_types import Const, merge_types
-from rdhlang5_types.exceptions import FatalError, MicroOpConflict, raise_if_safe, \
-    MicroOpTypeConflict, InvalidAssignmentType, InvalidDereferenceKey, \
+from rdhlang5.type_system.composites import InferredType, bind_type_to_value, \
+    unbind_type_to_value, CompositeType, Composite
+from rdhlang5.type_system.core_types import merge_types, Const
+from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict, \
+    raise_if_safe, InvalidAssignmentType, InvalidDereferenceKey, \
     InvalidDereferenceType, InvalidAssignmentKey, MissingMicroOp
-from rdhlang5_types.managers import get_type_of_value, get_manager
-from rdhlang5_types.micro_ops import MicroOpType, MicroOp, \
+from rdhlang5.type_system.managers import get_manager, get_type_of_value
+from rdhlang5.type_system.micro_ops import MicroOpType, MicroOp, \
     raise_micro_op_conflicts
 
 

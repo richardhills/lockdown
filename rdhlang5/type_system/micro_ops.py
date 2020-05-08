@@ -1,7 +1,6 @@
 from abc import ABCMeta, abstractmethod
 
-from rdhlang5_types.exceptions import MicroOpConflict, FatalError, \
-    MicroOpTypeConflict
+from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict
 
 
 class MicroOpType(object):

@@ -6,15 +6,14 @@ from rdhlang5.executor.function_type import FunctionType, enrich_break_type
 from rdhlang5.executor.opcodes import enrich_opcode, get_context_type, evaluate, \
     TypeErrorFactory, get_expression_break_types, flatten_out_types
 from rdhlang5.executor.type_factories import enrich_type
-from rdhlang5.utils import MISSING
-from rdhlang5_types.composites import CompositeType
-from rdhlang5_types.core_types import Type
-from rdhlang5_types.default_composite_types import DEFAULT_OBJECT_TYPE, \
+from rdhlang5.type_system.composites import CompositeType
+from rdhlang5.type_system.core_types import Type
+from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     DEFAULT_DICT_TYPE
-from rdhlang5_types.exceptions import FatalError
-from rdhlang5_types.managers import get_type_of_value, get_manager
-from rdhlang5_types.object_types import RDHObjectType, RDHObject
-from rdhlang5_types.utils import NO_VALUE
+from rdhlang5.type_system.exceptions import FatalError
+from rdhlang5.type_system.managers import get_manager, get_type_of_value
+from rdhlang5.type_system.object_types import RDHObject, RDHObjectType
+from rdhlang5.utils import MISSING
 
 
 def prepare(data, outer_context, flow_manager, immediate_context=None):

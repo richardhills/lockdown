@@ -5,12 +5,11 @@ from pip._vendor.contextlib2 import ExitStack
 
 from rdhlang5.executor.flow_control import FrameManager, FlowManager
 from rdhlang5.executor.function import prepare
-from rdhlang5_types.core_types import AnyType
-from rdhlang5_types.default_composite_types import DEFAULT_OBJECT_TYPE
-from rdhlang5_types.exceptions import FatalError
-from rdhlang5_types.managers import get_manager
-from rdhlang5_types.object_types import RDHObject
-from rdhlang5_types.utils import NO_VALUE
+from rdhlang5.type_system.core_types import AnyType
+from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE
+from rdhlang5.type_system.managers import get_manager
+from rdhlang5.type_system.object_types import RDHObject
+from rdhlang5.utils import NO_VALUE
 
 
 class ObjectDictWrapper(object):

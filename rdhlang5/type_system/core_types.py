@@ -2,8 +2,8 @@ from _collections import defaultdict
 from abc import ABCMeta, abstractmethod
 import weakref
 
-from rdhlang5_types.utils import InternalMarker
-from rdhlang5_types.exceptions import FatalError
+from rdhlang5.type_system.exceptions import FatalError
+from rdhlang5.utils import InternalMarker
 
 
 class AllowedValuesNotAvailable(Exception):

@@ -1,9 +1,9 @@
 import weakref
 
-from rdhlang5_types.core_types import UnitType, NoValueType, Type
-from rdhlang5_types.exceptions import FatalError, InvalidData
-from rdhlang5_types.runtime import replace_all_refs
-from rdhlang5_types.utils import NO_VALUE, InternalMarker
+from rdhlang5.type_system.core_types import Type, UnitType, NoValueType
+from rdhlang5.type_system.exceptions import FatalError, InvalidData
+from rdhlang5.type_system.runtime import replace_all_refs
+from rdhlang5.utils import InternalMarker, NO_VALUE
 
 
 weak_objs_by_id = {}
@@ -11,11 +11,11 @@ managers_by_id = {}
 
 
 def get_manager(obj):
-    from rdhlang5_types.object_types import RDHObject
-    from rdhlang5_types.dict_types import RDHDict
-    from rdhlang5_types.list_types import RDHList
-    from rdhlang5_types.composites import CompositeObjectManager, CompositeType
-    from rdhlang5_types.composites import Composite
+    from rdhlang5.type_system.object_types import RDHObject
+    from rdhlang5.type_system.dict_types import RDHDict
+    from rdhlang5.type_system.list_types import RDHList
+    from rdhlang5.type_system.composites import CompositeObjectManager, CompositeType
+    from rdhlang5.type_system.composites import Composite
     from rdhlang5.executor.function import *
 
     if isinstance(obj, InternalMarker):
@@ -70,10 +70,10 @@ def obj_cleared_callback(obj):
 
 
 def get_type_of_value(value):
-    from rdhlang5_types.dict_types import RDHDict
-    from rdhlang5_types.list_types import RDHList
-    from rdhlang5_types.object_types import RDHObject
-    from rdhlang5_types.composites import CompositeObjectManager, CompositeType
+    from rdhlang5.type_system.dict_types import RDHDict
+    from rdhlang5.type_system.list_types import RDHList
+    from rdhlang5.type_system.object_types import RDHObject
+    from rdhlang5.type_system.composites import CompositeObjectManager, CompositeType
     # Changing this to import PreparedFunction gives an import error ... no idea why
     from rdhlang5.executor.function import *
 

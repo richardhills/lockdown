@@ -3,24 +3,21 @@ from abc import abstractmethod, ABCMeta
 from rdhlang5.executor.exceptions import PreparationException
 from rdhlang5.executor.flow_control import BreakTypesFactory  #
 from rdhlang5.executor.type_factories import enrich_type
-from rdhlang5.utils import MISSING
-from rdhlang5_types.composites import CompositeType
-from rdhlang5_types.core_types import NoValueType, IntegerType, UnitType, Const, \
-    AnyType, merge_types, unwrap_types, Type, \
-    AllowedValuesNotAvailable, BooleanType, remove_type
-from rdhlang5_types.default_composite_types import DEFAULT_OBJECT_TYPE, \
-    DEFAULT_LIST_TYPE, rich_composite_type
-from rdhlang5_types.dict_types import DictGetterType, DictSetterType, \
-    DictWildcardGetterType, DictWildcardSetterType, RDHDict
-from rdhlang5_types.exceptions import FatalError, InvalidDereferenceKey, \
-    InvalidDereferenceType, InvalidAssignmentType, InvalidAssignmentKey
-from rdhlang5_types.list_types import RDHListType, RDHList
-from rdhlang5_types.managers import get_type_of_value, get_manager
-from rdhlang5_types.object_types import RDHObjectType, RDHObject, \
+from rdhlang5.type_system.composites import CompositeType
+from rdhlang5.type_system.core_types import AnyType, Type, merge_types, Const, \
+    UnitType, NoValueType, AllowedValuesNotAvailable, unwrap_types, IntegerType, \
+    BooleanType, remove_type
+from rdhlang5.type_system.default_composite_types import rich_composite_type
+from rdhlang5.type_system.dict_types import RDHDict, DictGetterType, \
+    DictSetterType, DictWildcardGetterType, DictWildcardSetterType
+from rdhlang5.type_system.exceptions import FatalError, InvalidDereferenceType, \
+    InvalidDereferenceKey, InvalidAssignmentType, InvalidAssignmentKey
+from rdhlang5.type_system.list_types import RDHListType, RDHList
+from rdhlang5.type_system.managers import get_type_of_value, get_manager
+from rdhlang5.type_system.object_types import RDHObject, RDHObjectType, \
     ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
     ObjectWildcardSetterType
-from rdhlang5_types.utils import NO_VALUE
-from rdhlang5_types.micro_ops import MicroOp
+from rdhlang5.utils import MISSING, NO_VALUE
 
 
 def evaluate(opcode, context, flow_manager):

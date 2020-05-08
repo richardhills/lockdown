@@ -1,15 +1,15 @@
 from UserDict import DictMixin
 from collections import OrderedDict
 
-from rdhlang5_types.composites import bind_type_to_value, unbind_type_to_value, \
-    DefaultFactoryType, CompositeType, CompositeObjectManager, Composite, \
-    InferredType
-from rdhlang5_types.core_types import merge_types, OneOfType, AnyType, Const
-from rdhlang5_types.exceptions import FatalError, MicroOpConflict, raise_if_safe, \
-    InvalidAssignmentType, InvalidDereferenceKey, InvalidDereferenceType, \
-    MicroOpTypeConflict, MissingMicroOp, InvalidAssignmentKey
-from rdhlang5_types.managers import get_manager, get_type_of_value
-from rdhlang5_types.micro_ops import MicroOpType, MicroOp, raise_micro_op_conflicts
+from rdhlang5.type_system.composites import InferredType, bind_type_to_value, \
+    unbind_type_to_value, CompositeType, Composite
+from rdhlang5.type_system.core_types import merge_types
+from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict, \
+    raise_if_safe, InvalidAssignmentType, InvalidDereferenceKey, \
+    InvalidDereferenceType, MissingMicroOp, InvalidAssignmentKey
+from rdhlang5.type_system.managers import get_manager, get_type_of_value
+from rdhlang5.type_system.micro_ops import MicroOpType, MicroOp, \
+    raise_micro_op_conflicts
 
 
 WILDCARD = object()
