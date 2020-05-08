@@ -1,9 +1,11 @@
 from collections import defaultdict
+import weakref
 
-from rdhlang5_types.core_types import unwrap_types, Type, AnyType
+from rdhlang5_types.core_types import unwrap_types, Type, AnyType, OneOfType
 from rdhlang5_types.exceptions import FatalError, MicroOpTypeConflict
 from rdhlang5_types.managers import get_manager
 from rdhlang5_types.micro_ops import MicroOpType, MicroOp, merge_micro_op_types
+from pip._internal import self_outdated_check
 
 
 class InferredType(Type):
@@ -14,7 +16,7 @@ class InferredType(Type):
         return other
 
 class CompositeType(Type):
-    def __init__(self, micro_op_types, initial_data=None, is_revconst=False):
+    def __init__(self, micro_op_types, initial_data=None, is_revconst=False, name=None):
         if not isinstance(micro_op_types, dict):
             raise FatalError()
         for tag in micro_op_types.keys():
@@ -23,18 +25,34 @@ class CompositeType(Type):
         self.micro_op_types = micro_op_types
         self.initial_data = initial_data
         self.is_revconst = is_revconst
+        self.name = name or "unknown"
 
     def replace_inferred_types(self, other):
         if not isinstance(other, CompositeType):
             return self
 
         potential_replacement_opcodes = {}
-        need_to_replace = False
 
         for key, micro_op_type in self.micro_op_types.items():
             other_micro_op_type = other.micro_op_types.get(key, None)
 
             potential_replacement_opcodes[key] = micro_op_type.replace_inferred_type(other_micro_op_type)
+
+        return CompositeType(
+            micro_op_types=potential_replacement_opcodes,
+            initial_data=self.initial_data,
+            is_revconst=False
+        )
+
+    def reify_revconst_types(self):
+        if not self.is_revconst:
+            return self
+
+        potential_replacement_opcodes = {}
+        need_to_replace = False
+
+        for key, micro_op_type in self.micro_op_types.items():
+            potential_replacement_opcodes[key] = micro_op_type.reify_revconst_types(self.micro_op_types)
             need_to_replace = need_to_replace or bool(micro_op_type is not potential_replacement_opcodes[key])
 
         if need_to_replace:
@@ -42,14 +60,13 @@ class CompositeType(Type):
         else:
             return self
 
+
     def get_micro_op_type(self, tag):
         return self.micro_op_types.get(tag, None)
 
-    def is_copyable_from(self, other):
+    def internal_is_copyable_from(self, other):
         if not isinstance(other, CompositeType):
             return False
-        if self.is_revconst:
-            raise FatalError()
 
         if not other.is_revconst:
             for ours in self.micro_op_types.values():
@@ -58,20 +75,67 @@ class CompositeType(Type):
                         return False
 
         for our_tag, our_micro_op in self.micro_op_types.items():
-            if our_micro_op.key_error:
-                continue
             their_micro_op = other.micro_op_types.get(our_tag, None)
 
             no_initial_data_to_make_safe = not other.initial_data or our_micro_op.check_for_runtime_data_conflict(other.initial_data)
-            if no_initial_data_to_make_safe:
+            if no_initial_data_to_make_safe and not our_micro_op.key_error:
                 if their_micro_op is None:
                     return False
                 if not our_micro_op.can_be_derived_from(their_micro_op):
                     return False
+
         return True
+
+    def is_copyable_from(self, other):
+        if not isinstance(other, CompositeType):
+            return False
+        if self is other:
+            return True
+
+        source_weakref = weakrefs_for_type.get(id(other), None)
+        if source_weakref is None:
+            source_weakref = weakref.ref(other)
+            type_ids_for_weakref_id[id(source_weakref)] = id(other)
+        target_weakref = weakrefs_for_type.get(id(self), None)
+        if target_weakref is None:
+            target_weakref = weakref.ref(self)
+            type_ids_for_weakref_id[id(target_weakref)] = id(self)
+
+        result = results_by_target_id[id(target_weakref)][id(source_weakref)]
+        if result is not None:
+#            check = self.internal_is_copyable_from(other)
+#            if not check == result:
+#                raise FatalError()
+            return result
+
+        results_by_target_id[id(self)][id(other)] = True
+        results_by_source_id[id(other)][id(self)] = True
+
+        result = self.internal_is_copyable_from(other)
+
+        results_by_target_id[id(self)][id(other)] = result
+        results_by_source_id[id(other)][id(self)] = result
+
+        return result
 
     def __repr__(self):
         return "Composite<{}; {}>".format(", ".join([str(m) for m in self.micro_op_types.values()]), self.initial_data)
+
+    def short_str(self):
+        return "Composite<{}>".format(self.name)
+
+weakrefs_for_type = {}
+type_ids_for_weakref_id = {}
+results_by_target_id = defaultdict(lambda: defaultdict(lambda: None))
+results_by_source_id = defaultdict(lambda: defaultdict(lambda: None))
+
+def type_cleared(type_weakref):
+    type_id = type_ids_for_weakref_id(type_weakref)
+    for source_id in results_by_target_id[type_id].keys():
+        del results_by_source_id[source_id]
+    del results_by_target_id[type_id]
+    del weakrefs_for_type[type_id]
+    del type_ids_for_weakref_id[type_weakref]
 
 class Composite(object):
     pass
@@ -127,8 +191,16 @@ class CompositeObjectManager(object):
     def check_for_runtime_data_conflicts(self, type):
         if isinstance(type, AnyType):
             return False
-        if not isinstance(type, CompositeType):
+        if isinstance(type, OneOfType):
+            for subtype in type.types:
+                if not self.check_for_runtime_data_conflicts_with_composite_type(subtype):
+                    return False
             return True
+        if isinstance(type, CompositeType):
+            return self.check_for_runtime_data_conflicts_with_composite_type(type)
+        return True
+
+    def check_for_runtime_data_conflicts_with_composite_type(self, type):
         for micro_op_type in type.micro_op_types.values():
             if micro_op_type.check_for_runtime_data_conflict(self.obj):
                 return True

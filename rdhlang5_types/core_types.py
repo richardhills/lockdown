@@ -1,5 +1,9 @@
+from _collections import defaultdict
 from abc import ABCMeta, abstractmethod
+import weakref
+
 from rdhlang5_types.utils import InternalMarker
+from rdhlang5_types.exceptions import FatalError
 
 
 class AllowedValuesNotAvailable(Exception):
@@ -20,8 +24,14 @@ class Type(object):
     def replace_inferred_types(self, other):
         return self
 
+    def reify_revconst_types(self):
+        return self
+
     def __str__(self):
         return repr(self)
+
+    def short_str(self):
+        return str(self)
 
 class AnyType(Type):
     def is_copyable_from(self, other):
@@ -66,7 +76,7 @@ class StringType(Type):
 
 class IntegerType(Type):
     def is_copyable_from(self, other):
-        return isinstance(other, IntegerType) or (isinstance(other, UnitType) and isinstance(other.value, int))
+        return isinstance(other, IntegerType) or (isinstance(other, UnitType) and isinstance(other.value, int) and not isinstance(other.value, bool))
 
     def __repr__(self):
         return "IntegerType"
@@ -82,6 +92,9 @@ def unwrap_types(type):
     if isinstance(type, OneOfType):
         return type.types
     return [ type ]
+
+def remove_type(target, subtype):
+    return merge_types([t for t in unwrap_types(target) if not subtype.is_copyable_from(t)], "exact")
 
 def merge_types(types, mode):
     to_drop = []
@@ -111,16 +124,34 @@ def merge_types(types, mode):
 
 class OneOfType(Type):
     def __init__(self, types):
+        if len(types) <= 1:
+            raise FatalError()
         self.types = types
 
     def is_copyable_from(self, other):
-        for t in self.types:
-            if t.is_copyable_from(other):
-                return True
-        return False
+        for other_sub_type in unwrap_types(other):
+            for t in self.types:
+                if t.is_copyable_from(other_sub_type):
+                    break
+            else:
+                return False
+        return True
 
+    def reify_revconst_types(self):
+        new_types = []
+        requires_change = False
+        for type in self.types:
+            new_type = type.reify_revconst_types()
+            new_types.append(new_type)
+            requires_change = requires_change or new_type is not type
+        if requires_change:
+            return OneOfType(new_types)
+        else:
+            return self
+
+    def __repr__(self, *args, **kwargs):
+        return "OneOfType<{}>".format(", ".join(t.short_str() for t in self.types))
 
 class Const(object):
     def __init__(self, wrapped):
         self.wrapped = wrapped
-

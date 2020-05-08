@@ -11,6 +11,9 @@ class MicroOpType(object):
     def replace_inferred_type(self, other_micro_op_type):
         raise NotImplementedError(self)
 
+    def reify_revconst_types(self, other_micro_op_types):
+        return self
+
     @abstractmethod
     def create(self, target, through_type):
         raise NotImplementedError(self)

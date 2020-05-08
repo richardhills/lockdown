@@ -1,9 +1,10 @@
 from collections import OrderedDict
 
 from rdhlang5_types.composites import bind_type_to_value, unbind_type_to_value, \
-    DefaultFactoryType, CompositeType, Composite, CompositeObjectManager,\
+    DefaultFactoryType, CompositeType, Composite, CompositeObjectManager, \
     InferredType
-from rdhlang5_types.core_types import merge_types, OneOfType, AnyType, Const
+from rdhlang5_types.core_types import merge_types, OneOfType, AnyType, Const, \
+    Type
 from rdhlang5_types.exceptions import FatalError, MicroOpConflict, raise_if_safe, \
     InvalidAssignmentType, InvalidDereferenceKey, InvalidDereferenceType, \
     MicroOpTypeConflict, MissingMicroOp
@@ -170,7 +171,7 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
         )
 
     def __repr__(self):
-        return "get.*.{}".format(self.type)
+        return "get.*.{}".format(self.type.short_str())
 
 
 class ObjectWildcardGetter(MicroOp):
@@ -205,7 +206,7 @@ class ObjectWildcardGetter(MicroOp):
 
 class ObjectGetterType(ObjectMicroOpType):
     def __init__(self, key, type, key_error, type_error):
-        if type is None:
+        if type is None or not isinstance(type, Type):
             raise FatalError()
         self.key = key
         self.type = type
@@ -462,6 +463,12 @@ class ObjectSetterType(ObjectMicroOpType):
         new_type = self.type.replace_inferred_types(other_micro_op_type.type)
         if new_type is not self.type:
             return ObjectSetterType(self.key, new_type, key_error=self.key_error, type_error=self.type_error)
+        return self
+
+    def reify_revconst_types(self, other_micro_op_types):
+        getter = other_micro_op_types.get(("get", self.key), None)
+        if getter:
+            return ObjectSetterType(self.key, getter.type, self.key_error, self.type_error)
         return self
 
     def bind(self, key, target):

@@ -3,7 +3,7 @@ from unittest.case import TestCase
 
 from rdhlang5_types.composites import CompositeType, InferredType
 from rdhlang5_types.core_types import IntegerType, UnitType, StringType, AnyType, \
-    Const
+    Const, BooleanType, OneOfType
 from rdhlang5_types.default_composite_types import DEFAULT_OBJECT_TYPE, \
     rich_composite_type
 from rdhlang5_types.dict_types import RDHDictType, DictGetterType
@@ -20,6 +20,7 @@ class TestObject(object):
         for key, value in initial_data.items():
             self.__dict__[key] = value
 
+
 class TestMicroOpMerging(TestCase):
     def test_merge_gets(self):
         first = ObjectGetterType("foo", IntegerType(), False, False)
@@ -35,6 +36,7 @@ class TestMicroOpMerging(TestCase):
 
         combined = first.merge(second)
         self.assertTrue(isinstance(combined.type, IntegerType))
+
 
 class TestBasicObject(TestCase):
     def test_add_micro_op_dictionary(self):
@@ -185,6 +187,7 @@ class TestBasicObject(TestCase):
         del obj.foo
         self.assertFalse(hasattr(obj, "foo"))
 
+
 class TestRevConstType(TestCase):
     def test_rev_const_assigned_to_broad_type(self):
         rev_const_type = CompositeType({
@@ -221,6 +224,23 @@ class TestRevConstType(TestCase):
         obj = TestObject({ "foo": "hello" })
         with self.assertRaises(MicroOpTypeConflict):
             get_manager(obj).add_composite_type(rev_const_type)
+
+    def test_rev_const_narrowing(self):
+        rev_const_type = CompositeType({
+            ("get", "foo"): ObjectGetterType("foo", StringType(), False, False),
+            ("set", "foo"): ObjectSetterType("foo", AnyType(), False, False)
+        }, is_revconst=True)
+
+        normal_broad_type = CompositeType({
+            ("get", "foo"): ObjectGetterType("foo", StringType(), False, False),
+            ("set", "foo"): ObjectSetterType("foo", StringType(), False, False)
+        })
+
+        rev_const_type = rev_const_type.reify_revconst_types()
+
+        self.assertTrue(isinstance(rev_const_type.micro_op_types[("get", "foo")].type, StringType))
+
+        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type.reify_revconst_types()))
 
 
 class TestRDHObjectType(TestCase):
@@ -301,7 +321,7 @@ class TestRDHObjectType(TestCase):
             foo.foo = "hello"
 
     def test_const_is_enforced(self):
-        return # test doesn't work because the assignment uses the set-wildcard
+        return  # test doesn't work because the assignment uses the set-wildcard
         foo = {
             "foo": 5,
             "bar": "hello"
@@ -650,6 +670,7 @@ class TestNestedPythonTypes(TestCase):
         with self.assertRaises(AttributeError):
             foo.bop
 
+
 class TestDefaultDict(TestCase):
     def test_default_dict(self):
         def default_factory(target, key):
@@ -663,6 +684,7 @@ class TestDefaultDict(TestCase):
 
         self.assertEquals(foo.bar, "forty-two")
         self.assertEquals(foo.bam, "bam-123")
+
 
 class TestListObjects(TestCase):
     def test_basic_list_of_ints(self):
@@ -687,6 +709,7 @@ class TestListObjects(TestCase):
         with self.assertRaises(Exception):
             get_manager(foo).add_composite_type(RDHListType([ IntegerType(), IntegerType(), IntegerType() ], None))
 
+
 class TestMisc(TestCase):
     # Tests for random things that were broken
     def test_misc1(self):
@@ -706,6 +729,7 @@ class TestMisc(TestCase):
         }, bind=RDHObjectType({
             "local": RDHListType([ IntegerType(), IntegerType() ], None)
         }, wildcard_type=rich_composite_type))
+
 
 class TestRDHListType(TestCase):
     def test_simple_list_assignment(self):
@@ -755,6 +779,7 @@ class TestRDHListType(TestCase):
         bar = RDHListType([ IntegerType(), IntegerType() ], None)
 
         self.assertTrue(foo.is_copyable_from(bar))
+
     def test_const_covariant_array_assignment_allowed(self):
         foo = RDHListType([ ], Const(AnyType()), allow_push=False, allow_wildcard_insert=False)
         bar = RDHListType([ ], IntegerType())
@@ -790,6 +815,7 @@ class TestRDHListType(TestCase):
         bar = RDHListType([ ], IntegerType())
 
         self.assertFalse(foo.is_copyable_from(bar))
+
 
 class TestList(TestCase):
     def test_simple_list_assignment(self):
@@ -913,6 +939,7 @@ class TestList(TestCase):
         with self.assertRaises(Exception):
             get_manager(foo).add_composite_type(RDHListType([ ], StringType()))
 
+
 class TestInferredTypes(TestCase):
     def test_basic(self):
         foo = InferredType()
@@ -943,7 +970,7 @@ class TestInferredTypes(TestCase):
         })
         foo = foo.replace_inferred_types(RDHObjectType({
             "bar": IntegerType(),
-            "bam": StringType
+            "bam": StringType()
         }))
         self.assertIsInstance(foo.micro_op_types[("get", "bar")].type, IntegerType)
 
@@ -953,7 +980,7 @@ class TestInferredTypes(TestCase):
         })
         with self.assertRaises(Exception):
             foo = foo.replace_inferred_types(RDHObjectType({
-                "bam": StringType
+                "bam": StringType()
             }))
 
     def test_double_nested(self):
@@ -979,6 +1006,60 @@ class TestInferredTypes(TestCase):
             })
         }))
         self.assertIsInstance(foo.micro_op_types[("get", "bar")].type.micro_op_types[("get", "bam")].type, IntegerType)
+
+
+class TestOneOfTypes(TestCase):
+    def test_basic(self):
+        self.assertTrue(OneOfType([IntegerType(), StringType()]).is_copyable_from(IntegerType()))
+        self.assertTrue(OneOfType([IntegerType(), StringType()]).is_copyable_from(StringType()))
+        self.assertFalse(StringType().is_copyable_from(OneOfType([IntegerType(), StringType()])))
+
+    def test_nested(self):
+        self.assertTrue(
+            RDHObjectType({
+                "foo": OneOfType([ IntegerType(), StringType() ])
+            }).is_copyable_from(RDHObjectType({
+                "foo": OneOfType([ IntegerType(), StringType() ])
+            }))
+        )
+
+        # Blocked because the receiver could set obj.foo = "hello", breaking the sender
+        self.assertFalse(
+            RDHObjectType({
+                "foo": OneOfType([ IntegerType(), StringType() ])
+            }).is_copyable_from(RDHObjectType({
+                "foo": IntegerType()
+            }))
+        )
+
+        self.assertTrue(
+            RDHObjectType({
+                "foo": Const(OneOfType([ IntegerType(), StringType() ]))
+            }).is_copyable_from(RDHObjectType({
+                "foo": IntegerType()
+            }))
+        )
+
+    def test_runtime1(self):
+        obj = RDHObject({
+            "foo": 5
+        })
+        get_manager(obj).add_composite_type(
+            RDHObjectType({
+                "foo": OneOfType([ IntegerType(), StringType() ])
+            })
+        )
+
+class TestCoreTypes(TestCase):
+    def test_ints_and_bools(self):
+        self.assertTrue(IntegerType().is_copyable_from(IntegerType()))
+        self.assertTrue(BooleanType().is_copyable_from(BooleanType()))
+        self.assertFalse(BooleanType().is_copyable_from(IntegerType()))
+        self.assertFalse(IntegerType().is_copyable_from(BooleanType()))
+        self.assertTrue(BooleanType().is_copyable_from(UnitType(True)))
+        self.assertTrue(IntegerType().is_copyable_from(UnitType(5)))
+        self.assertFalse(BooleanType().is_copyable_from(UnitType(5)))
+        self.assertFalse(IntegerType().is_copyable_from(UnitType(True)))
 
 
 if __name__ == '__main__':

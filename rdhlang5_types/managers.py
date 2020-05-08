@@ -59,7 +59,7 @@ def get_manager(obj):
             manager = CompositeObjectManager(obj)
         else:
             raise FatalError()
-        weak_objs_by_id[id(obj)] = weakref.ref(obj)
+        weak_objs_by_id[id(obj)] = weakref.ref(obj, obj_cleared_callback)
         managers_by_id[id(obj)] = manager
     return manager
 

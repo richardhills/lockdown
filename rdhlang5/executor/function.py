@@ -8,6 +8,7 @@ from rdhlang5.executor.opcodes import enrich_opcode, get_context_type, evaluate,
 from rdhlang5.executor.type_factories import enrich_type
 from rdhlang5.utils import MISSING
 from rdhlang5_types.composites import CompositeType
+from rdhlang5_types.core_types import Type
 from rdhlang5_types.default_composite_types import DEFAULT_OBJECT_TYPE, \
     DEFAULT_DICT_TYPE
 from rdhlang5_types.exceptions import FatalError
@@ -16,7 +17,7 @@ from rdhlang5_types.object_types import RDHObjectType, RDHObject
 from rdhlang5_types.utils import NO_VALUE
 
 
-def prepare(data, outer_context, flow_manager):
+def prepare(data, outer_context, flow_manager, immediate_context=None):
     get_manager(data).add_composite_type(DEFAULT_OBJECT_TYPE)
 
     if not hasattr(data, "code"):
@@ -37,6 +38,14 @@ def prepare(data, outer_context, flow_manager):
 
     argument_type = enrich_type(static.argument)
 
+    if immediate_context:
+        suggested_argument_type = immediate_context.get("suggested_argument_type", None)
+        if not isinstance(suggested_argument_type, Type):
+            raise PreparationException()
+        if suggested_argument_type:
+            argument_type = argument_type.replace_inferred_types(suggested_argument_type)
+            argument_type = argument_type.reify_revconst_types()
+
     context = RDHObject({
         "outer": outer_context,
         "static": static,
@@ -56,6 +65,7 @@ def prepare(data, outer_context, flow_manager):
     actual_local_type = flatten_out_types(actual_local_type)
 
     local_type = local_type.replace_inferred_types(actual_local_type)
+    local_type = local_type.reify_revconst_types()
 
     if not local_type.is_copyable_from(actual_local_type):
         raise PreparationException()

@@ -4,6 +4,7 @@ from rdhlang5_types.dict_types import RDHDict
 from rdhlang5_types.exceptions import FatalError
 from rdhlang5_types.list_types import RDHList
 from rdhlang5_types.object_types import RDHObject, RDHObjectType
+from rdhlang5.executor.opcodes import InvokeOp
 
 
 def check_is_opcode(data):
@@ -21,6 +22,12 @@ def unit_type(value):
     return object_template_op({
         "type": literal_op("Unit"),
         "value": literal_op(value)
+    })
+
+def one_of_type(types):
+    return object_template_op({
+        "type": literal_op("OneOf"),
+        "types": list_template_op(types)
     })
 
 def object_type(properties):
@@ -157,26 +164,80 @@ def loop_op(opcode):
         "code": opcode
     })
 
-def return_op(code):
+def transform_op(*args):
+    if len(args) == 1:
+        output, = args
+        input = code = restart = restart_type = None
+    if len(args) == 3:
+        input, output, code = args
+        restart = restart_type = None
+    elif len(args) == 5:
+        input, output, restart, restart_type, code = args
+    else:
+        raise FatalError()
     check_is_opcode(code)
-    return RDHObject({
+    if not isinstance(input, basestring):
+        raise FatalError()
+    if not isinstance(output, basestring):
+        raise FatalError()
+    if restart is not None and not isinstance(restart, basestring):
+        raise FatalError()
+    op = {
         "opcode": "transform",
-        "output": "return",
-        "input": "value",
-        "code": code
-    })
+        "output": output,
+    }
+    if input:
+        op["input"] = input
+        op["code"] = code
+    if restart:
+        op["restart"] = restart
+        op["restart_type"] = restart_type
+    return RDHObject(op)
+
+def return_op(code):
+    return transform_op("value", "return", code)
+
+def break_op(break_mode):
+    return transform_op(break_mode)
+
+def try_catch_op(try_opcode, catch_function, finally_opcode=None):
+    check_is_opcode(try_opcode)
+    if not finally_opcode:
+        finally_opcode = nop
+    check_is_opcode(finally_opcode)
+    return comma_op(
+        transform_op(
+            "success", "value",
+            invoke_op(
+                prepared_function(
+                    inferred_type,
+                    match_op(
+                        dereference("argument"), [
+                            catch_function,
+                            prepared_function(
+                                inferred_type,
+                                throw_op(dereference("argument"))
+                            )
+                        ]
+                    )
+                ),
+                transform_op(
+                    "exception", "value",
+                    transform_op(
+                        "value", "success",
+                        try_opcode
+                    )
+                )
+            )
+        ),
+        finally_opcode
+    )
 
 def yield_op(code, restart_type):
-    check_is_opcode(code)
-    check_is_opcode(restart_type)
-    return RDHObject({
-        "opcode": "transform",
-        "output": "yield",
-        "input": "value",
-        "restart": "value",
-        "restart_type": restart_type,
-        "code": code
-    })
+    return transform_op("value", "yield", "value", restart_type, code)
+
+def throw_op(code):
+    return transform_op("value", "exception", code)
 
 def context_op():
     return RDHObject({
@@ -249,6 +310,14 @@ inferred_type = type_lit("Inferred")
 any_type = type_lit("Any")
 int_type = type_lit("Integer")
 bool_type = type_lit("Boolean")
+string_type = type_lit("String")
+
+def const_string_type():
+    # TODO make neater
+    return literal_op(RDHObject({
+        "type": "String",
+        "const": True
+    }))
 
 def unbound_dereference(name):
     return RDHObject({
