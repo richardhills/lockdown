@@ -221,6 +221,32 @@ class TestBasicFunction(TestCase):
         self.assertEquals(result.mode, "value")
         self.assertEquals(result.value, 6)
 
+
+    def test_mutate_list_of_objects(self):
+        code = parse("""
+            function() {
+                List<Object { bar: int }> foo = [ { bar: 2 }, { bar: 3 } ];
+                foo[1] = { bar: 6 };
+                return foo[0].bar * foo[1].bar;
+            }
+        """)
+        result = bootstrap_function(code)
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 12)
+
+
+    def test_mutate_object_in_list(self):
+        code = parse("""
+            function() {
+                List<Object { bar: int }> foo = [ { bar: 2 }, { bar: 3 } ];
+                foo[1].bar = 6;
+                return foo[0].bar * foo[1].bar;
+            }
+        """)
+        result = bootstrap_function(code)
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 12)
+
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
     unittest.main()

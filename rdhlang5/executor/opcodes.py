@@ -413,7 +413,10 @@ class AssignmentOp(Opcode):
                             micro_op = None
                             if isinstance(of_type, CompositeType) and reference is not None:
                                 micro_op = of_type.get_micro_op_type(("set", reference))
-        
+
+                                if not micro_op:
+                                    micro_op = of_type.get_micro_op_type(("set-wildcard", ))
+
                             if micro_op:
                                 if not micro_op.type.is_copyable_from(rvalue_type):
                                     break_types.add("exception", self.INVALID_RVALUE.get_type())
@@ -439,13 +442,21 @@ class AssignmentOp(Opcode):
             default_type = manager.default_type
 
             try:
-                micro_op_type = manager.get_micro_op_type(default_type, ("set", reference))
-                if micro_op_type:
-                    if not micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
+                direct_micro_op_type = manager.get_micro_op_type(default_type, ("set", reference))
+                if direct_micro_op_type:
+                    if not direct_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
                         raise flow_manager.exception(self.INVALID_RVALUE(), self)
 
-                    micro_op = micro_op_type.create(of, default_type)
+                    micro_op = direct_micro_op_type.create(of, default_type)
                     return flow_manager.value(micro_op.invoke(rvalue), self)
+
+                wildcard_micro_op_type = manager.get_micro_op_type(default_type, ("set-wildcard", ))
+                if wildcard_micro_op_type:
+                    if not wildcard_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
+                        raise flow_manager.exception(self.INVALID_RVALUE(), self)
+
+                    micro_op = wildcard_micro_op_type.create(of, default_type)
+                    return flow_manager.value(micro_op.invoke(reference, rvalue), self)
 
                 raise flow_manager.exception(self.INVALID_LVALUE(), self)
             except InvalidAssignmentType:
