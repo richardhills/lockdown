@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+
 from abc import abstractmethod, ABCMeta
 
 from rdhlang5.executor.exceptions import PreparationException
@@ -33,7 +36,7 @@ def get_expression_break_types(expression, context, flow_manager, immediate_cont
     if not isinstance(other_break_types, dict):
         raise FatalError()
     for mode, break_types in other_break_types.items():
-        if not isinstance(mode, str):
+        if not isinstance(mode, basestring):
             raise FatalError()
         if not isinstance(break_types, (list, tuple)):
             raise FatalError()
@@ -769,7 +772,10 @@ OPCODES = {
     "object_template": ObjectTemplateOp,
     "dict_template": DictTemplateOp,
     "list_template": ListTemplateOp,
+    "multiplication": BinaryIntegerOp("Multiplication", lambda lvalue, rvalue: lvalue * rvalue, IntegerType()),
+    "division": BinaryIntegerOp("Division", lambda lvalue, rvalue: lvalue / rvalue, IntegerType()),
     "addition": BinaryIntegerOp("Addition", lambda lvalue, rvalue: lvalue + rvalue, IntegerType()),
+    "subtraction": BinaryIntegerOp("Subtraction", lambda lvalue, rvalue: lvalue - rvalue, IntegerType()),
     "equality": BinaryIntegerOp("Equality", lambda lvalue, rvalue: lvalue == rvalue, BooleanType()),
     "dereference": DereferenceOp,
     "assignment": AssignmentOp,

@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+
 from _collections import defaultdict
 
 from rdhlang5.executor.exceptions import PreparationException
@@ -132,6 +135,9 @@ class UnboundDereferenceBinder(object):
 
     def search_for_reference(self, reference, prepend_context=[]):
         from rdhlang5.executor.raw_code_factories import dereference
+
+        if reference in ("local", "argument", "outer", "static"):
+            return dereference(prepend_context, reference)
 
         types = getattr(self.context, "types", None)
         if types:

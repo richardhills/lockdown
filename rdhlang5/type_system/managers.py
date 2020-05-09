@@ -77,7 +77,7 @@ def get_type_of_value(value):
     # Changing this to import PreparedFunction gives an import error ... no idea why
     from rdhlang5.executor.function import *
 
-    if isinstance(value, (str, int)):
+    if isinstance(value, (basestring, int)):
         return UnitType(value)
     if value is None:
         return NoValueType()

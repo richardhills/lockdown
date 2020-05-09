@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+
 from rdhlang5.type_system.dict_types import RDHDict
 from rdhlang5.type_system.exceptions import FatalError
 from rdhlang5.type_system.list_types import RDHList
@@ -140,8 +143,17 @@ def binary_integer_op(name, lvalue, rvalue):
         "rvalue": rvalue
     })
 
+def multiplication_op(lvalue, rvalue):
+    return binary_integer_op("multiplication", lvalue, rvalue)
+
+def division_op(lvalue, rvalue):
+    return binary_integer_op("division", lvalue, rvalue)
+
 def addition_op(lvalue, rvalue):
     return binary_integer_op("addition", lvalue, rvalue)
+
+def subtraction_op(lvalue, rvalue):
+    return binary_integer_op("subtraction", lvalue, rvalue)
 
 def equality_op(lvalue, rvalue):
     return binary_integer_op("equality", lvalue, rvalue)
@@ -317,6 +329,8 @@ def const_string_type():
     }))
 
 def unbound_dereference(name):
+    if not isinstance(name, basestring):
+        raise FatalError()
     return RDHObject({
         "opcode": "unbound_dereference",
         "reference": name
@@ -329,11 +343,13 @@ def dereference(*vars):
     result = context_op()
 
     for var in vars:
-        if isinstance(var, str):
+        if isinstance(var, basestring):
             for v in var.split("."):
                 result = dereference_op(result, literal_op(v))
-        if isinstance(var, list):
+        elif isinstance(var, list):
             for v in var:
                 result = dereference_op(result, literal_op(v))
+        else:
+            raise FatalError(var)
 
     return result

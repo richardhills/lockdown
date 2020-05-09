@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+
 from rdhlang5.executor.exceptions import PreparationException
 from rdhlang5.executor.function_type import FunctionType, enrich_break_type
 from rdhlang5.type_system.composites import InferredType

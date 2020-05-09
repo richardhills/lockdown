@@ -61,14 +61,14 @@ class UnitType(Type):
         return [ self.value ]
 
     def __repr__(self):
-        if isinstance(self.value, str):
+        if isinstance(self.value, basestring):
             return "<\"{}\">".format(self.value)
         else:
             return "<{}>".format(self.value)
 
 class StringType(Type):
     def is_copyable_from(self, other):
-        return isinstance(other, StringType) or (isinstance(other, UnitType) and isinstance(other.value, str))
+        return isinstance(other, StringType) or (isinstance(other, UnitType) and isinstance(other.value, basestring))
 
     def __repr__(self):
         return "StringType"

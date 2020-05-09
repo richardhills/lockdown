@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+
 from _collections import defaultdict
 
 from rdhlang5.type_system.core_types import Type

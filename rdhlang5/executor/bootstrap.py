@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+
 from _collections import defaultdict
 
 from munch import munchify
@@ -48,7 +51,7 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False)
         function_break_types = function.get_type().break_types
 
         for mode, break_types in function_break_types.items():
-            if mode not in ("exit", "return") and check_safe_exit:
+            if mode not in ("exit", "return", "value") and check_safe_exit:
                 raise BootstrapException("break mode {}: {} not safe".format(mode, break_types))
             for break_type in break_types:
                 break_manager = stack.enter_context(break_manager.capture(mode, break_type, top_level=True))
