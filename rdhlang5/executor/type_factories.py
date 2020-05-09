@@ -41,13 +41,16 @@ def build_object_type(data):
             properties[name] = Const(properties[name])
     return RDHObjectType(properties)
 
+def build_list_type(data):
+    return RDHListType(
+        [ enrich_type(type) for type in data.entry_types ],
+        enrich_type(data.wildcard_type)
+    )
+
 TYPES = {
     "Any": lambda data: AnyType(),
     "Object": build_object_type,
-    "List": lambda data: RDHListType(
-        [ enrich_type(type) for type in data["entry_types"] ],
-        enrich_type(data["wildcard_type"])
-    ),
+    "List": build_list_type,
     "Function": build_function_type,
     "OneOf": build_one_of_type,
     "Integer": lambda data: IntegerType(),

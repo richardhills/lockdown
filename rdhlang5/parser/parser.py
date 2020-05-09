@@ -8,15 +8,20 @@ from antlr4.CommonTokenStream import CommonTokenStream
 from antlr4.InputStream import InputStream
 from antlr4.error.ErrorListener import ConsoleErrorListener
 
+from rdhlang5.executor.exceptions import PreparationException
 from rdhlang5.executor.raw_code_factories import function_lit, nop, comma_op, \
-    literal_op, dereference_op, unbound_dereference, dereference, addition_op, \
-    transform_op, int_type, multiplication_op, division_op, subtraction_op,\
-    object_type
+    literal_op, dereference_op, unbound_dereference, addition_op, \
+    transform_op, int_type, multiplication_op, division_op, subtraction_op, \
+    object_type, prepare_op, is_opcode, object_template_op, infer_all, \
+    no_value_type, combine_opcodes, static_op, invoke_op, assignment_op,\
+    unbound_assignment, list_template_op, list_type
 from rdhlang5.parser.grammar.langLexer import langLexer
 from rdhlang5.parser.grammar.langParser import langParser
 from rdhlang5.parser.grammar.langVisitor import langVisitor
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE
+from rdhlang5.type_system.exceptions import FatalError
 from rdhlang5.type_system.object_types import RDHObject
+from rdhlang5.utils import MISSING, default, spread_dict
 
 
 class RDHLang5Visitor(langVisitor):
@@ -53,35 +58,118 @@ class RDHLang5Visitor(langVisitor):
             return self.visit(ctx.function())
 
     def visitFunction(self, ctx):
-        argument_type_expression = ctx.expression()
-        code_block = self.visit(ctx.codeBlock())
+        argument_type = ctx.expression()
 
-        if argument_type_expression:
-            argument_type_expression = self.visit(argument_type_expression)
-            return function_lit(
-                argument_type_expression,
-                transform_op("return", "value", code_block)
-            )
+        if argument_type:
+            argument_type = self.visit(argument_type)
         else:
-            return function_lit(
-                transform_op("return", "value", code_block)
-            )
+            argument_type = MISSING
 
-    def visitCodeBlock(self, ctx):
-        expressions = [
-            self.visit(e) for e in ctx.expression()
-        ]
-        if len(expressions) == 0:
-            return nop
-        if len(expressions) == 1:
-            return expressions[0]
-        return comma_op(expressions)
+        function_builder = CodeBlockBuilder(
+            argument_type_expression=argument_type
+        ).chain(self.visit(ctx.codeBlock()))
+
+        return function_builder.create("function")
+
+    def visitSymbolInitialization(self, ctx):
+        return (
+            ctx.SYMBOL().getText(),
+            self.visit(ctx.expression())
+        )
+
+    def visitLocalVariableDeclaration(self, ctx):
+        type = self.visit(ctx.expression())
+
+        remaining_code = ctx.codeBlock()
+        if remaining_code:
+            remaining_code = self.visit(remaining_code)
+
+        for symbol_initialization in reversed(ctx.symbolInitialization()):
+            name, initial_value = self.visit(symbol_initialization)
+
+            new_code_block = CodeBlockBuilder(
+                local_variable_types={ name: type },
+                local_initializer=object_template_op({ name: initial_value })
+            )
+            if remaining_code:
+                new_code_block = new_code_block.chain(remaining_code)
+            remaining_code = new_code_block
+
+        return new_code_block
+
+    def visitStaticValueDeclaration(self, ctx):
+        remaining_code = self.visit(ctx.codeBlock())
+
+        name, value = self.visit(ctx.symbolInitialization())
+
+        return CodeBlockBuilder(
+            extra_statics={ name: value }
+        ).chain(remaining_code)
+
+    def visitTypedef(self, ctx):
+        remaining_code = self.visit(ctx.codeBlock())
+
+        value = self.visit(ctx.expression())
+        name = ctx.SYMBOL().getText()
+
+        return CodeBlockBuilder(
+            extra_statics={ name: value },
+        ).chain(remaining_code)
+
+    def visitToExpression(self, ctx):
+        code_expressions = [self.visit(e) for e in ctx.expression()]
+
+        new_function = CodeBlockBuilder(
+            code_expressions=code_expressions
+        )
+
+        remaining_code = ctx.codeBlock()
+        if remaining_code:
+            remaining_code = self.visit(remaining_code)
+            new_function = new_function.chain(remaining_code)
+
+        return new_function
+
+
+#     def visitCodeBlock(self, ctx):
+#         expressions = [
+#             self.visit(e) for e in ctx.expression()
+#         ]
+#         if len(expressions) == 0:
+#             return nop
+#         if len(expressions) == 1:
+#             return expressions[0]
+#         return comma_op(expressions)
 
     def visitStringExpression(self, ctx):
         return literal_op(json.loads(ctx.STRING().getText()))
 
     def visitNumberExpression(self, ctx):
         return literal_op(json.loads(ctx.NUMBER().getText()))
+
+    def visitImmediateAssignment(self, ctx):
+        return unbound_assignment(
+            ctx.SYMBOL().getText(),
+            self.visit(ctx.expression())
+        )
+
+    def visitStaticAssignment(self, ctx):
+        of, rvalue = ctx.expression()
+        of = self.visit(of)
+        rvalue = self.visit(rvalue)
+        reference = ctx.SYMBOL().getText()
+        return assignment_op(
+            of, literal_op(reference), rvalue
+        )
+
+    def visitDynamicAssignment(self, ctx):
+        of, reference, rvalue = ctx.expression()
+        of = self.visit(of)
+        reference = self.visit(reference)
+        rvalue = self.visit(rvalue)
+        return assignment_op(
+            of, reference, rvalue
+        )
 
     def visitImmediateDereference(self, ctx):
         return unbound_dereference(ctx.SYMBOL().getText())
@@ -140,7 +228,17 @@ class RDHLang5Visitor(langVisitor):
         )
 
     def visitIntTypeLiteral(self, ctx):
-        return int_type
+        return int_type()
+
+    def visitObjectTemplate(self, ctx):
+        result = {}
+        for pair in ctx.objectPropertyPair():
+            name, type = self.visit(pair)
+            result[name] = type
+        return object_template_op(result)
+
+    def visitObjectPropertyPair(self, ctx):
+        return [ ctx.SYMBOL().getText(), self.visit(ctx.expression()) ] 
 
     def visitObjectType(self, ctx):
         result = {}
@@ -151,6 +249,140 @@ class RDHLang5Visitor(langVisitor):
 
     def visitObjectTypePropertyPair(self, ctx):
         return [ ctx.SYMBOL().getText(), self.visit(ctx.expression()) ]
+
+    def visitListTemplate(self, ctx):
+        return list_template_op([
+            self.visit(e) for e in ctx.expression()
+        ])
+
+    def visitListType(self, ctx):
+        type = self.visit(ctx.expression())
+        return list_type([], type)
+
+class CodeBlockBuilder(object):
+    def __init__(
+        self,
+        code_expressions=MISSING,
+        local_variable_types=MISSING,
+        local_initializer=MISSING,
+        extra_statics=MISSING,
+        argument_type_expression=MISSING,
+        breaks_types=MISSING
+    ):
+        self.code_expressions = code_expressions
+        self.local_variable_types = local_variable_types
+        self.local_initializer = local_initializer
+        self.extra_statics = extra_statics
+        self.argument_type_expression = argument_type_expression
+        self.breaks_types = breaks_types
+
+    def chain(self, other):
+        can_merge_code_blocks = True
+
+        if other.argument_type_expression is not MISSING:
+            # If the inner function needs an argument, we have no mechanism to provide it
+            raise PreparationException()
+        if other.breaks_types is not MISSING:
+            # The newly created function ignores other.breaks_types, so let's fail early if they're provided
+            raise PreparationException()
+
+        if self.local_variable_types is not MISSING and other.local_variable_types is not MISSING:
+            # We can only take local variables from one of the two functions
+            can_merge_code_blocks = False
+        if self.code_expressions is not MISSING and other.local_variable_types is not MISSING:
+            # We have code that should execute before the other functions local variables are declared
+            can_merge_code_blocks = False
+        if self.extra_statics is not MISSING and other.extra_statics is not MISSING:
+            # We can only take extra statics from one of the two functions
+            can_merge_code_blocks = False
+        if self.extra_statics is not MISSING and other.local_variable_types is not MISSING:
+            # The inner local_variable_types might reference something from statics
+            can_merge_code_blocks = False
+
+        new_code_expressions = None
+        our_code_expressions = default(self.code_expressions, MISSING, [])
+        other_code_expressions = default(other.code_expressions, MISSING, [])
+
+        if can_merge_code_blocks:
+            new_code_expressions = our_code_expressions + other_code_expressions
+            local_variable_types = default(self.local_variable_types, MISSING, other.local_variable_types)
+            local_initializer = default(self.local_initializer, MISSING, other.local_initializer)
+            extra_statics = default(self.extra_statics, MISSING, other.extra_statics)
+        else:
+            new_code_expressions = our_code_expressions + [ other.create("expression") ]
+            local_variable_types = self.local_variable_types
+            local_initializer = self.local_initializer
+            extra_statics = self.extra_statics
+
+        return CodeBlockBuilder(
+            code_expressions=new_code_expressions,
+            local_variable_types=local_variable_types,
+            local_initializer=local_initializer,
+            extra_statics=extra_statics,
+            argument_type_expression=self.argument_type_expression,
+            breaks_types=self.breaks_types
+        )
+
+    def requires_function(self):
+        return (
+            self.argument_type_expression is not MISSING
+            or self.local_variable_types is not MISSING
+            or self.extra_statics is not MISSING
+            or self.breaks_types is not MISSING
+        )
+
+    def create(self, output_mode):
+        if output_mode not in ("function", "expression"):
+            raise FatalError()
+
+        code_expressions = default(self.code_expressions, MISSING, [])
+
+        for c in code_expressions:
+            if not is_opcode(c):
+                raise PreparationException()
+
+        if not self.requires_function() and output_mode == "expression":
+            return combine_opcodes(code_expressions)
+
+        result = {}
+
+        statics = {}
+
+        if self.argument_type_expression is not MISSING:
+            argument_type = self.argument_type_expression
+        else:
+            argument_type = no_value_type()
+
+        if self.local_variable_types is not MISSING:
+            local_type = object_type(self.local_variable_types)
+        else:
+            local_type = object_type({})
+
+        if self.local_initializer is not MISSING:
+            local_initializer = self.local_initializer
+        else:
+            local_initializer = object_template_op({})
+
+        if self.breaks_types is not MISSING:
+            break_types = object_template_op(self.breaks_types)
+        else:
+            break_types = infer_all()
+
+        if self.extra_statics is not MISSING:
+            raise ValueError()
+            statics = spread_dict(self.extra_statics, statics)
+
+        if output_mode == "function":
+            code = transform_op(
+                "return", "value", combine_opcodes(code_expressions)
+            )
+            return function_lit(
+                argument_type, break_types, local_type, local_initializer, code
+            )
+        elif output_mode == "expression":
+            return invoke_op(static_op(prepare_op(literal_op(function_lit(
+                argument_type, break_types, local_type, local_initializer, combine_opcodes(code_expressions)
+            )))))
 
 class ParseError(Exception):
     pass

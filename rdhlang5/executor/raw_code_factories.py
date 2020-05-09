@@ -7,16 +7,22 @@ from rdhlang5.type_system.list_types import RDHList
 from rdhlang5.type_system.object_types import RDHObject
 
 
-def check_is_opcode(data):
+def is_opcode(data):
     if not isinstance(data, RDHObject):
         raise FatalError()
-    if not "opcode" in data.__dict__:
+    return "opcode" in data.__dict__
+
+
+def check_is_opcode(data):
+    if not is_opcode(data):
         raise FatalError
+
 
 def type_lit(name):
     return literal_op(RDHObject({
         "type": name
     }))
+
 
 def unit_type(value):
     return object_template_op({
@@ -24,17 +30,27 @@ def unit_type(value):
         "value": literal_op(value)
     })
 
+
 def one_of_type(types):
     return object_template_op({
         "type": literal_op("OneOf"),
         "types": list_template_op(types)
     })
 
+
 def object_type(properties):
     return object_template_op({
         "type": literal_op("Object"),
         "properties": object_template_op(properties)
     })
+
+def list_type(entry_types, wildcard_type):
+    return object_template_op({
+        "type": literal_op("List"),
+        "entry_types": list_template_op(entry_types),
+        "wildcard_type": wildcard_type
+    })
+
 
 def function_type(argument_type, break_types):
     if not isinstance(break_types, dict):
@@ -44,6 +60,7 @@ def function_type(argument_type, break_types):
         "argument": argument_type,
         "break_types": dict_template_op(break_types)
     })
+
 
 def build_break_types(return_type=None, exception_type=None, yield_types=None, value_type=None):
     break_types = {}
@@ -59,26 +76,28 @@ def build_break_types(return_type=None, exception_type=None, yield_types=None, v
 
     return break_types
 
+
 def infer_all():
     return {
-        "wildcard": list_template_op([ dict_template_op({ "out": inferred_type, "in": inferred_type }) ])
+        "wildcard": list_template_op([ dict_template_op({ "out": inferred_type(), "in": inferred_type() }) ])
     }
+
 
 def function_lit(*args):
     if len(args) == 1:
         code, = args
-        argument_type = local_type = no_value_type
+        argument_type = local_type = no_value_type()
         break_types = infer_all()
-        local_initializer = nop
+        local_initializer = nop()
     elif len(args) == 2:
         argument_type, code = args
-        local_type = no_value_type
+        local_type = no_value_type()
         break_types = infer_all()
-        local_initializer = nop
+        local_initializer = nop()
     elif len(args) == 3:
         argument_type, break_types, code = args
-        local_type = no_value_type
-        local_initializer = nop
+        local_type = no_value_type()
+        local_initializer = nop()
     elif len(args) == 5:
         argument_type, break_types, local_type, local_initializer, code = args
     else:
@@ -104,11 +123,13 @@ def function_lit(*args):
 
     return RDHObject(func)
 
+
 def literal_op(value):
     return RDHObject({
         "opcode": "literal",
         "value": value
     })
+
 
 def object_template_op(values):
     for v in values.values():
@@ -118,6 +139,7 @@ def object_template_op(values):
         "opcodes": RDHDict(values)
     })
 
+
 def dict_template_op(values):
     for v in values.values():
         check_is_opcode(v)
@@ -126,6 +148,7 @@ def dict_template_op(values):
         "opcodes": RDHDict(values)
     })
 
+
 def list_template_op(values):
     for v in values:
         check_is_opcode(v)
@@ -133,6 +156,7 @@ def list_template_op(values):
         "opcode": "list_template",
         "opcodes": RDHList(values)
     })
+
 
 def binary_integer_op(name, lvalue, rvalue):
     check_is_opcode(lvalue)
@@ -143,20 +167,26 @@ def binary_integer_op(name, lvalue, rvalue):
         "rvalue": rvalue
     })
 
+
 def multiplication_op(lvalue, rvalue):
     return binary_integer_op("multiplication", lvalue, rvalue)
+
 
 def division_op(lvalue, rvalue):
     return binary_integer_op("division", lvalue, rvalue)
 
+
 def addition_op(lvalue, rvalue):
     return binary_integer_op("addition", lvalue, rvalue)
+
 
 def subtraction_op(lvalue, rvalue):
     return binary_integer_op("subtraction", lvalue, rvalue)
 
+
 def equality_op(lvalue, rvalue):
     return binary_integer_op("equality", lvalue, rvalue)
+
 
 def comma_op(*opcodes):
     for v in opcodes:
@@ -166,6 +196,7 @@ def comma_op(*opcodes):
         "opcodes": RDHList(opcodes)
     })
 
+
 def loop_op(opcode):
     check_is_opcode(opcode)
     return RDHObject({
@@ -173,19 +204,21 @@ def loop_op(opcode):
         "code": opcode
     })
 
+
 def transform_op(*args):
     if len(args) == 1:
         output, = args
         input = code = restart = restart_type = None
-    if len(args) == 3:
+    elif len(args) == 3:
         input, output, code = args
         restart = restart_type = None
     elif len(args) == 5:
         input, output, restart, restart_type, code = args
     else:
         raise FatalError()
-    check_is_opcode(code)
-    if not isinstance(input, basestring):
+    if code:
+        check_is_opcode(code)
+    if input and not isinstance(input, basestring):
         raise FatalError()
     if not isinstance(output, basestring):
         raise FatalError()
@@ -203,28 +236,31 @@ def transform_op(*args):
         op["restart_type"] = restart_type
     return RDHObject(op)
 
+
 def return_op(code):
     return transform_op("value", "return", code)
+
 
 def break_op(break_mode):
     return transform_op(break_mode)
 
+
 def try_catch_op(try_opcode, catch_function, finally_opcode=None):
     check_is_opcode(try_opcode)
     if not finally_opcode:
-        finally_opcode = nop
+        finally_opcode = nop()
     check_is_opcode(finally_opcode)
     return comma_op(
         transform_op(
             "success", "value",
             invoke_op(
                 prepared_function(
-                    inferred_type,
+                    inferred_type(),
                     match_op(
                         dereference("argument"), [
                             catch_function,
                             prepared_function(
-                                inferred_type,
+                                inferred_type(),
                                 throw_op(dereference("argument"))
                             )
                         ]
@@ -242,16 +278,20 @@ def try_catch_op(try_opcode, catch_function, finally_opcode=None):
         finally_opcode
     )
 
+
 def yield_op(code, restart_type):
     return transform_op("value", "yield", "value", restart_type, code)
 
+
 def throw_op(code):
     return transform_op("value", "exception", code)
+
 
 def context_op():
     return RDHObject({
         "opcode": "context",
     })
+
 
 def dereference_op(of, reference):
     check_is_opcode(of)
@@ -261,6 +301,7 @@ def dereference_op(of, reference):
         "of": of,
         "reference": reference
     })
+
 
 def assignment_op(of, reference, rvalue):
     check_is_opcode(of)
@@ -273,6 +314,7 @@ def assignment_op(of, reference, rvalue):
         "rvalue": rvalue
     })
 
+
 def condition_op(condition, when_true, when_false):
     check_is_opcode(condition)
     check_is_opcode(when_true)
@@ -284,6 +326,7 @@ def condition_op(condition, when_true, when_false):
         "when_false": when_false
     })
 
+
 def prepare_op(function_expression):
     check_is_opcode(function_expression)
     return RDHObject({
@@ -291,9 +334,18 @@ def prepare_op(function_expression):
         "code": function_expression
     })
 
+
+def static_op(expression):
+    check_is_opcode(expression)
+    return RDHObject({
+        "opcode": "static",
+        "code": expression
+    })
+
+
 def invoke_op(function_expression, argument_expression=None):
     if argument_expression is None:
-        argument_expression = nop
+        argument_expression = nop()
     check_is_opcode(function_expression)
     check_is_opcode(argument_expression)
     return RDHObject({
@@ -301,6 +353,7 @@ def invoke_op(function_expression, argument_expression=None):
         "function": function_expression,
         "argument": argument_expression
     })
+
 
 def match_op(value_expression, matchers):
     check_is_opcode(value_expression)
@@ -313,13 +366,50 @@ def match_op(value_expression, matchers):
     })
 
 
-nop = RDHObject({ "opcode": "nop" })
-no_value_type = type_lit("NoValue")
-inferred_type = type_lit("Inferred")
-any_type = type_lit("Any")
-int_type = type_lit("Integer")
-bool_type = type_lit("Boolean")
-string_type = type_lit("String")
+def nop():
+    return RDHObject({ "opcode": "nop" })
+
+
+def no_value_type():
+    return type_lit("NoValue")
+
+
+def inferred_type():
+    return type_lit("Inferred")
+
+
+def any_type():
+    return type_lit("Any")
+
+
+def int_type():
+    return type_lit("Integer")
+
+
+def bool_type():
+    return type_lit("Boolean")
+
+
+def string_type():
+    return type_lit("String")
+
+
+def combine_opcodes(opcodes):
+    flattened_opcodes = []
+    for opcode in opcodes:
+        check_is_opcode(opcode)
+    for opcode in opcodes:
+        if opcode.__dict__["opcode"] == "comma":
+            flattened_opcodes.extend(opcode.opcodes)
+        else:
+            flattened_opcodes.append(opcode)
+    if len(flattened_opcodes) == 0:
+        return nop()
+    if len(flattened_opcodes) == 1:
+        return opcodes[0]
+    if len(flattened_opcodes) > 1:
+        return comma_op(*flattened_opcodes)
+
 
 def const_string_type():
     # TODO make neater
@@ -327,6 +417,7 @@ def const_string_type():
         "type": "String",
         "const": True
     }))
+
 
 def unbound_dereference(name):
     if not isinstance(name, basestring):
@@ -336,8 +427,21 @@ def unbound_dereference(name):
         "reference": name
     })
 
+
+def unbound_assignment(name, rvalue):
+    if not isinstance(name, basestring):
+        raise FatalError()
+    check_is_opcode(rvalue)
+    return RDHObject({
+        "opcode": "unbound_assignment",
+        "reference": name,
+        "rvalue": rvalue
+    })
+
+
 def prepared_function(*args):
-    return prepare_op(literal_op(function_lit(*args)))
+    return static_op(prepare_op(literal_op(function_lit(*args))))
+
 
 def dereference(*vars):
     result = context_op()

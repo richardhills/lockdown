@@ -15,7 +15,9 @@ from rdhlang5.type_system.dict_types import RDHDict, DictGetterType, \
     DictSetterType, DictWildcardGetterType, DictWildcardSetterType
 from rdhlang5.type_system.exceptions import FatalError, InvalidDereferenceType, \
     InvalidDereferenceKey, InvalidAssignmentType, InvalidAssignmentKey
-from rdhlang5.type_system.list_types import RDHListType, RDHList
+from rdhlang5.type_system.list_types import RDHListType, RDHList, ListGetterType, \
+    ListSetterType, ListWildcardGetterType, ListWildcardSetterType, \
+    ListWildcardDeletterType, ListInsertType, ListWildcardInsertType
 from rdhlang5.type_system.managers import get_type_of_value, get_manager
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType, \
     ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
@@ -23,9 +25,9 @@ from rdhlang5.type_system.object_types import RDHObject, RDHObjectType, \
 from rdhlang5.utils import MISSING, NO_VALUE
 
 
-def evaluate(opcode, context, flow_manager):
+def evaluate(opcode, context, flow_manager, immediate_context=None):
     with flow_manager.capture("value", { "out": AnyType() }) as new_flow_manager:
-        opcode.jump(context, new_flow_manager)
+        opcode.jump(context, new_flow_manager, immediate_context)
         raise FatalError()
     return new_flow_manager.result
 
@@ -90,7 +92,7 @@ class Opcode(object):
         raise NotImplementedError()
 
     @abstractmethod
-    def jump(self, context, flow_manager):
+    def jump(self, context, flow_manager, immediate_context=None):
         raise NotImplementedError()
 
 
@@ -100,7 +102,7 @@ class Nop(Opcode):
         break_types.add("value", NoValueType())
         return break_types.build()
 
-    def jump(self, context, manager):
+    def jump(self, context, manager, immediate_context=None):
         return manager.value(NO_VALUE, self)
 
 
@@ -115,7 +117,7 @@ class LiteralOp(Opcode):
         break_types.add("value", self.type)
         return break_types.build()
 
-    def jump(self, context, break_manager):
+    def jump(self, context, break_manager, immediate_context=None):
         return break_manager.value(self.value, self)
 
 
@@ -160,7 +162,7 @@ class ObjectTemplateOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager):
+    def jump(self, context, flow_manager, immediate_context=None):
         with flow_manager.get_next_frame(self) as frame:
             result = {}
             for key, opcode in self.opcodes.items():
@@ -210,7 +212,7 @@ class DictTemplateOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager):
+    def jump(self, context, flow_manager, immediate_context=None):
         with flow_manager.get_next_frame(self) as frame:
             result = {}
             for key, opcode in self.opcodes.items():
@@ -227,17 +229,43 @@ class ListTemplateOp(Opcode):
     def get_break_types(self, context, flow_manager, immediate_context=None):
         break_types = BreakTypesFactory()
 
-        sub_types = []
-        for opcode in self.opcodes:
+        micro_ops = {}
+        initial_data = {}
+
+        for index, opcode in enumerate(self.opcodes):
             value_type, other_break_types = get_expression_break_types(opcode, context, flow_manager)
             break_types.merge(other_break_types)
-            sub_types.append(flatten_out_types(value_type))
+            value_type = flatten_out_types(value_type)
 
-        break_types.add("value", RDHListType(sub_types, AnyType()))
+            micro_ops[("get", index)] = ListGetterType(index, value_type, False, False)
+            micro_ops[("set", index)] = ListSetterType(index, AnyType(), False, False)
+
+            initial_value = MISSING
+
+            if isinstance(value_type, CompositeType) and value_type.initial_data:
+                initial_value = value_type.initial_data
+
+            try:
+                allowed_values = value_type.get_allowed_values()
+                if len(allowed_values) == 1:
+                    initial_value = allowed_values[0]
+            except AllowedValuesNotAvailable:
+                pass
+
+            if initial_value is not MISSING:
+                initial_data[index] = initial_value
+
+        micro_ops[("get-wildcard",)] = ListWildcardGetterType(rich_composite_type, True, False)
+        micro_ops[("set-wildcard",)] = ListWildcardSetterType(rich_composite_type, True, True)
+        micro_ops[("insert", 0)] = ListInsertType(rich_composite_type, 0, False, False)
+        micro_ops[("delete-wildcard",)] = ListWildcardDeletterType(True)
+        micro_ops[("insert-wildcard",)] = ListWildcardInsertType(rich_composite_type, True, False)
+
+        break_types.add("value", CompositeType(micro_ops, initial_data=initial_data, is_revconst=True))
 
         return break_types.build()
 
-    def jump(self, context, flow_manager):
+    def jump(self, context, flow_manager, immediate_context=None):
         with flow_manager.get_next_frame(self) as frame:
             result = []
             for index, opcode in enumerate(self.opcodes):
@@ -272,7 +300,7 @@ class ContextOp(Opcode):
         break_types.add("value", get_context_type(context))
         return break_types.build()
 
-    def jump(self, context, flow_manager):
+    def jump(self, context, flow_manager, immediate_context=None):
         return flow_manager.value(context, self)
 
 
@@ -304,8 +332,11 @@ class DereferenceOp(Opcode):
                     for reference in reference_type.get_allowed_values():
                         for of_type in unwrap_types(of_types):
                             micro_op = None
+
                             if isinstance(of_type, CompositeType):
                                 micro_op = of_type.get_micro_op_type(("get", reference))
+                                if micro_op is None:
+                                    micro_op = of_type.get_micro_op_type(("get-wildcard", ))
 
                             if micro_op:
                                 break_types.add("value", micro_op.type)
@@ -320,7 +351,7 @@ class DereferenceOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager):
+    def jump(self, context, flow_manager, immediate_context=None):
         with flow_manager.get_next_frame(self) as frame:
             of, _ = frame.step("of", lambda: evaluate(self.of, context, flow_manager))
             reference, _ = frame.step("reference", lambda: evaluate(self.reference, context, flow_manager))
@@ -329,10 +360,15 @@ class DereferenceOp(Opcode):
             default_type = manager.default_type
 
             try:
-                micro_op_type = manager.get_micro_op_type(default_type, ("get", reference))
-                if micro_op_type:
-                    micro_op = micro_op_type.create(of, default_type)
+                direct_micro_op_type = manager.get_micro_op_type(default_type, ("get", reference))
+                if direct_micro_op_type:
+                    micro_op = direct_micro_op_type.create(of, default_type)
                     return flow_manager.value(micro_op.invoke(), self)
+
+                wildcard_micro_op_type = manager.get_micro_op_type(default_type, ("get-wildcard", ))
+                if wildcard_micro_op_type:
+                    micro_op = wildcard_micro_op_type.create(of, default_type)
+                    return flow_manager.value(micro_op.invoke(reference), self)
 
                 raise flow_manager.exception(self.INVALID_DEREFERENCE(), self)
             except InvalidDereferenceType:
@@ -393,7 +429,7 @@ class AssignmentOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager):
+    def jump(self, context, flow_manager, immediate_context=None):
         with flow_manager.get_next_frame(self) as frame:
             of, _ = frame.step("of", lambda: evaluate(self.of, context, flow_manager))
             reference, _ = frame.step("reference", lambda: evaluate(self.reference, context, flow_manager))
@@ -449,7 +485,7 @@ def BinaryIntegerOp(name, func, result_type):
 
             return break_types.build()
 
-        def jump(self, context, break_manager):
+        def jump(self, context, break_manager, immediate_context=None):
             with break_manager.get_next_frame(self) as frame:
                 lvalue, _ = frame.step("lvalue", lambda: evaluate(self.lvalue, context, break_manager))
                 if not isinstance(lvalue, int):
@@ -505,7 +541,7 @@ class TransformOp(Opcode):
             break_types.add(self.restart, restart_type)
         return break_types.build()
 
-    def jump(self, context, break_manager):
+    def jump(self, context, break_manager, immediate_context=None):
         with break_manager.get_next_frame(self) as frame:
             if frame.has_restart_value():
                 restart_value = frame.pop_restart_value()
@@ -546,7 +582,7 @@ class CommaOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager):
+    def jump(self, context, flow_manager, immediate_context=None):
         value = NO_VALUE
         with flow_manager.get_next_frame(self) as frame:
             for index, opcode in enumerate(self.opcodes):
@@ -563,7 +599,7 @@ class LoopOp(Opcode):
         _, other_break_types = get_expression_break_types(self.code, context, flow_manager)
         return other_break_types
 
-    def jump(self, context, flow_manager):
+    def jump(self, context, flow_manager, immediate_context=None):
         while True:
             evaluate(self.code, context, flow_manager)
 
@@ -601,7 +637,7 @@ class ConditionalOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager):
+    def jump(self, context, flow_manager, immediate_context=None):
         with flow_manager.get_next_frame(self) as frame:
             condition, _ = frame.step("condition", lambda: evaluate(self.condition, context, flow_manager))
 
@@ -621,21 +657,46 @@ class PrepareOp(Opcode):
         self.code = enrich_opcode(data.code, visitor)
 
     def get_break_types(self, context, flow_manager, immediate_context=None):
-        break_types = BreakTypesFactory()
+        raise PreparationException()
 
+        # I've left this code for reference, not sure how to use in future...
+#         break_types = BreakTypesFactory()
+# 
+#         function_data = evaluate(self.code, context, flow_manager)
+# 
+#         from rdhlang5.executor.function import prepare
+# 
+#         self.function = prepare(function_data, context, flow_manager, immediate_context)
+# 
+#         break_types.add("value", self.function.get_type())
+# 
+#         return break_types.build()
+
+    def jump(self, context, flow_manager, immediate_context=None):
         function_data = evaluate(self.code, context, flow_manager)
 
         from rdhlang5.executor.function import prepare
 
-        self.function = prepare(function_data, context, flow_manager, immediate_context)
+        function = prepare(function_data, context, flow_manager, immediate_context)
 
-        break_types.add("value", self.function.get_type())
+        flow_manager.value(function, self)
 
-        return break_types.build()
+class StaticOp(Opcode):
+    def __init__(self, data, visitor):
+        self.code = enrich_opcode(data.code, visitor)
 
-    def jump(self, context, flow_manager):
-        flow_manager.value(self.function, self)
+    def get_break_types(self, context, flow_manager, immediate_context=None):
+        break_types = BreakTypesFactory()
+        try:
+            self.value = evaluate(self.code, context, flow_manager, immediate_context)
+            break_types.add("value", get_type_of_value(self.value))
+            return break_types.build()
+        except Exception as e:
+            raise
+            raise PreparationException(e)
 
+    def jump(self, context, flow_manager, immediate_context=None):
+        flow_manager.value(self.value, self)
 
 class InvokeOp(Opcode):
     def __init__(self, data, visitor):
@@ -664,7 +725,7 @@ class InvokeOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager):
+    def jump(self, context, flow_manager, immediate_context=None):
         function = evaluate(self.function, context, flow_manager)
         argument = evaluate(self.argument, context, flow_manager)
         # TODO: check argument type
@@ -709,7 +770,7 @@ class MatchOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager):
+    def jump(self, context, flow_manager, immediate_context=None):
         with flow_manager.get_next_frame(self) as frame:
             value, _ = frame.step("value", lambda: evaluate(self.value, context, flow_manager))
             value_type = get_type_of_value(value)
@@ -784,6 +845,7 @@ OPCODES = {
     "loop": LoopOp,
     "conditional": ConditionalOp,
     "prepare": PrepareOp,
+    "static": StaticOp,
     "invoke": InvokeOp,
     "match": MatchOp
 }

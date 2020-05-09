@@ -77,27 +77,49 @@ WS
    ;
 
 function
-   : 'function' '(' expression? ')' codeBlock
+   : 'function' '(' expression? ')' '{' codeBlock '}'
+   ;
+
+symbolInitialization
+   : SYMBOL '=' expression
    ;
 
 codeBlock
-   : '{' ( expression ';' )* '}'
+   : expression symbolInitialization (',' symbolInitialization)* ';' codeBlock? # localVariableDeclaration
+   | 'static' symbolInitialization ';' codeBlock? # staticValueDeclaration
+   | 'typedef' expression SYMBOL ';' codeBlock? # typedef
+/*   | 'import' SYMBOL ';' codeBlock? # importStatement */
+   | (expression ';')+ codeBlock? # toExpression
    ;
 
 expression
    : STRING					# stringExpression
    | NUMBER					# numberExpression
+   | objectTemplate			# toObjectTemplate
+   | listTemplate			# toListTemplate
+   | '(' expression ')'     # parenthesis
    | SYMBOL					# immediateDereference
    | expression '.' SYMBOL  # staticDereference
    | expression '[' expression ']' # dynamicDereference
-   | '(' expression ')'     # parenthesis
    | expression '*' expression # multiplication
    | expression '/' expression # division
    | expression '+' expression # addition
    | expression '-' expression # subtraction
+   | SYMBOL '=' expression  # immediateAssignment
+   | expression '.' SYMBOL '=' expression  # staticAssignment
+   | expression '[' expression ']' '=' expression # dynamicAssignment
    | 'return' expression    # returnStatement
    | 'int'					# intTypeLiteral
    | objectType				# toObjectType
+   | listType				# toListType
+   ;
+
+objectTemplate
+   : '{' objectPropertyPair? (';' objectPropertyPair)* '}'
+   ;
+
+objectPropertyPair
+   : SYMBOL ':' expression
    ;
 
 objectType
@@ -106,4 +128,12 @@ objectType
 
 objectTypePropertyPair
    : SYMBOL ':' expression
+   ;
+
+listTemplate
+   : '[' expression? (',' expression)* ']'
+   ;
+
+listType
+   : 'List' '<' expression '>'
    ;

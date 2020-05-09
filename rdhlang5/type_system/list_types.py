@@ -78,7 +78,7 @@ class ListWildcardGetterType(ListMicroOpType):
             if isinstance(self.type, InferredType):
                 raise FatalError()
             return self
-        new_type = self.type.replace_inferred_type(other_micro_op_type.type)
+        new_type = self.type.replace_inferred_types(other_micro_op_type.type)
         if new_type is not self.type:
             return ListWildcardGetterType(new_type, key_error=self.key_error, type_error=self.type_error)
         return self
@@ -225,7 +225,7 @@ class ListGetterType(ListMicroOpType):
             if isinstance(self.type, InferredType):
                 raise FatalError()
             return self
-        new_type = self.type.replace_inferred_type(other_micro_op_type.type)
+        new_type = self.type.replace_inferred_types(other_micro_op_type.type)
         if new_type is not self.type:
             return ListGetterType(new_type, key_error=self.key_error, type_error=self.type_error)
         return self
@@ -390,7 +390,7 @@ class ListWildcardSetterType(ListMicroOpType):
             if isinstance(self.type, InferredType):
                 raise FatalError()
             return self
-        new_type = self.type.replace_inferred_type(other_micro_op_type.type)
+        new_type = self.type.replace_inferred_types(other_micro_op_type.type)
         if new_type is not self.type:
             return ListWildcardSetterType(new_type, key_error=self.key_error, type_error=self.type_error)
         return self
@@ -465,7 +465,7 @@ class ListSetterType(ListMicroOpType):
         return (
             (not other_micro_op_type.key_error or self.key_error)
             and (not other_micro_op_type.type_error or self.type_error)
-            and self.type.is_copyable_from(other_micro_op_type.type)
+            and other_micro_op_type.type.is_copyable_from(self.type)
         )
 
     def replace_inferred_type(self, other_micro_op_type):
@@ -473,7 +473,7 @@ class ListSetterType(ListMicroOpType):
             if isinstance(self.type, InferredType):
                 raise FatalError()
             return self
-        new_type = self.type.replace_inferred_type(other_micro_op_type.type)
+        new_type = self.type.replace_inferred_types(other_micro_op_type.type)
         if new_type is not self.type:
             return ListSetterType(new_type, key_error=self.key_error, type_error=self.type_error)
         return self
@@ -555,13 +555,6 @@ class ListWildcardDeletterType(ListMicroOpType):
         return not other_micro_op_type.key_error or self.key_error
 
     def replace_inferred_type(self, other_micro_op_type):
-        if not isinstance(other_micro_op_type, ListWildcardDeletterType):
-            if isinstance(self.type, InferredType):
-                raise FatalError()
-            return self
-        new_type = self.type.replace_inferred_type(other_micro_op_type.type)
-        if new_type is not self.type:
-            return ListWildcardDeletterType(new_type, key_error=self.key_error, type_error=self.type_error)
         return self
 
     def check_for_new_micro_op_type_conflict(self, other_micro_op_type, other_micro_op_types):
@@ -618,7 +611,7 @@ class ListDeletterType(ListMicroOpType):
             if isinstance(self.type, InferredType):
                 raise FatalError()
             return self
-        new_type = self.type.replace_inferred_type(other_micro_op_type.type)
+        new_type = self.type.replace_inferred_types(other_micro_op_type.type)
         if new_type is not self.type:
             return ListDeletterType(new_type, key_error=self.key_error, type_error=self.type_error)
         return self
@@ -678,7 +671,7 @@ class ListWildcardInsertType(ListMicroOpType):
         return (
             (not other_micro_op_type.key_error or self.key_error)
             and (not other_micro_op_type.type_error or self.type_error)
-            and self.type.is_copyable_from(other_micro_op_type.type)
+            and other_micro_op_type.type.is_copyable_from(self.type)
         )
 
     def replace_inferred_type(self, other_micro_op_type):
@@ -686,7 +679,7 @@ class ListWildcardInsertType(ListMicroOpType):
             if isinstance(self.type, InferredType):
                 raise FatalError()
             return self
-        new_type = self.type.replace_inferred_type(other_micro_op_type.type)
+        new_type = self.type.replace_inferred_types(other_micro_op_type.type)
         if new_type is not self.type:
             return ListDeletterType(new_type, key_error=self.key_error, type_error=self.type_error)
         return self
@@ -759,7 +752,7 @@ class ListInsertType(ListMicroOpType):
         return (
             (not other_micro_op_type.key_error or self.key_error)
             and (not other_micro_op_type.type_error or self.type_error)
-            and self.type.is_copyable_from(other_micro_op_type.type)
+            and other_micro_op_type.type.is_copyable_from(self.type)
         )
 
     def replace_inferred_type(self, other_micro_op_type):
@@ -767,7 +760,7 @@ class ListInsertType(ListMicroOpType):
             if isinstance(self.type, InferredType):
                 raise FatalError()
             return self
-        new_type = self.type.replace_inferred_type(other_micro_op_type.type)
+        new_type = self.type.replace_inferred_types(other_micro_op_type.type)
         if new_type is not self.type:
             return ListInsertType(new_type, key_error=self.key_error, type_error=self.type_error)
         return self

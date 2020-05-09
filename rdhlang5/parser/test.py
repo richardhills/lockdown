@@ -112,6 +112,92 @@ class TestBasicFunction(TestCase):
         self.assertEquals(result.mode, "value")
         self.assertEquals(result.value, 42)
 
+    def test_initialize_and_return_local(self):
+        code = parse("""
+            function() { int foo = 40; return foo + 2; }
+        """)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 42)
+
+    def test_initialize_and_return_local_object(self):
+        code = parse("""
+            function() {
+                Object { foo: int } bar = { foo: 40 };
+                return bar.foo + 2;
+            }
+        """)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 42)
+
+    def test_many_const_locals(self):
+        code = parse("""
+            function() {
+                int foo = 1;
+                int bar = foo + 40;
+                int baz = bar - 3;
+                return baz + 4;
+            }
+        """)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 42)
+
+    def test_mutate_locals(self):
+        code = parse("""
+            function() {
+                int foo = 1;
+                foo = foo + 30;
+                foo = foo * 2;
+                foo = foo - 20;
+                return foo;
+            }
+        """)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 42)
+
+
+    def test_mix_of_initialization_and_mutation(self):
+        code = parse("""
+            function() {
+                int foo = 2;
+                foo = foo + 30;
+                int bar = 15;
+                bar = bar / 3;
+                return foo + bar * 2;
+            }
+        """)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 42)
+
+
+    def test_mix_of_initialization_and_mutation_on_object(self):
+        code = parse("""
+            function() {
+                Object { baz: int } foo = { baz: 2 };
+                foo.baz = foo.baz + 30;
+                int bar = 15;
+                bar = bar / 3;
+                return foo.baz + bar * 2;
+            }
+        """)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 42)
+
+    def test_list(self):
+        code = parse("""
+            function() {
+                List<int> foo = [ 1, 2, 3 ];
+                return foo[0] * foo[1] * foo[2];
+            }
+        """)
+        result = bootstrap_function(code)
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 6)
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

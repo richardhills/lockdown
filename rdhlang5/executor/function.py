@@ -8,6 +8,8 @@ from rdhlang5.executor.flow_control import FlowManager, BreakTypesFactory
 from rdhlang5.executor.function_type import FunctionType, enrich_break_type
 from rdhlang5.executor.opcodes import enrich_opcode, get_context_type, evaluate, \
     TypeErrorFactory, get_expression_break_types, flatten_out_types
+from rdhlang5.executor.raw_code_factories import dereference_op, assignment_op, \
+    literal_op
 from rdhlang5.executor.type_factories import enrich_type
 from rdhlang5.type_system.composites import CompositeType
 from rdhlang5.type_system.core_types import Type
@@ -70,6 +72,7 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
     local_type = local_type.reify_revconst_types()
 
     if not local_type.is_copyable_from(actual_local_type):
+        local_type.is_copyable_from(actual_local_type)
         raise PreparationException()
 
     actual_break_types_factory.merge(local_other_break_types)
@@ -136,8 +139,11 @@ class UnboundDereferenceBinder(object):
     def search_for_reference(self, reference, prepend_context=[]):
         from rdhlang5.executor.raw_code_factories import dereference
 
+        if not isinstance(reference, basestring):
+            raise FatalError()
+
         if reference in ("local", "argument", "outer", "static"):
-            return dereference(prepend_context, reference)
+            return dereference(prepend_context)
 
         types = getattr(self.context, "types", None)
         if types:
@@ -145,27 +151,41 @@ class UnboundDereferenceBinder(object):
             if isinstance(argument_type, CompositeType):
                 getter = argument_type.micro_op_types.get(("get", reference), None)
                 if getter:
-                    return dereference(prepend_context, "argument", reference)
+                    return dereference(prepend_context, "argument")
             local_type = getattr(self.context.types, "local", None)
             if isinstance(local_type, CompositeType):
                 getter = local_type.micro_op_types.get(("get", reference), None)
                 if getter:
-                    return dereference(prepend_context, "local", reference)
+                    return dereference(prepend_context, "local")
         static = getattr(self.context, "static", None)
         if static and hasattr(static, reference):
-            return dereference(prepend_context, "static", reference)
+            return dereference(prepend_context, "static"), reference
         outer_context = getattr(self.context, "outer", None)
         if outer_context:
-            return UnboundDereferenceBinder(outer_context).search_for_reference(prepend_context + [ "outer" ], reference)
+            return UnboundDereferenceBinder(outer_context).search_for_reference(reference, prepend_context + [ "outer" ])
+
+        return None
 
     def __call__(self, expression):
         if getattr(expression, "opcode", None) == "unbound_dereference":
             reference = expression.reference
-            bound_reference = self.search_for_reference(reference)
+            bound_countext_op = self.search_for_reference(reference)
 
-            if bound_reference:
-                get_manager(bound_reference).add_composite_type(DEFAULT_OBJECT_TYPE)
-                return bound_reference
+            if bound_countext_op:
+                new_dereference = dereference_op(bound_countext_op, literal_op(reference))
+                get_manager(new_dereference).add_composite_type(DEFAULT_OBJECT_TYPE)
+                return new_dereference
+            else:
+                raise FatalError() # TODO, dynamic dereference
+
+        if getattr(expression, "opcode", None) == "unbound_assignment":
+            reference = expression.reference
+            bound_countext_op = self.search_for_reference(reference)
+
+            if bound_countext_op:
+                new_assignment = assignment_op(bound_countext_op, literal_op(reference), expression.rvalue)
+                get_manager(new_assignment).add_composite_type(DEFAULT_OBJECT_TYPE)
+                return new_assignment
             else:
                 raise FatalError() # TODO, dynamic dereference
 

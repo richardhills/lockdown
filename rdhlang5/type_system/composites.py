@@ -83,6 +83,7 @@ class CompositeType(Type):
                 if their_micro_op is None:
                     return False
                 if not our_micro_op.can_be_derived_from(their_micro_op):
+                    our_micro_op.can_be_derived_from(their_micro_op)
                     return False
 
         return True

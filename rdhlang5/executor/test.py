@@ -7,13 +7,14 @@ from unittest.case import TestCase
 from rdhlang5.executor.bootstrap import bootstrap_function, prepare, \
     create_application_flow_manager, create_no_escape_flow_manager
 from rdhlang5.executor.exceptions import PreparationException
-from rdhlang5.executor.raw_code_factories import function_lit, literal_op, \
-    no_value_type, return_op, int_type, addition_op, dereference_op, context_op, \
-    comma_op, yield_op, any_type, build_break_types, assignment_op, nop, \
-    object_template_op, object_type, unit_type, loop_op, condition_op, \
-    equality_op, inferred_type, infer_all, invoke_op, prepare_op, function_type, \
-    dereference, prepared_function, unbound_dereference, match_op, one_of_type, \
-    string_type, bool_type, try_catch_op, throw_op, const_string_type
+from rdhlang5.executor.raw_code_factories import function_lit, no_value_type, \
+    build_break_types, int_type, literal_op, return_op, addition_op, \
+    dereference_op, context_op, comma_op, any_type, yield_op, object_type, \
+    object_template_op, unit_type, assignment_op, condition_op, loop_op, \
+    equality_op, nop, inferred_type, infer_all, invoke_op, static_op, prepare_op, \
+    unbound_dereference, match_op, dereference, prepared_function, one_of_type, \
+    string_type, bool_type, try_catch_op, throw_op, const_string_type, \
+    function_type
 from rdhlang5.type_system.core_types import IntegerType, AnyType, StringType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     rich_composite_type
@@ -26,7 +27,7 @@ from rdhlang5.utils import NO_VALUE
 class TestPreparedFunction(TestCase):
     def test_basic_function(self):
         func = function_lit(
-            no_value_type, build_break_types(value_type=int_type), literal_op(42)
+            no_value_type(), build_break_types(value_type=int_type()), literal_op(42)
         )
 
         result = bootstrap_function(func)
@@ -36,7 +37,7 @@ class TestPreparedFunction(TestCase):
 
 
     def test_basic_function_return(self):
-        func = function_lit(no_value_type, build_break_types(int_type), return_op(literal_op(42)))
+        func = function_lit(no_value_type(), build_break_types(int_type()), return_op(literal_op(42)))
 
         result = bootstrap_function(func, check_safe_exit=True)
 
@@ -44,7 +45,7 @@ class TestPreparedFunction(TestCase):
         self.assertEquals(result.value, 42)
 
     def test_addition(self):
-        func = function_lit(no_value_type, build_break_types(int_type), return_op(addition_op(literal_op(40), literal_op(2))))
+        func = function_lit(no_value_type(), build_break_types(int_type()), return_op(addition_op(literal_op(40), literal_op(2))))
 
         result = bootstrap_function(func, check_safe_exit=True)
 
@@ -54,7 +55,7 @@ class TestPreparedFunction(TestCase):
 class TestDereference(TestCase):
     def test_return_variable(self):
         func = function_lit(
-            no_value_type, build_break_types(int_type),
+            no_value_type(), build_break_types(int_type()),
             return_op(
                 dereference_op(
                     dereference_op(
@@ -84,7 +85,7 @@ class TestDereference(TestCase):
 
     def test_add_locals(self):
         func = function_lit(
-            no_value_type, build_break_types(int_type),
+            no_value_type(), build_break_types(int_type()),
             return_op(
                 addition_op(
                     dereference_op(
@@ -130,7 +131,7 @@ class TestComma(TestCase):
     def test_comma(self):
         result = bootstrap_function(
             function_lit(
-                no_value_type, build_break_types(int_type),
+                no_value_type(), build_break_types(int_type()),
                 return_op(comma_op(literal_op(5), literal_op(8), literal_op(42)))
             ),
             check_safe_exit=True
@@ -145,11 +146,11 @@ class TestComma(TestCase):
 
         func = prepare(
             function_lit(
-                no_value_type, build_break_types(int_type, yield_types={ "out": any_type, "in": int_type }),
+                no_value_type(), build_break_types(int_type(), yield_types={ "out": any_type(), "in": int_type() }),
                 return_op(comma_op(
                     literal_op(5),
-                    yield_op(literal_op("first"), int_type),
-                    yield_op(literal_op("second"), int_type)
+                    yield_op(literal_op("first"), int_type()),
+                    yield_op(literal_op("second"), int_type())
                 ))
             ),
             context, create_no_escape_flow_manager()
@@ -169,7 +170,7 @@ class TestTemplates(TestCase):
     def test_return(self):
         result = bootstrap_function(
             function_lit(
-                no_value_type, build_break_types(object_type({ "foo": int_type })),
+                no_value_type(), build_break_types(object_type({ "foo": int_type() })),
                 comma_op(
                     return_op(object_template_op({ "foo": literal_op(42) }))
                 )
@@ -185,7 +186,7 @@ class TestTemplates(TestCase):
     def test_nested_return(self):
         result = bootstrap_function(
             function_lit(
-                no_value_type, build_break_types(object_type({ "foo": object_type({ "bar": int_type }) })),
+                no_value_type(), build_break_types(object_type({ "foo": object_type({ "bar": int_type() }) })),
                 comma_op(
                     return_op(object_template_op({ "foo": object_template_op({ "bar": literal_op(42) }) }))
                 )
@@ -201,7 +202,7 @@ class TestTemplates(TestCase):
     def test_return_with_dereference1(self):
         result = bootstrap_function(
             function_lit(
-                int_type, build_break_types(object_type({ "foo": unit_type(42), "bar": any_type })),
+                int_type(), build_break_types(object_type({ "foo": unit_type(42), "bar": any_type() })),
                 comma_op(
                     return_op(object_template_op({ "foo": literal_op(42), "bar": dereference_op(context_op(), literal_op("argument")) }))
                 )
@@ -219,7 +220,7 @@ class TestTemplates(TestCase):
     def test_return_with_dereference2(self):
         result = bootstrap_function(
             function_lit(
-                int_type, build_break_types(object_type({ "foo": unit_type(42), "bar": int_type })),
+                int_type(), build_break_types(object_type({ "foo": unit_type(42), "bar": int_type() })),
                 comma_op(
                     return_op(object_template_op({ "foo": literal_op(42), "bar": dereference_op(context_op(), literal_op("argument")) }))
                 )
@@ -237,7 +238,7 @@ class TestTemplates(TestCase):
     def test_return_with_dereference3(self):
         result = bootstrap_function(
             function_lit(
-                int_type, build_break_types(object_type({ "foo": int_type, "bar": any_type })),
+                int_type(), build_break_types(object_type({ "foo": int_type(), "bar": any_type() })),
                 comma_op(
                     return_op(object_template_op({ "foo": literal_op(42), "bar": dereference_op(context_op(), literal_op("argument")) }))
                 )
@@ -255,7 +256,7 @@ class TestTemplates(TestCase):
     def test_return_with_dereference4(self):
         result = bootstrap_function(
             function_lit(
-                int_type, build_break_types(object_type({ "foo": any_type, "bar": any_type })),
+                int_type(), build_break_types(object_type({ "foo": any_type(), "bar": any_type() })),
                 comma_op(
                     return_op(object_template_op({ "foo": literal_op(42), "bar": dereference_op(context_op(), literal_op("argument")) }))
                 )
@@ -274,7 +275,7 @@ class TestTemplates(TestCase):
         with self.assertRaises(Exception):
             bootstrap_function(
                 function_lit(
-                    int_type, build_break_types(object_type({ "foo": any_type, "bar": unit_type(42) })),
+                    int_type(), build_break_types(object_type({ "foo": any_type(), "bar": unit_type(42) })),
                     return_op(object_template_op({ "foo": literal_op(42), "bar": dereference_op(context_op(), literal_op("argument")) }))
                 ),
                 argument=42,
@@ -284,7 +285,7 @@ class TestTemplates(TestCase):
     def test_return_rev_const_and_inferred(self):
         result = bootstrap_function(
             function_lit(
-                no_value_type,
+                no_value_type(),
                 comma_op(
                     return_op(object_template_op({ "foo": object_template_op({ "bar": literal_op(42) }) }))
                 )
@@ -301,7 +302,7 @@ class TestLocals(TestCase):
     def test_initialization(self):
         result = bootstrap_function(
             function_lit(
-                no_value_type, build_break_types(int_type), int_type, literal_op(42),
+                no_value_type(), build_break_types(int_type()), int_type(), literal_op(42),
                 comma_op(
                     return_op(dereference_op(context_op(), literal_op("local")))
                 )
@@ -315,7 +316,7 @@ class TestLocals(TestCase):
     def test_initialization_from_argument(self):
         result = bootstrap_function(
             function_lit(
-                int_type, build_break_types(int_type), int_type, dereference_op(context_op(), literal_op("argument")),
+                int_type(), build_break_types(int_type()), int_type(), dereference_op(context_op(), literal_op("argument")),
                 comma_op(
                     return_op(dereference_op(context_op(), literal_op("local")))
                 )
@@ -333,8 +334,8 @@ class TestLocals(TestCase):
 
         func = prepare(
             function_lit(
-                no_value_type, build_break_types(any_type, yield_types={ "out": any_type, "in": int_type }),
-                int_type, yield_op(literal_op("hello"), int_type),
+                no_value_type(), build_break_types(any_type(), yield_types={ "out": any_type(), "in": int_type() }),
+                int_type(), yield_op(literal_op("hello"), int_type()),
                 return_op(dereference_op(context_op(), literal_op("local")))
             ),
             context, create_no_escape_flow_manager()
@@ -354,9 +355,9 @@ class TestLocals(TestCase):
 
         func = prepare(
             function_lit(
-                no_value_type, build_break_types(any_type, yield_types={ "out": any_type, "in": int_type }),
-                int_type, yield_op(literal_op("first"), int_type),
-                return_op(addition_op(dereference_op(context_op(), literal_op("local")), yield_op(literal_op("second"), int_type)))
+                no_value_type(), build_break_types(any_type(), yield_types={ "out": any_type(), "in": int_type() }),
+                int_type(), yield_op(literal_op("first"), int_type()),
+                return_op(addition_op(dereference_op(context_op(), literal_op("local")), yield_op(literal_op("second"), int_type())))
             ),
             context, create_no_escape_flow_manager()
         )
@@ -374,7 +375,7 @@ class TestAssignment(TestCase):
     def test_assignment(self):
         result = bootstrap_function(
             function_lit(
-                no_value_type, build_break_types(int_type), int_type, literal_op(0),
+                no_value_type(), build_break_types(int_type()), int_type(), literal_op(0),
                 comma_op(
                     assignment_op(context_op(), literal_op("local"), literal_op(42)),
                     return_op(dereference_op(context_op(), literal_op("local")))
@@ -389,7 +390,7 @@ class TestAssignment(TestCase):
     def test_assignment_from_argument(self):
         result = bootstrap_function(
             function_lit(
-                int_type, build_break_types(int_type), int_type, literal_op(0),
+                int_type(), build_break_types(int_type()), int_type(), literal_op(0),
                 comma_op(
                     assignment_op(context_op(), literal_op("local"), dereference_op(context_op(), literal_op("argument"))),
                     return_op(dereference_op(context_op(), literal_op("local")))
@@ -405,7 +406,7 @@ class TestAssignment(TestCase):
 class TestArguments(TestCase):
     def test_simple_return_argument(self):
         func = function_lit(
-            int_type, build_break_types(int_type),
+            int_type(), build_break_types(int_type()),
             return_op(dereference_op(context_op(), literal_op("argument")))
         )
 
@@ -416,7 +417,7 @@ class TestArguments(TestCase):
 
     def test_doubler(self):
         func = function_lit(
-            int_type, build_break_types(int_type),
+            int_type(), build_break_types(int_type()),
             return_op(addition_op(dereference_op(context_op(), literal_op("argument")), dereference_op(context_op(), literal_op("argument"))))
         )
 
@@ -429,7 +430,7 @@ class TestConditional(TestCase):
     def test_basic_truth(self):
         result = bootstrap_function(
             function_lit(
-                no_value_type, build_break_types(int_type),
+                no_value_type(), build_break_types(int_type()),
                 return_op(condition_op(literal_op(True), literal_op(34), literal_op(53)))
             ), check_safe_exit=True
         )
@@ -439,7 +440,7 @@ class TestConditional(TestCase):
     def test_basic_false(self):
         result = bootstrap_function(
             function_lit(
-                no_value_type, build_break_types(int_type),
+                no_value_type(), build_break_types(int_type()),
                 return_op(condition_op(literal_op(False), literal_op(34), literal_op(53)))
             ), check_safe_exit=True
         )
@@ -451,7 +452,7 @@ class TestLoops(TestCase):
     def test_immediate_return(self):
         result = bootstrap_function(
             function_lit(
-                no_value_type, build_break_types(int_type),
+                no_value_type(), build_break_types(int_type()),
                 loop_op(return_op(literal_op(42)))
             ), check_safe_exit=True
         )
@@ -462,7 +463,7 @@ class TestLoops(TestCase):
     def test_count_then_return(self):
         result = bootstrap_function(
             function_lit(
-                no_value_type, build_break_types(int_type), int_type, literal_op(0),
+                no_value_type(), build_break_types(int_type()), int_type(), literal_op(0),
                 loop_op(
                     comma_op(
                         assignment_op(
@@ -471,7 +472,7 @@ class TestLoops(TestCase):
                         ),
                         condition_op(equality_op(
                             dereference_op(context_op(), literal_op("local")), literal_op(42)
-                        ), return_op(dereference_op(context_op(), literal_op("local"))), nop)
+                        ), return_op(dereference_op(context_op(), literal_op("local"))), nop())
                     )
                 )
             ), check_safe_exit=True
@@ -484,7 +485,7 @@ class TestInferredBreakTypes(TestCase):
     def test_basic_inferrence(self):
         result = bootstrap_function(
             function_lit(
-                no_value_type, build_break_types(inferred_type),
+                no_value_type(), build_break_types(inferred_type()),
                 return_op(literal_op(42))
             ), check_safe_exit=True
         )
@@ -495,7 +496,7 @@ class TestInferredBreakTypes(TestCase):
     def test_infer_all(self):
         result = bootstrap_function(
             function_lit(
-                no_value_type, infer_all(), return_op(literal_op(42))
+                no_value_type(), infer_all(), return_op(literal_op(42))
             ), check_safe_exit=True
         )
 
@@ -505,7 +506,7 @@ class TestInferredBreakTypes(TestCase):
     def test_infer_exception(self):
         result = bootstrap_function(
             function_lit(
-                no_value_type, infer_all(), addition_op(literal_op("hello"), literal_op(5))
+                no_value_type(), infer_all(), addition_op(literal_op("hello"), literal_op(5))
             )
         )
 
@@ -516,7 +517,7 @@ class TestInferredBreakTypes(TestCase):
         with self.assertRaises(Exception):
             bootstrap_function(
                 function_lit(
-                    no_value_type, build_break_types(int_type), addition_op(literal_op("hello"), literal_op(5))
+                    no_value_type(), build_break_types(int_type()), addition_op(literal_op("hello"), literal_op(5))
                 )
             )
 
@@ -524,10 +525,10 @@ class TestFunctionPreparation(TestCase):
     def test_basic(self):
         result = bootstrap_function(
             function_lit(
-                no_value_type, build_break_types(int_type),
-                return_op(invoke_op(prepare_op(literal_op(function_lit(
-                    no_value_type, build_break_types(int_type), return_op(literal_op(42))
-                )))))
+                no_value_type(), build_break_types(int_type()),
+                return_op(invoke_op(static_op(prepare_op(literal_op(function_lit(
+                    no_value_type(), build_break_types(int_type()), return_op(literal_op(42))
+                ))))))
             )
         )
 
@@ -538,11 +539,11 @@ class TestFunctionInvocation(TestCase):
     def test_basic(self):
         result = bootstrap_function(
             function_lit(
-                no_value_type, build_break_types(int_type),
-                function_type(no_value_type, build_break_types(int_type)),
-                prepare_op(literal_op(function_lit(
-                    no_value_type, build_break_types(int_type), return_op(literal_op(42))
-                ))),
+                no_value_type(), build_break_types(int_type()),
+                function_type(no_value_type(), build_break_types(int_type())),
+                static_op(prepare_op(literal_op(function_lit(
+                    no_value_type(), build_break_types(int_type()), return_op(literal_op(42))
+                )))),
                 return_op(invoke_op(dereference_op(context_op(), literal_op("local"))))
             ), check_safe_exit=True
         )
@@ -553,11 +554,11 @@ class TestFunctionInvocation(TestCase):
     def test_basic_with_inferred_types(self):
         result = bootstrap_function(
             function_lit(
-                no_value_type, infer_all(),
-                function_type(no_value_type, build_break_types(int_type)),
-                prepare_op(literal_op(function_lit(
-                    no_value_type, infer_all(), return_op(literal_op(42))
-                ))),
+                no_value_type(), infer_all(),
+                function_type(no_value_type(), build_break_types(int_type())),
+                static_op(prepare_op(literal_op(function_lit(
+                    no_value_type(), infer_all(), return_op(literal_op(42))
+                )))),
                 return_op(invoke_op(dereference_op(context_op(), literal_op("local"))))
             ), check_safe_exit=True
         )
@@ -568,11 +569,11 @@ class TestFunctionInvocation(TestCase):
     def test_basic_with_inferred_local_type(self):
         result = bootstrap_function(
             function_lit(
-                no_value_type, infer_all(),
-                inferred_type,
-                prepare_op(literal_op(function_lit(
-                    no_value_type, infer_all(), return_op(literal_op(42))
-                ))),
+                no_value_type(), infer_all(),
+                inferred_type(),
+                static_op(prepare_op(literal_op(function_lit(
+                    no_value_type(), infer_all(), return_op(literal_op(42))
+                )))),
                 return_op(invoke_op(dereference_op(context_op(), literal_op("local"))))
             ), check_safe_exit=True
         )
@@ -584,7 +585,7 @@ class TestUnboundReference(TestCase):
     def test_unbound_reference_to_arguments(self):
         result = bootstrap_function(
             function_lit(
-                object_type({ "foo": int_type, "bar": int_type }), infer_all(),
+                object_type({ "foo": int_type(), "bar": int_type() }), infer_all(),
                 return_op(addition_op(
                     unbound_dereference("foo"), unbound_dereference("bar")
                 ))
@@ -597,8 +598,8 @@ class TestUnboundReference(TestCase):
     def test_unbound_reference_to_locals(self):
         result = bootstrap_function(
             function_lit(
-                no_value_type, infer_all(),
-                object_type({ "foo": int_type, "bar": int_type }),
+                no_value_type(), infer_all(),
+                object_type({ "foo": int_type(), "bar": int_type() }),
                 object_template_op({ "foo": literal_op(39), "bar": literal_op(3) }),
                 return_op(addition_op(
                     unbound_dereference("foo"), unbound_dereference("bar")
@@ -612,8 +613,8 @@ class TestUnboundReference(TestCase):
     def test_unbound_reference_to_locals_and_arguments(self):
         result = bootstrap_function(
             function_lit(
-                object_type({ "foo": int_type }), infer_all(),
-                object_type({ "bar": int_type }),
+                object_type({ "foo": int_type() }), infer_all(),
+                object_type({ "bar": int_type() }),
                 object_template_op({ "bar": literal_op(3) }),
                 return_op(addition_op(
                     unbound_dereference("foo"), unbound_dereference("bar")
@@ -627,17 +628,17 @@ class TestUnboundReference(TestCase):
 class TestMatch(TestCase):
     def test_interesting(self):
         func = function_lit(
-            any_type, infer_all(),
+            any_type(), infer_all(),
             match_op(
                 dereference("argument"), [
                     prepared_function(
                         object_type({
-                            "foo": int_type
+                            "foo": int_type()
                         }),
                         return_op(addition_op(dereference("argument.foo"), literal_op(3)))
                     ),
                     prepared_function(
-                        any_type,
+                        any_type(),
                         return_op(literal_op("invalid"))
                     )
                 ]
@@ -660,7 +661,7 @@ class TestMatch(TestCase):
 
     def test_to_string_from_int(self):
         func = function_lit(
-            any_type,
+            any_type(),
             return_op(
                 match_op(
                     dereference("argument"), [
@@ -681,7 +682,7 @@ class TestMatch(TestCase):
                             literal_op("four")
                         ),
                         prepared_function(
-                            any_type,
+                            any_type(),
                             literal_op("invalid")
                         )
                     ]
@@ -708,20 +709,20 @@ class TestMatch(TestCase):
 
     def test_to_match_with_one_of_type_combo(self):
         func = function_lit(
-            one_of_type([ string_type, int_type, bool_type ]),
+            one_of_type([ string_type(), int_type(), bool_type() ]),
             return_op(
                 match_op(
                     dereference("argument"), [
                         prepared_function(
-                            int_type,
+                            int_type(),
                             literal_op("int is not a string")
                         ),
                         prepared_function(
-                            bool_type,
+                            bool_type(),
                             literal_op("bool is not a string")
                         ),
                         prepared_function(
-                            inferred_type,
+                            inferred_type(),
                             dereference("argument")
                         )
                     ]
@@ -749,11 +750,11 @@ class TestTryCatch(TestCase):
     def test_slightly_strange_try_catch(self):
         # Function either throws the same string back at you, or returns an int +1
         func = function_lit(
-            one_of_type([ string_type, int_type ]),
+            one_of_type([ string_type(), int_type() ]),
             try_catch_op(
                 throw_op(dereference("argument")),
-                prepared_function(int_type, return_op(addition_op(literal_op(1), dereference("argument")))),
-                nop
+                prepared_function(int_type(), return_op(addition_op(literal_op(1), dereference("argument")))),
+                nop()
             )
         )
         result = bootstrap_function(func, argument="hello world")
@@ -765,7 +766,7 @@ class TestTryCatch(TestCase):
 
     def test_silly_tostring_casing(self):
         func = function_lit(
-            any_type,
+            any_type(),
             try_catch_op(
                 return_op(
                     match_op(
@@ -779,13 +780,13 @@ class TestTryCatch(TestCase):
                                 literal_op("two")
                             ),
                             prepared_function(
-                                int_type,
+                                int_type(),
                                 throw_op(object_template_op({
                                     "type": literal_op("UnknownInt")
                                 }))
                             ),
                             prepared_function(
-                                any_type,
+                                any_type(),
                                 throw_op(object_template_op({
                                     "type": literal_op("TypeError")
                                 }))
@@ -827,7 +828,7 @@ class TestTryCatch(TestCase):
                     }),
                     return_op(dereference("argument.message"))
                 ),
-                nop
+                nop()
             )
         )
         result = bootstrap_function(func, check_safe_exit=True)
@@ -839,8 +840,8 @@ class TestUtilityMethods(TestCase):
     def test_misc1(self):
         result = bootstrap_function(
             function_lit(
-                no_value_type, infer_all(),
-                object_type({ "foo": int_type, "bar": int_type }),
+                no_value_type(), infer_all(),
+                object_type({ "foo": int_type(), "bar": int_type() }),
                 object_template_op({ "foo": literal_op(39), "bar": literal_op(3) }),
                 return_op(addition_op(
                     dereference("local.foo"), dereference("local.bar")
@@ -854,10 +855,10 @@ class TestUtilityMethods(TestCase):
     def test_misc2(self):
         result = bootstrap_function(
             function_lit(
-                no_value_type, infer_all(),
-                inferred_type,
+                no_value_type(), infer_all(),
+                inferred_type(),
                 prepared_function(
-                    object_type({ "foo": int_type, "bar": int_type }),
+                    object_type({ "foo": int_type(), "bar": int_type() }),
                     return_op(addition_op(
                         dereference("argument.foo"), dereference("argument.bar")
                     ))
@@ -875,6 +876,18 @@ class TestUtilityMethods(TestCase):
     def test_fizzbuzz(self):
         pass
 
+class TestStatics(TestCase):
+    def test_static_value_dereference(self):
+        result = bootstrap_function(
+            function_lit(
+                return_op(static_op(addition_op(literal_op(5), literal_op(37))))
+            ), check_safe_exit=True
+        )
+
+        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.value, 42)
+
+
 class TestContinuations(TestCase):
     def test_single_restart(self):
         context = RDHObject({})
@@ -882,8 +895,8 @@ class TestContinuations(TestCase):
 
         func = prepare(
             function_lit(
-                no_value_type, build_break_types(any_type, yield_types={ "out": any_type, "in": int_type }),
-                return_op(addition_op(yield_op(literal_op("hello"), int_type), literal_op(40)))
+                no_value_type(), build_break_types(any_type(), yield_types={ "out": any_type(), "in": int_type() }),
+                return_op(addition_op(yield_op(literal_op("hello"), int_type()), literal_op(40)))
             ),
             context, create_no_escape_flow_manager()
         )
@@ -902,8 +915,8 @@ class TestContinuations(TestCase):
 
         func = prepare(
             function_lit(
-                no_value_type, build_break_types(int_type, yield_types={ "out": any_type, "in": int_type }),
-                return_op(addition_op(yield_op(literal_op("first"), int_type), yield_op(literal_op("second"), int_type)))
+                no_value_type(), build_break_types(int_type(), yield_types={ "out": any_type(), "in": int_type() }),
+                return_op(addition_op(yield_op(literal_op("first"), int_type()), yield_op(literal_op("second"), int_type())))
             ),
             context, create_no_escape_flow_manager()
         )
@@ -924,8 +937,8 @@ class TestContinuations(TestCase):
 
         func = prepare(
             function_lit(
-                no_value_type, build_break_types(int_type, yield_types={ "out": any_type, "in": int_type }),
-                return_op(addition_op(yield_op(literal_op("first"), int_type), yield_op(literal_op("second"), int_type)))
+                no_value_type(), build_break_types(int_type(), yield_types={ "out": any_type(), "in": int_type() }),
+                return_op(addition_op(yield_op(literal_op("first"), int_type()), yield_op(literal_op("second"), int_type())))
             ),
             context, create_no_escape_flow_manager()
         )
@@ -947,8 +960,8 @@ class TestContinuations(TestCase):
 
         func = prepare(
             function_lit(
-                no_value_type, build_break_types(any_type, yield_types={ "out": any_type, "in": int_type }),
-                return_op(addition_op(yield_op(literal_op(30), int_type), yield_op(literal_op(10), int_type)))
+                no_value_type(), build_break_types(any_type(), yield_types={ "out": any_type(), "in": int_type() }),
+                return_op(addition_op(yield_op(literal_op(30), int_type()), yield_op(literal_op(10), int_type())))
             ),
             context, create_no_escape_flow_manager()
         )
