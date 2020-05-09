@@ -199,6 +199,28 @@ class TestBasicFunction(TestCase):
         self.assertEquals(result.mode, "value")
         self.assertEquals(result.value, 6)
 
+    def test_list_of_objects(self):
+        code = parse("""
+            function() {
+                List<Object { bar: int }> foo = [ { bar: 2 }, { bar: 3 } ];
+                return foo[0].bar * foo[1].bar;
+            }
+        """)
+        result = bootstrap_function(code)
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 6)
+
+    def test_object_with_lists(self):
+        code = parse("""
+            function() {
+                Object { foo: List<int> } bar = { foo: [ 1, 2, 3 ] };
+                return bar.foo[0] * bar.foo[1] * bar.foo[2];
+            }
+        """)
+        result = bootstrap_function(code)
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 6)
+
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
     unittest.main()
