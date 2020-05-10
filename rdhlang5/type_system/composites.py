@@ -145,10 +145,7 @@ class Composite(object):
 def bind_type_to_value(source, key, type, value):
     if not isinstance(value, Composite):
         return
-    
-    from rdhlang5.type_system.list_types import RDHListType
-    if isinstance(type, RDHListType):
-        pass
+
     manager = get_manager(value)
 
     source_manager = get_manager(source)
@@ -160,7 +157,7 @@ def bind_type_to_value(source, key, type, value):
                 manager.add_composite_type(sub_type)
                 source_manager.child_type_references[key].append(sub_type)
                 something_worked = True
-            except MicroOpTypeConflict:
+            except MicroOpTypeConflict as e:
                 pass
         else:
             something_worked = True

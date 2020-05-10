@@ -130,22 +130,17 @@ class RDHLang5Visitor(langVisitor):
 
         return new_function
 
-
-#     def visitCodeBlock(self, ctx):
-#         expressions = [
-#             self.visit(e) for e in ctx.expression()
-#         ]
-#         if len(expressions) == 0:
-#             return nop
-#         if len(expressions) == 1:
-#             return expressions[0]
-#         return comma_op(expressions)
-
     def visitStringExpression(self, ctx):
         return literal_op(json.loads(ctx.STRING().getText()))
 
     def visitNumberExpression(self, ctx):
         return literal_op(json.loads(ctx.NUMBER().getText()))
+
+    def visitInvocation(self, ctx):
+        function, argument = ctx.expression()
+        function = self.visit(function)
+        argument = self.visit(argument)
+        return invoke_op(function, argument)
 
     def visitImmediateAssignment(self, ctx):
         return unbound_assignment(

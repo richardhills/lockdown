@@ -1,6 +1,8 @@
 from _abcoll import MutableSequence
 from collections import OrderedDict
 
+from rdhlang5.type_system.builtins import BuiltInFunctionGetterType, \
+    ListInsertFunctionType
 from rdhlang5.type_system.composites import InferredType, bind_type_to_value, \
     unbind_type_to_value, CompositeType, Composite
 from rdhlang5.type_system.core_types import merge_types, Const
@@ -829,37 +831,37 @@ class ListInsert(MicroOp):
                 other_micro_op_type.bind(after_key, self.target)
 
 
-class RDHListType(CompositeType):
-    def __init__(self, element_types, wildcard_type, allow_push=True, allow_wildcard_insert=True, allow_delete=True, is_sparse=False):
-        micro_ops = OrderedDict() #  Ordered so that dependencies from i+1 element on i are preserved
+def RDHListType(element_types, wildcard_type, allow_push=True, allow_wildcard_insert=True, allow_delete=True, is_sparse=False):
+    micro_ops = OrderedDict() #  Ordered so that dependencies from i+1 element on i are preserved
 
-        for index, element_type in enumerate(element_types):
-            const = False
-            if isinstance(element_type, Const):
-                const = True
-                element_type = element_type.wrapped
+    for index, element_type in enumerate(element_types):
+        const = False
+        if isinstance(element_type, Const):
+            const = True
+            element_type = element_type.wrapped
 
-            micro_ops[("get", index)] = ListGetterType(index, element_type, False, False)
-            if not const:
-                micro_ops[("set", index)] = ListSetterType(index, element_type, False, False)
+        micro_ops[("get", index)] = ListGetterType(index, element_type, False, False)
+        if not const:
+            micro_ops[("set", index)] = ListSetterType(index, element_type, False, False)
 
-        if wildcard_type:
-            const = False
-            if isinstance(wildcard_type, Const):
-                const = True
-                wildcard_type = wildcard_type.wrapped
+    if wildcard_type:
+        const = False
+        if isinstance(wildcard_type, Const):
+            const = True
+            wildcard_type = wildcard_type.wrapped
 
-            micro_ops[("get-wildcard",)] = ListWildcardGetterType(wildcard_type, True, False)
-            if not const:
-                micro_ops[("set-wildcard",)] = ListWildcardSetterType(wildcard_type, not is_sparse, False)
-            if allow_push:
-                micro_ops[("insert", 0)] = ListInsertType(wildcard_type, 0, False, False)
-            if allow_delete:
-                micro_ops[("delete-wildcard",)] = ListWildcardDeletterType(True)
-            if allow_wildcard_insert:
-                micro_ops[("insert-wildcard",)] = ListWildcardInsertType(wildcard_type, not is_sparse, False)
+        micro_ops[("get-wildcard",)] = ListWildcardGetterType(wildcard_type, True, False)
+        if not const:
+            micro_ops[("set-wildcard",)] = ListWildcardSetterType(wildcard_type, not is_sparse, False)
+        if allow_push:
+            micro_ops[("insert", 0)] = ListInsertType(wildcard_type, 0, False, False)
+        if allow_delete:
+            micro_ops[("delete-wildcard",)] = ListWildcardDeletterType(True)
+        if allow_wildcard_insert:
+            micro_ops[("insert-wildcard",)] = ListWildcardInsertType(wildcard_type, not is_sparse, False)
+            micro_ops[("get", "insert")] = BuiltInFunctionGetterType(ListInsertFunctionType(wildcard_type))
 
-        super(RDHListType, self).__init__(micro_ops)
+    return CompositeType(micro_ops)
 
 SPARSE_ELEMENT = object()
 
@@ -920,7 +922,7 @@ class RDHList(Composite, MutableSequence, object):
     
                 micro_op = micro_op_type.create(self)
                 micro_op.invoke(key, value)
-        except InvalidAssignmentKey:
+        except (InvalidAssignmentKey, MissingMicroOp):
             raise IndexError()
 
     def __getitem__(self, key, raw=False):
@@ -940,11 +942,11 @@ class RDHList(Composite, MutableSequence, object):
                 micro_op_type = manager.get_micro_op_type(("get-wildcard",))
 
                 if micro_op_type is None:
-                    raise MissingMicroOp()
+                    raise MissingMicroOp(key)
 
                 micro_op = micro_op_type.create(self)
                 return micro_op.invoke(key)
-        except InvalidDereferenceKey:
+        except (InvalidDereferenceKey, MissingMicroOp):
             if key >= 0 and key < self.length:
                 return None
             raise IndexError()

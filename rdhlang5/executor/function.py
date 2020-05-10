@@ -191,8 +191,14 @@ class UnboundDereferenceBinder(object):
 
         return expression
 
+class RDHFunction(object):
+    def get_type(self):
+        raise NotImplementedError()
 
-class PreparedFunction(object):
+    def invoke(self, argument, outer_context, flow_manager):
+        raise NotImplementedError()
+
+class PreparedFunction(RDHFunction):
     DID_NOT_TERMINATE = TypeErrorFactory("PreparedFunction: did_not_terminate")
 
     def __init__(self, data, code, argument_type, local_type, local_initializer, break_types):

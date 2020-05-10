@@ -88,7 +88,7 @@ def get_type_of_value(value):
         if manager is None:
             pass
         return CompositeType(manager.get_merged_micro_op_types(), value)
-    if isinstance(value, PreparedFunction):
+    if isinstance(value, RDHFunction):
         return value.get_type()
     if isinstance(value, Type):
         return NoValueType()

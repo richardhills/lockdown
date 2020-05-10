@@ -260,6 +260,17 @@ class TestBasicFunction(TestCase):
         self.assertEquals(result.mode, "value")
         self.assertEquals(result.value, 9)
 
+    def test_insert_into_list(self):
+        code = parse("""
+            function() {
+                List<int> foo = [ 1, 2, 3 ];
+                foo.insert([ 0, 4 ]);
+                return foo[0];
+            }
+        """)
+        result = bootstrap_function(code)
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 4)
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

@@ -14,7 +14,7 @@ class MicroOpType(object):
         return self
 
     @abstractmethod
-    def create(self, target, through_type):
+    def create(self, target):
         raise NotImplementedError(self)
 
     @abstractmethod
@@ -64,9 +64,6 @@ class MicroOpType(object):
 
 class MicroOp(object):
     def invoke(self, *args):
-        raise NotImplementedError(self)
-
-    def bind_to_in_place_value(self):
         raise NotImplementedError(self)
 
 

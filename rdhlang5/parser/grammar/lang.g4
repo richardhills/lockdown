@@ -97,6 +97,7 @@ expression
    | NUMBER					# numberExpression
    | objectTemplate			# toObjectTemplate
    | listTemplate			# toListTemplate
+   | expression '(' expression ')' # invocation
    | '(' expression ')'     # parenthesis
    | SYMBOL					# immediateDereference
    | expression '.' SYMBOL  # staticDereference

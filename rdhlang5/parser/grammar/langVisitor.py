@@ -115,6 +115,11 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#invocation.
+    def visitInvocation(self, ctx):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#staticDereference.
     def visitStaticDereference(self, ctx):
         return self.visitChildren(ctx)
