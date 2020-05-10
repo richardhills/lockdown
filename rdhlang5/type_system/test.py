@@ -816,6 +816,12 @@ class TestRDHListType(TestCase):
 
         self.assertFalse(foo.is_copyable_from(bar))
 
+    def test_narrowing_assignment_blocked(self):
+        foo = RDHListType([], IntegerType(), allow_push=False, allow_wildcard_insert=False, allow_delete=False, is_sparse=False)
+        bar = RDHListType([], rich_composite_type, allow_push=False, allow_wildcard_insert=False, allow_delete=False, is_sparse=False)
+
+        self.assertTrue(bar.is_copyable_from(foo))
+        self.assertFalse(foo.is_copyable_from(bar))
 
 class TestList(TestCase):
     def test_simple_list_assignment(self):

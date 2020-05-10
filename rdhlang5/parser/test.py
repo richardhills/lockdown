@@ -7,6 +7,7 @@ import unittest.main
 from rdhlang5.parser.parser import parse
 from rdhlang5.type_system.object_types import RDHObject
 from rdhlang5.executor.bootstrap import bootstrap_function
+from rdhlang5.executor.exceptions import PreparationException
 
 
 class TestJSONParsing(TestCase):
@@ -271,6 +272,30 @@ class TestBasicFunction(TestCase):
         result = bootstrap_function(code)
         self.assertEquals(result.mode, "value")
         self.assertEquals(result.value, 4)
+
+    def test_insert_object_into_list(self):
+        code = parse("""
+            function() {
+                List<Object { bar: int }> foo = [ { bar: 2 }, { bar: 3 } ];
+                foo.insert([ 0, { bar: 6 } ]);
+                return foo[0].bar;
+            }
+        """)
+        result = bootstrap_function(code)
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 6)
+
+class TestMisc(TestCase):
+    def test_invalid_list_assignment(self):
+        code = parse("""
+            function() {
+                List<int> foo = [ { bar: 2 }, { bar: 3 } ];
+                foo.insert([ 0, { bar: 6 } ]);
+                return foo[0].bar;
+            }
+        """)
+        with self.assertRaises(PreparationException):
+            bootstrap_function(code)
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
