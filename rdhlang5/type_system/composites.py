@@ -184,7 +184,6 @@ class CompositeObjectManager(object):
         # A dictionary of key (names) to a list of types bound to the remote object
         self.child_type_references = defaultdict(list)
 
-        self.default_type = None
         self.default_factory = None
 
     def get_merged_micro_op_types(self, new_micro_op_types={}):
@@ -221,9 +220,6 @@ class CompositeObjectManager(object):
             
         self.check_for_runtime_micro_op_conflicts(type)
 
-        if self.default_type is None:
-            self.default_type = type
-
         self.type_references[id(type)] += 1
 
         if id(type) in self.micro_op_types:
@@ -241,7 +237,7 @@ class CompositeObjectManager(object):
         if self.type_references[type_id] == 0:
             del self.micro_op_types[type_id]
 
-    def get_micro_op_type(self, type, tag):
+    def get_micro_op_type(self, tag):
         merged_micro_op_types = self.get_merged_micro_op_types()
         return merged_micro_op_types.get(tag, None)
 #         if id(type) not in self.micro_op_types:
@@ -261,7 +257,7 @@ class DefaultFactoryType(MicroOpType):
     def __init__(self, type):
         self.type = type
 
-    def create(self, target, through_type):
+    def create(self, target):
         return DefaultFactory(target)
 
     def can_be_derived_from(self, other_micro_op):

@@ -357,17 +357,16 @@ class DereferenceOp(Opcode):
             reference, _ = frame.step("reference", lambda: evaluate(self.reference, context, flow_manager))
 
             manager = get_manager(of)
-            default_type = manager.default_type
 
             try:
-                direct_micro_op_type = manager.get_micro_op_type(default_type, ("get", reference))
+                direct_micro_op_type = manager.get_micro_op_type(("get", reference))
                 if direct_micro_op_type:
-                    micro_op = direct_micro_op_type.create(of, default_type)
+                    micro_op = direct_micro_op_type.create(of)
                     return flow_manager.value(micro_op.invoke(), self)
 
-                wildcard_micro_op_type = manager.get_micro_op_type(default_type, ("get-wildcard", ))
+                wildcard_micro_op_type = manager.get_micro_op_type(("get-wildcard", ))
                 if wildcard_micro_op_type:
-                    micro_op = wildcard_micro_op_type.create(of, default_type)
+                    micro_op = wildcard_micro_op_type.create(of)
                     return flow_manager.value(micro_op.invoke(reference), self)
 
                 raise flow_manager.exception(self.INVALID_DEREFERENCE(), self)
@@ -439,23 +438,22 @@ class AssignmentOp(Opcode):
             rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, flow_manager))
 
             manager = get_manager(of)
-            default_type = manager.default_type
 
             try:
-                direct_micro_op_type = manager.get_micro_op_type(default_type, ("set", reference))
+                direct_micro_op_type = manager.get_micro_op_type(("set", reference))
                 if direct_micro_op_type:
                     if not direct_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
                         raise flow_manager.exception(self.INVALID_RVALUE(), self)
 
-                    micro_op = direct_micro_op_type.create(of, default_type)
+                    micro_op = direct_micro_op_type.create(of)
                     return flow_manager.value(micro_op.invoke(rvalue), self)
 
-                wildcard_micro_op_type = manager.get_micro_op_type(default_type, ("set-wildcard", ))
+                wildcard_micro_op_type = manager.get_micro_op_type(("set-wildcard", ))
                 if wildcard_micro_op_type:
                     if not wildcard_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
                         raise flow_manager.exception(self.INVALID_RVALUE(), self)
 
-                    micro_op = wildcard_micro_op_type.create(of, default_type)
+                    micro_op = wildcard_micro_op_type.create(of)
                     return flow_manager.value(micro_op.invoke(reference, rvalue), self)
 
                 raise flow_manager.exception(self.INVALID_LVALUE(), self)

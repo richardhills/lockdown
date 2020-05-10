@@ -68,8 +68,8 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target, through_type):
-        return ObjectWildcardGetter(target, through_type, self.type, self.key_error, self.type_error)
+    def create(self, target):
+        return ObjectWildcardGetter(target, self.type, self.key_error, self.type_error)
 
     def can_be_derived_from(self, other_micro_op_type):
         return (
@@ -176,9 +176,8 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
 
 class ObjectWildcardGetter(MicroOp):
 
-    def __init__(self, target, through_type, type, key_error, type_error):
+    def __init__(self, target, type, key_error, type_error):
         self.target = target
-        self.through_type = through_type
         self.type = type
         self.key_error = key_error
         self.type_error = type_error
@@ -189,12 +188,12 @@ class ObjectWildcardGetter(MicroOp):
         if key in self.target.__dict__:
             value = self.target.__dict__[key]
         else:
-            default_factory_op_type = get_manager(self.target).get_micro_op_type(self.through_type, ("default-factory", ))
+            default_factory_op_type = get_manager(self.target).get_micro_op_type(("default-factory", ))
 
             if not default_factory_op_type:
                 raise_if_safe(InvalidDereferenceKey, self.key_error)
 
-            default_factory_op = default_factory_op_type.create(self.target, self.through_type)
+            default_factory_op = default_factory_op_type.create(self.target)
             value = default_factory_op.invoke(key)
 
         get_manager(value)
@@ -213,8 +212,8 @@ class ObjectGetterType(ObjectMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target, through_type):
-        return ObjectGetter(target, through_type, self.key, self.type, self.key_error, self.type_error)
+    def create(self, target):
+        return ObjectGetter(target, self.key, self.type, self.key_error, self.type_error)
 
     def can_be_derived_from(self, other_micro_op_type):
         return (
@@ -323,9 +322,8 @@ class ObjectGetterType(ObjectMicroOpType):
         return "get.{}.{}".format(self.key, self.type)
 
 class ObjectGetter(MicroOp):
-    def __init__(self, target, through_type, key, type, key_error, type_error):
+    def __init__(self, target, key, type, key_error, type_error):
         self.target = target
-        self.through_type = through_type
         self.key = key
         self.type = type
         self.key_error = key_error
@@ -337,7 +335,7 @@ class ObjectGetter(MicroOp):
         if self.key in self.target.__dict__:
             value = self.target.__dict__[self.key]
         else:
-            default_factory_op = get_manager(self.target).get_micro_op_type(self.through_type, ("default-factory", ))
+            default_factory_op = get_manager(self.target).get_micro_op_type(("default-factory", ))
 
             if default_factory_op:
                 value = default_factory_op.invoke(self.key)
@@ -362,7 +360,7 @@ class ObjectWildcardSetterType(ObjectMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target, through_type):
+    def create(self, target):
         return ObjectWildcardSetter(target, self.type, self.key_error, self.type_error)
 
     def can_be_derived_from(self, other_micro_op_type):
@@ -445,7 +443,7 @@ class ObjectSetterType(ObjectMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target, through_type):
+    def create(self, target):
         return ObjectSetter(target, self.key, self.type, self.key_error, self.type_error)
 
     def can_be_derived_from(self, other_micro_op_type):
@@ -543,7 +541,7 @@ class ObjectWildcardDeletterType(ObjectMicroOpType):
     def __init__(self, key_error):
         self.key_error = key_error
 
-    def create(self, target, through_type):
+    def create(self, target):
         return ObjectWildcardDeletter(target, self.key_error)
 
     def replace_inferred_type(self, other_micro_op_type):
@@ -609,7 +607,7 @@ class ObjectDeletterType(ObjectMicroOpType):
         self.key = key
         self.key_error = key_error
 
-    def create(self, target, through_type):
+    def create(self, target):
         return ObjectDeletter(target, self.key, self.key_error)
 
     def can_be_derived_from(self, other_micro_op_type):
@@ -723,19 +721,19 @@ class RDHObject(Composite, object):
 
     def __setattr__(self, key, value):
         manager = get_manager(self)
-        default_type = manager.default_type
-        micro_op_type = manager.get_micro_op_type(default_type, ("set", key))
+
+        micro_op_type = manager.get_micro_op_type(("set", key))
         if micro_op_type is not None:
-            micro_op = micro_op_type.create(self, default_type)
+            micro_op = micro_op_type.create(self)
             micro_op.invoke(value)
         else:
-            micro_op_type = manager.get_micro_op_type(default_type, ("set-wildcard",))
+            micro_op_type = manager.get_micro_op_type(("set-wildcard",))
 
             if micro_op_type is None:
-                manager.get_micro_op_type(default_type, ("set-wildcard",))
+                manager.get_micro_op_type(("set-wildcard",))
                 raise MissingMicroOp()
 
-            micro_op = micro_op_type.create(self, default_type)
+            micro_op = micro_op_type.create(self)
             micro_op.invoke(key, value)
 
     def __getattribute__(self, key):
@@ -744,20 +742,18 @@ class RDHObject(Composite, object):
 
         try:
             manager = get_manager(self)
-            default_type = manager.default_type
-            if default_type is None:
-                raise AttributeError(key)
-            micro_op_type = manager.get_micro_op_type(default_type, ("get", key))
+
+            micro_op_type = manager.get_micro_op_type(("get", key))
             if micro_op_type is not None:
-                micro_op = micro_op_type.create(self, default_type)
+                micro_op = micro_op_type.create(self)
                 return micro_op.invoke()
             else:
-                micro_op_type = manager.get_micro_op_type(default_type, ("get-wildcard",))
+                micro_op_type = manager.get_micro_op_type(("get-wildcard",))
     
                 if micro_op_type is None:
                     raise MissingMicroOp()
     
-                micro_op = micro_op_type.create(self, default_type)
+                micro_op = micro_op_type.create(self)
                 return micro_op.invoke(key)
         except InvalidDereferenceKey:
             if key == "of":
@@ -766,20 +762,18 @@ class RDHObject(Composite, object):
 
     def __delattr__(self, key):
         manager = get_manager(self)
-        default_type = manager.default_type
-        if default_type is None:
-            raise AttributeError()
-        micro_op_type = manager.get_micro_op_type(default_type, ("delete", key))
+
+        micro_op_type = manager.get_micro_op_type(("delete", key))
         if micro_op_type is not None:
-            micro_op = micro_op_type.create(self, default_type)
+            micro_op = micro_op_type.create(self)
             return micro_op.invoke()
         else:
-            micro_op_type = manager.get_micro_op_type(default_type, ("delete-wildcard",))
+            micro_op_type = manager.get_micro_op_type(("delete-wildcard",))
 
             if micro_op_type is None:
                 raise MissingMicroOp()
 
-            micro_op = micro_op_type.create(self, default_type)
+            micro_op = micro_op_type.create(self)
             return micro_op.invoke(key)
 
     def __repr__(self):

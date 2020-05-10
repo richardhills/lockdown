@@ -63,8 +63,8 @@ class ListWildcardGetterType(ListMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target, through_type):
-        return ListWildcardGetter(target, through_type, self.type, self.key_error, self.type_error)
+    def create(self, target):
+        return ListWildcardGetter(target, self.type, self.key_error, self.type_error)
 
     def can_be_derived_from(self, other_micro_op_type):
         return (
@@ -174,9 +174,8 @@ class ListWildcardGetterType(ListMicroOpType):
 
 
 class ListWildcardGetter(MicroOp):
-    def __init__(self, target, through_type, type, key_error, type_error):
+    def __init__(self, target, type, key_error, type_error):
         self.target = target
-        self.through_type = through_type
         self.type = type
         self.key_error = key_error
         self.type_error = type_error
@@ -187,12 +186,12 @@ class ListWildcardGetter(MicroOp):
         if key >= 0 and key < len(self.target):
             value = self.target.__getitem__(key, raw=True)
         else:
-            default_factory_op_type = get_manager(self.target).get_micro_op_type(self.through_type, ("default-factory",))
+            default_factory_op_type = get_manager(self.target).get_micro_op_type(("default-factory",))
 
             if not default_factory_op_type:
                 raise_if_safe(InvalidDereferenceKey, self.key_error)
 
-            default_factory_op = default_factory_op_type.create(self.target, self.through_type)
+            default_factory_op = default_factory_op_type.create(self.target)
             value = default_factory_op.invoke(key)
 
         if value is not SPARSE_ELEMENT:
@@ -210,8 +209,8 @@ class ListGetterType(ListMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target, through_type):
-        return ListGetter(target, through_type, self.key, self.type, self.key_error, self.type_error)
+    def create(self, target):
+        return ListGetter(target, self.key, self.type, self.key_error, self.type_error)
 
     def can_be_derived_from(self, other_micro_op_type):
         return (
@@ -340,9 +339,8 @@ class ListGetterType(ListMicroOpType):
 
 
 class ListGetter(MicroOp):
-    def __init__(self, target, through_type, key, type, key_error, type_error):
+    def __init__(self, target, key, type, key_error, type_error):
         self.target = target
-        self.through_type = through_type
         self.key = key
         self.type = type
         self.key_error = key_error
@@ -354,7 +352,7 @@ class ListGetter(MicroOp):
         if self.key >= 0 and self.key < len(self.target):
             value = self.target.__getitem__(self.key, raw=True)
         else:
-            default_factory_op = get_manager(self.target).get_micro_op_type(self.through_type, ("default-factory",))
+            default_factory_op = get_manager(self.target).get_micro_op_type(("default-factory",))
 
             if default_factory_op:
                 value = default_factory_op.invoke(self.key)
@@ -375,7 +373,7 @@ class ListWildcardSetterType(ListMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target, through_type):
+    def create(self, target):
         return ListWildcardSetter(target, self.type, self.key_error, self.type_error)
 
     def can_be_derived_from(self, other_micro_op_type):
@@ -458,7 +456,7 @@ class ListSetterType(ListMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target, through_type):
+    def create(self, target):
         return ListSetter(target, self.key, self.type, self.key_error, self.type_error)
 
     def can_be_derived_from(self, other_micro_op_type):
@@ -548,7 +546,7 @@ class ListWildcardDeletterType(ListMicroOpType):
     def unbind(self, key, target):
         pass
 
-    def create(self, target, through_type):
+    def create(self, target):
         return ListWildcardDeletter(target, self.key_error)
 
     def can_be_derived_from(self, other_micro_op_type):
@@ -600,7 +598,7 @@ class ListDeletterType(ListMicroOpType):
         self.key = key
         self.key_error = key_error
 
-    def create(self, target, through_type):
+    def create(self, target):
         return ListDeletter(target, self.key, self.key_error)
 
     def can_be_derived_from(self, other_micro_op_type):
@@ -664,7 +662,7 @@ class ListWildcardInsertType(ListMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target, through_type):
+    def create(self, target):
         return ListWildcardInsert(target, self.type, self.key_error, self.type_error)
 
     def can_be_derived_from(self, other_micro_op_type):
@@ -745,7 +743,7 @@ class ListInsertType(ListMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target, through_type):
+    def create(self, target):
         return ListInsert(target, self.key, self.type, self.key_error, self.type_error)
 
     def can_be_derived_from(self, other_micro_op_type):
@@ -886,21 +884,19 @@ class RDHList(Composite, MutableSequence, object):
             return
 
         manager = get_manager(self)
-        default_type = manager.default_type
-        if default_type is None:
-            raise AttributeError()
-        micro_op_type = manager.get_micro_op_type(default_type, ("insert", index))
+
+        micro_op_type = manager.get_micro_op_type(("insert", index))
 
         if micro_op_type is not None:
-            micro_op = micro_op_type.create(self, default_type)
+            micro_op = micro_op_type.create(self)
             return micro_op.invoke(element)
         else:
-            micro_op_type = manager.get_micro_op_type(default_type, ("insert-wildcard",))
+            micro_op_type = manager.get_micro_op_type(("insert-wildcard",))
 
             if micro_op_type is None:
                 raise MissingMicroOp()
 
-            micro_op = micro_op_type.create(self, default_type)
+            micro_op = micro_op_type.create(self)
             micro_op.invoke(index, element)
 
     def __setitem__(self, key, value, raw=False):
@@ -911,20 +907,18 @@ class RDHList(Composite, MutableSequence, object):
 
         try:
             manager = get_manager(self)
-            default_type = manager.default_type
-            if default_type is None:
-                raise IndexError()
-            micro_op_type = manager.get_micro_op_type(default_type, ("set", key))
+
+            micro_op_type = manager.get_micro_op_type(("set", key))
             if micro_op_type is not None:
-                micro_op = micro_op_type.create(self, default_type)
+                micro_op = micro_op_type.create(self)
                 micro_op.invoke(value)
             else:
-                micro_op_type = manager.get_micro_op_type(default_type, ("set-wildcard",))
+                micro_op_type = manager.get_micro_op_type(("set-wildcard",))
     
                 if micro_op_type is None:
                     raise MissingMicroOp()
     
-                micro_op = micro_op_type.create(self, default_type)
+                micro_op = micro_op_type.create(self)
                 micro_op.invoke(key, value)
         except InvalidAssignmentKey:
             raise IndexError()
@@ -937,20 +931,18 @@ class RDHList(Composite, MutableSequence, object):
 
         try:
             manager = get_manager(self)
-            default_type = manager.default_type
-            if default_type is None:
-                raise IndexError()
-            micro_op_type = manager.get_micro_op_type(default_type, ("get", key))
+
+            micro_op_type = manager.get_micro_op_type(("get", key))
             if micro_op_type is not None:
-                micro_op = micro_op_type.create(self, default_type)
+                micro_op = micro_op_type.create(self)
                 return micro_op.invoke()
             else:
-                micro_op_type = manager.get_micro_op_type(default_type, ("get-wildcard",))
+                micro_op_type = manager.get_micro_op_type(("get-wildcard",))
 
                 if micro_op_type is None:
                     raise MissingMicroOp()
 
-                micro_op = micro_op_type.create(self, default_type)
+                micro_op = micro_op_type.create(self)
                 return micro_op.invoke(key)
         except InvalidDereferenceKey:
             if key >= 0 and key < self.length:
@@ -965,20 +957,18 @@ class RDHList(Composite, MutableSequence, object):
             return
 
         manager = get_manager(self)
-        default_type = manager.default_type
-        if default_type is None:
-            raise IndexError()
-        micro_op_type = manager.get_micro_op_type(default_type, ("delete", key))
+
+        micro_op_type = manager.get_micro_op_type(("delete", key))
         if micro_op_type is not None:
-            micro_op = micro_op_type.create(self, default_type)
+            micro_op = micro_op_type.create(self)
             return micro_op.invoke()
         else:
-            micro_op_type = manager.get_micro_op_type(default_type, ("delete-wildcard",))
+            micro_op_type = manager.get_micro_op_type(("delete-wildcard",))
 
             if micro_op_type is None:
                 raise MissingMicroOp()
 
-            micro_op = micro_op_type.create(self, default_type)
+            micro_op = micro_op_type.create(self)
             return micro_op.invoke(key)
 
     def __str__(self):

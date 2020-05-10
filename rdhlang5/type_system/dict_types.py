@@ -70,8 +70,8 @@ class DictWildcardGetterType(DictMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target, through_type):
-        return DictWildcardGetter(target, through_type, self.type, self.key_error, self.type_error)
+    def create(self, target):
+        return DictWildcardGetter(target, self.type, self.key_error, self.type_error)
 
     def can_be_derived_from(self, other_micro_op_type):
         return (
@@ -173,9 +173,8 @@ class DictWildcardGetterType(DictMicroOpType):
 
 class DictWildcardGetter(MicroOp):
 
-    def __init__(self, target, through_type, type, key_error, type_error):
+    def __init__(self, target, type, key_error, type_error):
         self.target = target
-        self.through_type = through_type
         self.type = type
         self.key_error = key_error
         self.type_error = type_error
@@ -186,12 +185,12 @@ class DictWildcardGetter(MicroOp):
         if key in self.target.wrapped:
             value = self.target.__getitem__(key, raw=True)
         else:
-            default_factory_op_type = get_manager(self.target).get_micro_op_type(self.through_type, ("default-factory",))
+            default_factory_op_type = get_manager(self.target).get_micro_op_type(("default-factory",))
 
             if not default_factory_op_type:
                 raise_if_safe(InvalidDereferenceKey, self.key_error)
 
-            default_factory_op = default_factory_op_type.create(self.target, self.through_type)
+            default_factory_op = default_factory_op_type.create(self.target)
             value = default_factory_op.invoke(key)
 
         get_manager(value)
@@ -209,8 +208,8 @@ class DictGetterType(DictMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target, through_type):
-        return DictGetter(target, through_type, self.key, self.type, self.key_error, self.type_error)
+    def create(self, target):
+        return DictGetter(target, self.key, self.type, self.key_error, self.type_error)
 
     def can_be_derived_from(self, other_micro_op_type):
         return (
@@ -313,9 +312,8 @@ class DictGetterType(DictMicroOpType):
 
 
 class DictGetter(MicroOp):
-    def __init__(self, target, through_type, key, type, key_error, type_error):
+    def __init__(self, target, key, type, key_error, type_error):
         self.target = target
-        self.through_type = through_type
         self.key = key
         self.type = type
         self.key_error = key_error
@@ -327,7 +325,7 @@ class DictGetter(MicroOp):
         if self.key in self.target.wrapped:
             value = self.target.wrapped[self.key]
         else:
-            default_factory_op = get_manager(self.target).get_micro_op_type(self.through_type, ("default-factory",))
+            default_factory_op = get_manager(self.target).get_micro_op_type(("default-factory",))
 
             if default_factory_op:
                 value = default_factory_op.invoke(self.key)
@@ -350,7 +348,7 @@ class DictWildcardSetterType(DictMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target, through_type):
+    def create(self, target):
         return DictWildcardSetter(target, self.type, self.key_error, self.type_error)
 
     def can_be_derived_from(self, other_micro_op_type):
@@ -430,7 +428,7 @@ class DictSetterType(DictMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target, through_type):
+    def create(self, target):
         return DictSetter(target, self.key, self.type, self.key_error, self.type_error)
 
     def can_be_derived_from(self, other_micro_op_type):
@@ -520,7 +518,7 @@ class DictWildcardDeletterType(DictMicroOpType):
     def __init__(self, key_error):
         self.key_error = key_error
 
-    def create(self, target, through_type):
+    def create(self, target):
         return DictWildcardDeletter(target, self.key_error)
 
     def can_be_derived_from(self, other_micro_op_type):
@@ -578,7 +576,7 @@ class DictDeletterType(DictMicroOpType):
         self.key = key
         self.key_error = key_error
 
-    def create(self, target, through_type):
+    def create(self, target):
         return DictDeletter(target, self.key, self.key_error)
 
     def can_be_derived_from(self, other_micro_op_type):
@@ -657,20 +655,18 @@ class RDHDict(Composite, DictMixin, object):
 
         try:
             manager = get_manager(self)
-            default_type = manager.default_type
-            if default_type is None:
-                raise KeyError()
-            micro_op_type = manager.get_micro_op_type(default_type, ("get", key))
+
+            micro_op_type = manager.get_micro_op_type(("get", key))
             if micro_op_type is not None:
-                micro_op = micro_op_type.create(self, default_type)
+                micro_op = micro_op_type.create(self)
                 return micro_op.invoke()
             else:
-                micro_op_type = manager.get_micro_op_type(default_type, ("get-wildcard",))
+                micro_op_type = manager.get_micro_op_type(("get-wildcard",))
 
                 if micro_op_type is None:
                     raise MissingMicroOp()
 
-                micro_op = micro_op_type.create(self, default_type)
+                micro_op = micro_op_type.create(self)
                 return micro_op.invoke(key)
         except InvalidDereferenceKey:
             raise KeyError()
@@ -683,20 +679,18 @@ class RDHDict(Composite, DictMixin, object):
 
         try:
             manager = get_manager(self)
-            default_type = manager.default_type
-            if default_type is None:
-                raise KeyError()
-            micro_op_type = manager.get_micro_op_type(default_type, ("set", key))
+
+            micro_op_type = manager.get_micro_op_type(("set", key))
             if micro_op_type is not None:
-                micro_op = micro_op_type.create(self, default_type)
+                micro_op = micro_op_type.create(self)
                 micro_op.invoke(value)
             else:
-                micro_op_type = manager.get_micro_op_type(default_type, ("set-wildcard",))
+                micro_op_type = manager.get_micro_op_type(("set-wildcard",))
 
                 if micro_op_type is None:
                     raise MissingMicroOp()
 
-                micro_op = micro_op_type.create(self, default_type)
+                micro_op = micro_op_type.create(self)
                 micro_op.invoke(key, value)
         except InvalidAssignmentKey:
             raise KeyError()
@@ -708,20 +702,18 @@ class RDHDict(Composite, DictMixin, object):
             return self.wrapped.__delitem__(key)
 
         manager = get_manager(self)
-        default_type = manager.default_type
-        if default_type is None:
-            raise IndexError()
-        micro_op_type = manager.get_micro_op_type(default_type, ("delete", key))
+
+        micro_op_type = manager.get_micro_op_type(("delete", key))
         if micro_op_type is not None:
-            micro_op = micro_op_type.create(self, default_type)
+            micro_op = micro_op_type.create(self)
             return micro_op.invoke()
         else:
-            micro_op_type = manager.get_micro_op_type(default_type, ("delete-wildcard",))
+            micro_op_type = manager.get_micro_op_type(("delete-wildcard",))
 
             if micro_op_type is None:
                 raise MissingMicroOp()
 
-            micro_op = micro_op_type.create(self, default_type)
+            micro_op = micro_op_type.create(self)
             return micro_op.invoke(key)
 
     def keys(self):
