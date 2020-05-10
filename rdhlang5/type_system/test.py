@@ -1,7 +1,10 @@
+import gc
+from time import sleep
 from unittest import main
 from unittest.case import TestCase
 
-from rdhlang5.type_system.composites import CompositeType, InferredType
+from rdhlang5.type_system.composites import CompositeType, InferredType, \
+    results_by_target_id
 from rdhlang5.type_system.core_types import IntegerType, UnitType, StringType, \
     AnyType, Const, OneOfType, BooleanType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
@@ -774,11 +777,13 @@ class TestRDHListType(TestCase):
 
         self.assertFalse(foo.is_copyable_from(bar))
   
-    def test_convert_tuple_to_list(self):
-        foo = RDHListType([ ], IntegerType(), allow_delete=False, allow_wildcard_insert=False, allow_push=False)
-        bar = RDHListType([ IntegerType(), IntegerType() ], None)
-
-        self.assertTrue(foo.is_copyable_from(bar))
+# This is blocked - you can't have wildcard access to a list derived from a tuple without it
+# A strongly opcode to link the two would be an iterator, which both could support
+#     def test_convert_tuple_to_list(self):
+#         foo = RDHListType([ ], IntegerType(), allow_delete=False, allow_wildcard_insert=False, allow_push=False)
+#         bar = RDHListType([ IntegerType(), IntegerType() ], None)
+# 
+#         self.assertTrue(foo.is_copyable_from(bar))
 
     def test_const_covariant_array_assignment_allowed(self):
         foo = RDHListType([ ], Const(AnyType()), allow_push=False, allow_wildcard_insert=False)
@@ -792,17 +797,20 @@ class TestRDHListType(TestCase):
 
         self.assertFalse(foo.is_copyable_from(bar))
 
-    def test_pushing_into_short_tuple(self):
-        foo = RDHListType([ IntegerType() ], IntegerType(), allow_delete=False)
-        bar = RDHListType([ IntegerType() ], IntegerType(), allow_delete=False, allow_wildcard_insert=False)
+#     def test_pushing_into_short_tuple(self):
+#         foo = RDHListType([ IntegerType() ], IntegerType(), allow_delete=False)
+#         bar = RDHListType([ IntegerType() ], IntegerType(), allow_delete=False, allow_wildcard_insert=False)
+# 
+#         self.assertTrue(foo.is_copyable_from(bar))
 
-        self.assertTrue(foo.is_copyable_from(bar))
-
-    def test_pushing_into_long_tuple(self):
-        foo = RDHListType([ IntegerType(), IntegerType() ], IntegerType(), allow_delete=False)
-        bar = RDHListType([ IntegerType(), IntegerType() ], IntegerType(), allow_delete=False, allow_wildcard_insert=False)
-
-        self.assertTrue(foo.is_copyable_from(bar))
+# I'm not sure why I thought this was ok. You can't "invent" a new operation, wildcard insert
+# on an object that doesn't support it already, just because it doesn't conflict with
+# other operations that you happen to know about.
+#     def test_pushing_into_long_tuple(self):
+#         foo = RDHListType([ IntegerType(), IntegerType() ], IntegerType(), allow_delete=False)
+#         bar = RDHListType([ IntegerType(), IntegerType() ], IntegerType(), allow_delete=False, allow_wildcard_insert=False)
+# 
+#         self.assertTrue(foo.is_copyable_from(bar))
 
     def test_same_type_array_assignment(self):
         foo = RDHListType([ ], IntegerType())
@@ -817,8 +825,8 @@ class TestRDHListType(TestCase):
         self.assertFalse(foo.is_copyable_from(bar))
 
     def test_narrowing_assignment_blocked(self):
-        foo = RDHListType([], IntegerType(), allow_push=False, allow_wildcard_insert=False, allow_delete=False, is_sparse=False)
-        bar = RDHListType([], rich_composite_type, allow_push=False, allow_wildcard_insert=False, allow_delete=False, is_sparse=False)
+        foo = RDHListType([], IntegerType(), allow_push=False, allow_wildcard_insert=False, allow_delete=False, is_sparse=True)
+        bar = RDHListType([], Const(rich_composite_type), allow_push=False, allow_wildcard_insert=False, allow_delete=False, is_sparse=True)
 
         self.assertTrue(bar.is_copyable_from(foo))
         self.assertFalse(foo.is_copyable_from(bar))

@@ -946,9 +946,11 @@ class RDHList(Composite, MutableSequence, object):
 
                 micro_op = micro_op_type.create(self)
                 return micro_op.invoke(key)
-        except (InvalidDereferenceKey, MissingMicroOp):
+        except InvalidDereferenceKey:
             if key >= 0 and key < self.length:
                 return None
+            raise IndexError()
+        except MissingMicroOp:
             raise IndexError()
 
     def __delitem__(self, key, raw=False):

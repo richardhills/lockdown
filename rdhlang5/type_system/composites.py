@@ -79,7 +79,7 @@ class CompositeType(Type):
             their_micro_op = other.micro_op_types.get(our_tag, None)
 
             no_initial_data_to_make_safe = not other.initial_data or our_micro_op.check_for_runtime_data_conflict(other.initial_data)
-            if no_initial_data_to_make_safe and not our_micro_op.key_error:
+            if no_initial_data_to_make_safe: # and not our_micro_op.key_error:
                 if their_micro_op is None:
                     return False
                 if not our_micro_op.can_be_derived_from(their_micro_op):
@@ -95,15 +95,24 @@ class CompositeType(Type):
             return True
 
         source_weakref = weakrefs_for_type.get(id(other), None)
+        if source_weakref is not None and source_weakref() is not other:
+            raise FatalError()
+
         if source_weakref is None:
-            source_weakref = weakref.ref(other)
+            source_weakref = weakref.ref(other, type_cleared)
+            weakrefs_for_type[id(other)] = source_weakref
             type_ids_for_weakref_id[id(source_weakref)] = id(other)
+
         target_weakref = weakrefs_for_type.get(id(self), None)
+        if target_weakref is not None and target_weakref() is not self:
+            raise FatalError()
+
         if target_weakref is None:
-            target_weakref = weakref.ref(self)
+            target_weakref = weakref.ref(self, type_cleared)
+            weakrefs_for_type[id(self)] = target_weakref
             type_ids_for_weakref_id[id(target_weakref)] = id(self)
 
-        result = results_by_target_id[id(target_weakref)][id(source_weakref)]
+        result = results_by_target_id[id(self)][id(other)]
         if result is not None:
 #            check = self.internal_is_copyable_from(other)
 #            if not check == result:
@@ -132,12 +141,12 @@ results_by_target_id = defaultdict(lambda: defaultdict(lambda: None))
 results_by_source_id = defaultdict(lambda: defaultdict(lambda: None))
 
 def type_cleared(type_weakref):
-    type_id = type_ids_for_weakref_id(type_weakref)
+    type_id = type_ids_for_weakref_id[id(type_weakref)]
     for source_id in results_by_target_id[type_id].keys():
         del results_by_source_id[source_id]
     del results_by_target_id[type_id]
     del weakrefs_for_type[type_id]
-    del type_ids_for_weakref_id[type_weakref]
+    del type_ids_for_weakref_id[id(type_weakref)]
 
 class Composite(object):
     pass
