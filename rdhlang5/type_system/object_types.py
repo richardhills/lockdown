@@ -130,7 +130,7 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
         if isinstance(other_micro_op_type, (ObjectGetterType, ObjectWildcardGetterType)):
             return False
         if isinstance(other_micro_op_type, (ObjectSetterType, ObjectWildcardSetterType)):
-            if not self.type_error and not self.type.is_copyable_from(other_micro_op_type.type):
+            if not self.type_error and not other_micro_op_type.type_error and not self.type.is_copyable_from(other_micro_op_type.type):
                 return True
         if isinstance(other_micro_op_type, (ObjectDeletterType, ObjectWildcardDeletterType)):
             if not self.key_error and not other_micro_op_type.key_error and not has_default_factory:
@@ -347,6 +347,7 @@ class ObjectGetter(MicroOp):
         type_of_value = get_type_of_value(value)
 
         if not self.type.is_copyable_from(type_of_value):
+            self.type.is_copyable_from(type_of_value)
             raise raise_if_safe(InvalidDereferenceType, self.type_error)
 
         return value

@@ -132,10 +132,13 @@ class ObjectTemplateOp(Opcode):
         micro_ops = {}
         initial_data = {}
 
+        all_value_types = []
+
         for key, opcode in self.opcodes.items():
             value_type, other_break_types = get_expression_break_types(opcode, context, flow_manager)
             break_types.merge(other_break_types)
             value_type = flatten_out_types(value_type)
+            all_value_types.append(value_type)
 
             micro_ops[("get", key)] = ObjectGetterType(key, value_type, False, False)
             micro_ops[("set", key)] = ObjectSetterType(key, AnyType(), False, False)
@@ -155,8 +158,10 @@ class ObjectTemplateOp(Opcode):
             if initial_value is not MISSING:
                 initial_data[key] = initial_value
 
-        micro_ops[("get-wildcard",)] = ObjectWildcardGetterType(rich_composite_type, True, False)
-        micro_ops[("set-wildcard",)] = ObjectWildcardSetterType(rich_composite_type, True, True)
+        combined_value_types = merge_types(all_value_types, "exact")
+
+        micro_ops[("get-wildcard",)] = ObjectWildcardGetterType(combined_value_types, True, False)
+        micro_ops[("set-wildcard",)] = ObjectWildcardSetterType(AnyType(), True, True)
 
         break_types.add("value", CompositeType(micro_ops, initial_data=initial_data, is_revconst=True))
 
@@ -232,10 +237,13 @@ class ListTemplateOp(Opcode):
         micro_ops = {}
         initial_data = {}
 
+        all_value_types = []
+
         for index, opcode in enumerate(self.opcodes):
             value_type, other_break_types = get_expression_break_types(opcode, context, flow_manager)
             break_types.merge(other_break_types)
             value_type = flatten_out_types(value_type)
+            all_value_types.append(value_type)
 
             micro_ops[("get", index)] = ListGetterType(index, value_type, False, False)
             micro_ops[("set", index)] = ListSetterType(index, AnyType(), False, False)
@@ -255,11 +263,13 @@ class ListTemplateOp(Opcode):
             if initial_value is not MISSING:
                 initial_data[index] = initial_value
 
-        micro_ops[("get-wildcard",)] = ListWildcardGetterType(rich_composite_type, True, False)
-        micro_ops[("set-wildcard",)] = ListWildcardSetterType(rich_composite_type, True, True)
-        micro_ops[("insert", 0)] = ListInsertType(rich_composite_type, 0, False, False)
+        combined_value_types = merge_types(all_value_types, "exact")
+
+        micro_ops[("get-wildcard",)] = ListWildcardGetterType(combined_value_types, True, False)
+        micro_ops[("set-wildcard",)] = ListWildcardSetterType(AnyType(), True, True)
+        micro_ops[("insert", 0)] = ListInsertType(AnyType(), 0, False, False)
         micro_ops[("delete-wildcard",)] = ListWildcardDeletterType(True)
-        micro_ops[("insert-wildcard",)] = ListWildcardInsertType(rich_composite_type, True, False)
+        micro_ops[("insert-wildcard",)] = ListWildcardInsertType(AnyType(), True, False)
 
         break_types.add("value", CompositeType(micro_ops, initial_data=initial_data, is_revconst=True))
 

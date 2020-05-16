@@ -43,6 +43,8 @@ class AnyType(Type):
     
 class NoValueType(Type):
     def is_copyable_from(self, other):
+        if isinstance(other, OneOfType):
+            return other.is_copyable_to(self)
         return isinstance(other, NoValueType)
 
     def __repr__(self):
@@ -53,6 +55,8 @@ class UnitType(Type):
         self.value = value
 
     def is_copyable_from(self, other):
+        if isinstance(other, OneOfType):
+            return other.is_copyable_to(self)
         if not isinstance(other, UnitType):
             return False
         return other.value == self.value
@@ -68,6 +72,8 @@ class UnitType(Type):
 
 class StringType(Type):
     def is_copyable_from(self, other):
+        if isinstance(other, OneOfType):
+            return other.is_copyable_to(self)
         return isinstance(other, StringType) or (isinstance(other, UnitType) and isinstance(other.value, basestring))
 
     def __repr__(self):
@@ -76,6 +82,8 @@ class StringType(Type):
 
 class IntegerType(Type):
     def is_copyable_from(self, other):
+        if isinstance(other, OneOfType):
+            return other.is_copyable_to(self)
         return isinstance(other, IntegerType) or (isinstance(other, UnitType) and isinstance(other.value, int) and not isinstance(other.value, bool))
 
     def __repr__(self):
@@ -83,6 +91,8 @@ class IntegerType(Type):
 
 class BooleanType(Type):
     def is_copyable_from(self, other):
+        if isinstance(other, OneOfType):
+            return other.is_copyable_to(self)
         return isinstance(other, BooleanType) or (isinstance(other, UnitType) and isinstance(other.value, bool))
 
     def __repr__(self):
@@ -136,6 +146,15 @@ class OneOfType(Type):
             else:
                 return False
         return True
+
+    def is_copyable_to(self, other):
+        if isinstance(other, OneOfType):
+            raise FatalError()
+        for t in self.types:
+            if not other.is_copyable_from(t):
+                return False
+        return True
+        
 
     def reify_revconst_types(self):
         new_types = []

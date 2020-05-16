@@ -852,7 +852,7 @@ def RDHListType(element_types, wildcard_type, allow_push=True, allow_wildcard_in
 
         micro_ops[("get-wildcard",)] = ListWildcardGetterType(wildcard_type, True, False)
         if not const:
-            micro_ops[("set-wildcard",)] = ListWildcardSetterType(wildcard_type, not is_sparse, False)
+            micro_ops[("set-wildcard",)] = ListWildcardSetterType(wildcard_type, not is_sparse, True)
         if allow_push:
             micro_ops[("insert", 0)] = ListInsertType(wildcard_type, 0, False, False)
         if allow_delete:

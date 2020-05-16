@@ -1,4 +1,6 @@
+from __builtin__ import False
 from collections import defaultdict
+import threading
 import weakref
 
 from rdhlang5.type_system.core_types import Type, unwrap_types, AnyType, \
@@ -16,6 +18,8 @@ class InferredType(Type):
     def replace_inferred_types(self, other):
         return other
 
+composite_type_is_copyable_cache = threading.local()
+
 class CompositeType(Type):
     def __init__(self, micro_op_types, initial_data=None, is_revconst=False, name=None):
         if not isinstance(micro_op_types, dict):
@@ -23,6 +27,10 @@ class CompositeType(Type):
         for tag in micro_op_types.keys():
             if not isinstance(tag, tuple):
                 raise FatalError()
+        from rdhlang5.type_system.dict_types import RDHDict
+
+        if isinstance(initial_data, RDHDict):
+            pass
         self.micro_op_types = micro_op_types
         self.initial_data = initial_data
         self.is_revconst = is_revconst
@@ -81,6 +89,7 @@ class CompositeType(Type):
             no_initial_data_to_make_safe = not other.initial_data or our_micro_op.check_for_runtime_data_conflict(other.initial_data)
             if no_initial_data_to_make_safe: # and not our_micro_op.key_error:
                 if their_micro_op is None:
+                    our_micro_op.check_for_runtime_data_conflict(other.initial_data)
                     return False
                 if not our_micro_op.can_be_derived_from(their_micro_op):
                     our_micro_op.can_be_derived_from(their_micro_op)
@@ -89,43 +98,71 @@ class CompositeType(Type):
         return True
 
     def is_copyable_from(self, other):
-        if not isinstance(other, CompositeType):
-            return False
-        if self is other:
-            return True
+        try:
+            cache_started_empty = False
+            if getattr(composite_type_is_copyable_cache, "_is_copyable_from_cache", None) is None:
+                composite_type_is_copyable_cache._is_copyable_from_cache = defaultdict(lambda: defaultdict(lambda: None))
+                cache_started_empty = True
+            cache = composite_type_is_copyable_cache._is_copyable_from_cache
 
-        source_weakref = weakrefs_for_type.get(id(other), None)
-        if source_weakref is not None and source_weakref() is not other:
-            raise FatalError()
+            if isinstance(other, OneOfType):
+                return other.is_copyable_to(self)
 
-        if source_weakref is None:
-            source_weakref = weakref.ref(other, type_cleared)
-            weakrefs_for_type[id(other)] = source_weakref
-            type_ids_for_weakref_id[id(source_weakref)] = id(other)
+            if not isinstance(other, CompositeType):
+                return False
+            if self is other:
+                return True
 
-        target_weakref = weakrefs_for_type.get(id(self), None)
-        if target_weakref is not None and target_weakref() is not self:
-            raise FatalError()
+            result = results_by_target_id[id(self)][id(other)]
 
-        if target_weakref is None:
-            target_weakref = weakref.ref(self, type_cleared)
-            weakrefs_for_type[id(self)] = target_weakref
-            type_ids_for_weakref_id[id(target_weakref)] = id(self)
+            # Debugging check
+            if result is False:
+                check = self.internal_is_copyable_from(other)
+                if check is True:
+                    self.internal_is_copyable_from(other)
+                    raise FatalError()
 
-        result = results_by_target_id[id(self)][id(other)]
-        if result is not None:
-#            check = self.internal_is_copyable_from(other)
-#            if not check == result:
-#                raise FatalError()
-            return result
+            if result is None:
+                result = cache[id(self)][id(other)]
+            if result is not None:
+                return result
 
-        results_by_target_id[id(self)][id(other)] = True
-        results_by_source_id[id(other)][id(self)] = True
+            cache[id(self)][id(other)] = True
+            cache[id(other)][id(self)] = True
 
-        result = self.internal_is_copyable_from(other)
+            result = self.internal_is_copyable_from(other)
 
-        results_by_target_id[id(self)][id(other)] = result
-        results_by_source_id[id(other)][id(self)] = result
+            cache[id(self)][id(other)] = result
+            cache[id(other)][id(self)] = result
+
+            if cache_started_empty:
+                source_weakref = weakrefs_for_type.get(id(other), None)
+                if source_weakref is None:
+                    source_weakref = weakref.ref(other, type_cleared)
+                    weakrefs_for_type[id(other)] = source_weakref
+                    type_ids_for_weakref_id[id(source_weakref)] = id(other)
+
+                target_weakref = weakrefs_for_type.get(id(self), None)
+                if target_weakref is None:
+                    target_weakref = weakref.ref(self, type_cleared)
+                    weakrefs_for_type[id(self)] = target_weakref
+                    type_ids_for_weakref_id[id(target_weakref)] = id(self)
+
+                if target_weakref is not None and target_weakref() is not self:
+                    raise FatalError()
+                if source_weakref is not None and source_weakref() is not other:
+                    raise FatalError()
+
+                results_by_target_id[id(self)][id(other)] = result
+                results_by_source_id[id(other)][id(self)] = result
+
+                # At the moment, garbage collecting types completely breaks composite type comparison.
+                # Until I'm able to fix, let's keep strong references, leak like hell
+                strong_links[id(self)] = self
+                strong_links[id(other)] = other
+        finally:
+            if cache_started_empty:
+                composite_type_is_copyable_cache._is_copyable_from_cache = None
 
         return result
 
@@ -139,6 +176,7 @@ weakrefs_for_type = {}
 type_ids_for_weakref_id = {}
 results_by_target_id = defaultdict(lambda: defaultdict(lambda: None))
 results_by_source_id = defaultdict(lambda: defaultdict(lambda: None))
+strong_links = {}
 
 def type_cleared(type_weakref):
     type_id = type_ids_for_weakref_id[id(type_weakref)]
