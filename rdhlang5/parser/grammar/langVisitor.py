@@ -65,11 +65,6 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by langParser#intTypeLiteral.
-    def visitIntTypeLiteral(self, ctx):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by langParser#immediateDereference.
     def visitImmediateDereference(self, ctx):
         return self.visitChildren(ctx)
@@ -115,6 +110,11 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#toFunctionExpression.
+    def visitToFunctionExpression(self, ctx):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#invocation.
     def visitInvocation(self, ctx):
         return self.visitChildren(ctx)
@@ -132,6 +132,11 @@ class langVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by langParser#immediateAssignment.
     def visitImmediateAssignment(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#noParameterInvocation.
+    def visitNoParameterInvocation(self, ctx):
         return self.visitChildren(ctx)
 
 

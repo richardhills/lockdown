@@ -98,6 +98,7 @@ expression
    | objectTemplate			# toObjectTemplate
    | listTemplate			# toListTemplate
    | expression '(' expression ')' # invocation
+   | expression '(' ')' # noParameterInvocation
    | '(' expression ')'     # parenthesis
    | SYMBOL					# immediateDereference
    | expression '.' SYMBOL  # staticDereference
@@ -110,9 +111,9 @@ expression
    | expression '.' SYMBOL '=' expression  # staticAssignment
    | expression '[' expression ']' '=' expression # dynamicAssignment
    | 'return' expression    # returnStatement
-   | 'int'					# intTypeLiteral
    | objectType				# toObjectType
    | listType				# toListType
+   | function				# toFunctionExpression
    ;
 
 objectTemplate

@@ -168,7 +168,7 @@ class Continuation(object):
     def get_break_types(self):
         return {}
 
-    def invoke(self, restart_value, context, break_manager):
+    def invoke(self, restart_value, break_manager):
         if not self.restart_type.is_copyable_from(get_type_of_value(restart_value)):
             raise FatalError()
         self.restarted = True

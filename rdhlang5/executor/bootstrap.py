@@ -13,6 +13,8 @@ from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE
 from rdhlang5.type_system.managers import get_manager
 from rdhlang5.type_system.object_types import RDHObject
 from rdhlang5.utils import NO_VALUE
+from rdhlang5.executor.raw_code_factories import inferred_type
+from rdhlang5.executor.opcodes import get_context_type
 
 
 class ObjectDictWrapper(object):
@@ -33,22 +35,41 @@ def create_application_flow_manager():
 class BootstrapException(Exception):
     pass
 
+def get_default_global_context():
+    return RDHObject({
+        "static": RDHObject({
+            "int": RDHObject({
+                "type": "Integer"
+            }),
+            "var": RDHObject({
+                "type": "Inferred"
+            })
+        })
+    }, bind=DEFAULT_OBJECT_TYPE)
+
 def bootstrap_function(data, argument=None, context=None, check_safe_exit=False):
     if argument is None:
         argument = NO_VALUE
     if context is None:
-        context = RDHObject({})
+        context = get_default_global_context()
 
     get_manager(context).add_composite_type(DEFAULT_OBJECT_TYPE)
     break_managers = defaultdict(list)
 
     with ExitStack() as stack:
-        function = prepare(data, context, create_no_escape_flow_manager())
+        open_function = prepare(
+            data,
+            context,
+            create_no_escape_flow_manager(),
+            immediate_context={
+                "suggested_outer_type": get_context_type(context)
+            }
+        )
 
         break_manager = stack.enter_context(create_application_flow_manager())
         break_managers["exit"].append(break_manager)
 
-        function_break_types = function.get_type().break_types
+        function_break_types = open_function.get_type().break_types
 
         for mode, break_types in function_break_types.items():
             if mode not in ("exit", "return", "value") and check_safe_exit:
@@ -57,7 +78,8 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False)
                 break_manager = stack.enter_context(break_manager.capture(mode, break_type, top_level=True))
                 break_managers[mode].append(break_manager)
 
-        function.invoke(argument, context, break_manager)
+        closed_function = open_function.close(context)
+        closed_function.invoke(argument, break_manager)
 
     for mode, break_managers in break_managers.items():
         for break_manager in break_managers:

@@ -21,7 +21,7 @@ def get_manager(obj):
     if isinstance(obj, InternalMarker):
         return None
 
-    if isinstance(obj, PreparedFunction):
+    if isinstance(obj, (RDHFunction, OpenFunction)):
         return None
 
     if not isinstance(obj, (list, tuple, dict, Composite)) and not hasattr(obj, "__dict__"):
@@ -88,7 +88,7 @@ def get_type_of_value(value):
         if manager is None:
             pass
         return CompositeType(manager.get_merged_micro_op_types(), value)
-    if isinstance(value, RDHFunction):
+    if isinstance(value, (RDHFunction, OpenFunction)):
         return value.get_type()
     if isinstance(value, Type):
         return NoValueType()

@@ -4,7 +4,8 @@ from __future__ import unicode_literals
 from abc import abstractmethod, ABCMeta
 
 from rdhlang5.executor.exceptions import PreparationException
-from rdhlang5.executor.flow_control import BreakTypesFactory  #
+from rdhlang5.executor.flow_control import BreakTypesFactory
+from rdhlang5.executor.function_type import OpenFunctionType, ClosedFunctionType
 from rdhlang5.executor.type_factories import enrich_type
 from rdhlang5.type_system.composites import CompositeType
 from rdhlang5.type_system.core_types import AnyType, Type, merge_types, Const, \
@@ -286,6 +287,8 @@ class ListTemplateOp(Opcode):
 
 
 def get_context_type(context):
+    if context is None:
+        return NoValueType()
     context_manager = get_manager(context)
     if not hasattr(context_manager, "_context_type"):
         value_type = {}
@@ -298,9 +301,12 @@ def get_context_type(context):
                 value_type["local"] = context.types.local
             if hasattr(context.types, "outer"):
                 value_type["outer"] = context.types.outer
+        if hasattr(context, "prepare"):
+            value_type["prepare"] = get_type_of_value(context.prepare)
         if hasattr(context, "static"):
             value_type["static"] = get_type_of_value(context.static)
         context_manager._context_type = RDHObjectType(value_type)
+
     return context_manager._context_type
 
 
@@ -696,9 +702,64 @@ class PrepareOp(Opcode):
 
         from rdhlang5.executor.function import prepare
 
+        immediate_context = immediate_context or {}
+        immediate_context["suggested_outer_type"] = get_context_type(context)
+
         function = prepare(function_data, context, flow_manager, immediate_context)
 
         flow_manager.value(function, self)
+
+class CloseOp(Opcode):
+    INVALID_FUNCTION = TypeErrorFactory("Close: invalid_function")
+    INVALID_OUTER_CONTEXT = TypeErrorFactory("Close: invalid_outer_context")
+
+    def __init__(self, data, visitor):
+        self.function = enrich_opcode(data.function, visitor)
+        self.outer_context = enrich_opcode(data.outer_context, visitor)
+
+    def get_break_types(self, context, flow_manager, immediate_context=None):
+        break_types = BreakTypesFactory()
+
+        function_type, function_break_types = get_expression_break_types(self.function, context, flow_manager, immediate_context=immediate_context)
+        function_type = flatten_out_types(function_type)
+        break_types.merge(function_break_types)
+
+        outer_context_type, outer_context_break_types = get_expression_break_types(self.outer_context, context, flow_manager)
+        outer_context_type = flatten_out_types(outer_context_type)
+        break_types.merge(outer_context_break_types)
+
+        outer_context_type_is_safe = False
+
+        if function_type is not MISSING and outer_context_type is not MISSING:
+            if isinstance(function_type, OpenFunctionType):
+                break_types.add("value", ClosedFunctionType(function_type.argument_type, function_type.break_types))
+                if function_type.outer_type.is_copyable_from(outer_context_type):
+                    outer_context_type_is_safe = True
+            else:
+                break_types.add("value", AnyType())
+
+        if not outer_context_type_is_safe:
+            break_types.add("exception", self.INVALID_OUTER_CONTEXT.get_type())
+
+        if not isinstance(function_type, OpenFunctionType):
+            break_types.add("exception", self.INVALID_FUNCTION.get_type())
+
+        return break_types.build()
+
+    def jump(self, context, flow_manager, immediate_context=None):
+        open_function = evaluate(self.function, context, flow_manager, immediate_context)
+        outer_context = evaluate(self.outer_context, context, flow_manager, immediate_context)
+
+        from rdhlang5.executor.function import OpenFunction
+
+        if not isinstance(open_function, OpenFunction):
+            flow_manager.exception(self.INVALID_FUNCTION(), self)
+
+        if not open_function.outer_type.is_copyable_from(get_type_of_value(outer_context)):
+            open_function.outer_type.is_copyable_from(get_type_of_value(outer_context))
+            flow_manager.exception(self.INVALID_OUTER_CONTEXT(), self)
+
+        flow_manager.value(open_function.close(outer_context), self)
 
 class StaticOp(Opcode):
     def __init__(self, data, visitor):
@@ -749,7 +810,7 @@ class InvokeOp(Opcode):
         argument = evaluate(self.argument, context, flow_manager)
         # TODO: check argument type
 
-        function.invoke(argument, context, flow_manager)
+        function.invoke(argument, flow_manager)
 
         raise FatalError()
 
@@ -797,7 +858,7 @@ class MatchOp(Opcode):
             for index, matcher in enumerate(self.matchers):
                 matcher_function, _ = frame.step(index, lambda: evaluate(matcher, context, flow_manager))
                 if matcher_function.argument_type.is_copyable_from(value_type):
-                    matcher_function.invoke(value, context, flow_manager)
+                    matcher_function.invoke(value, flow_manager)
             else:
                 flow_manager.exception(self.NO_MATCH(), self)
 
@@ -864,6 +925,7 @@ OPCODES = {
     "loop": LoopOp,
     "conditional": ConditionalOp,
     "prepare": PrepareOp,
+    "close": CloseOp,
     "static": StaticOp,
     "invoke": InvokeOp,
     "match": MatchOp

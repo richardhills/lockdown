@@ -13,8 +13,8 @@ from rdhlang5.executor.raw_code_factories import function_lit, nop, comma_op, \
     literal_op, dereference_op, unbound_dereference, addition_op, \
     transform_op, int_type, multiplication_op, division_op, subtraction_op, \
     object_type, prepare_op, is_opcode, object_template_op, infer_all, \
-    no_value_type, combine_opcodes, static_op, invoke_op, assignment_op,\
-    unbound_assignment, list_template_op, list_type
+    no_value_type, combine_opcodes, static_op, invoke_op, assignment_op, \
+    unbound_assignment, list_template_op, list_type, close_op, context_op
 from rdhlang5.parser.grammar.langLexer import langLexer
 from rdhlang5.parser.grammar.langParser import langParser
 from rdhlang5.parser.grammar.langVisitor import langVisitor
@@ -142,6 +142,9 @@ class RDHLang5Visitor(langVisitor):
         argument = self.visit(argument)
         return invoke_op(function, argument)
 
+    def visitNoParameterInvocation(self, ctx):
+        return invoke_op(self.visit(ctx.expression()))
+
     def visitImmediateAssignment(self, ctx):
         return unbound_assignment(
             ctx.SYMBOL().getText(),
@@ -222,9 +225,6 @@ class RDHLang5Visitor(langVisitor):
             "value", "return", expression
         )
 
-    def visitIntTypeLiteral(self, ctx):
-        return int_type()
-
     def visitObjectTemplate(self, ctx):
         result = {}
         for pair in ctx.objectPropertyPair():
@@ -253,6 +253,12 @@ class RDHLang5Visitor(langVisitor):
     def visitListType(self, ctx):
         type = self.visit(ctx.expression())
         return list_type([], type)
+
+    def visitToFunctionExpression(self, ctx):
+        return close_op(
+            static_op(prepare_op(literal_op(self.visit(ctx.function())))),
+            context_op()
+        )
 
 class CodeBlockBuilder(object):
     def __init__(
@@ -339,8 +345,6 @@ class CodeBlockBuilder(object):
         if not self.requires_function() and output_mode == "expression":
             return combine_opcodes(code_expressions)
 
-        result = {}
-
         statics = {}
 
         if self.argument_type_expression is not MISSING:
@@ -375,9 +379,9 @@ class CodeBlockBuilder(object):
                 argument_type, break_types, local_type, local_initializer, code
             )
         elif output_mode == "expression":
-            return invoke_op(static_op(prepare_op(literal_op(function_lit(
+            return invoke_op(close_op(static_op(prepare_op(literal_op(function_lit(
                 argument_type, break_types, local_type, local_initializer, combine_opcodes(code_expressions)
-            )))))
+            )))), context_op()))
 
 class ParseError(Exception):
     pass

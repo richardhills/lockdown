@@ -2,7 +2,8 @@
 from __future__ import unicode_literals
 
 from rdhlang5.executor.exceptions import PreparationException
-from rdhlang5.executor.function_type import FunctionType, enrich_break_type
+from rdhlang5.executor.function_type import enrich_break_type, \
+    ClosedFunctionType
 from rdhlang5.type_system.composites import InferredType
 from rdhlang5.type_system.core_types import UnitType, OneOfType, Const, AnyType, \
     IntegerType, BooleanType, NoValueType, StringType
@@ -12,8 +13,8 @@ from rdhlang5.type_system.list_types import RDHListType
 from rdhlang5.type_system.object_types import RDHObjectType, RDHObject
 
 
-def build_function_type(data):
-    return FunctionType(
+def build_closed_function_type(data):
+    return ClosedFunctionType(
         enrich_type(data.argument),
         RDHDict({
             mode: [ enrich_break_type(b) for b in break_types ]
@@ -51,7 +52,7 @@ TYPES = {
     "Any": lambda data: AnyType(),
     "Object": build_object_type,
     "List": build_list_type,
-    "Function": build_function_type,
+    "Function": build_closed_function_type,
     "OneOf": build_one_of_type,
     "Integer": lambda data: IntegerType(),
     "Boolean": lambda data: BooleanType(),

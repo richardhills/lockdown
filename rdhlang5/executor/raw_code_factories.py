@@ -112,6 +112,7 @@ def function_lit(*args):
     static = {
         "argument": argument_type,
         "local": local_type,
+        "outer": inferred_type(),
         "break_types": object_template_op(break_types)
     }
 
@@ -335,6 +336,16 @@ def prepare_op(function_expression):
     })
 
 
+def close_op(function, context):
+    check_is_opcode(function)
+    check_is_opcode(context)
+    return RDHObject({
+        "opcode": "close",
+        "function": function,
+        "outer_context": context
+    })
+
+
 def static_op(expression):
     check_is_opcode(expression)
     return RDHObject({
@@ -440,7 +451,7 @@ def unbound_assignment(name, rvalue):
 
 
 def prepared_function(*args):
-    return static_op(prepare_op(literal_op(function_lit(*args))))
+    return close_op(static_op(prepare_op(literal_op(function_lit(*args)))), context_op())
 
 
 def dereference(*vars):

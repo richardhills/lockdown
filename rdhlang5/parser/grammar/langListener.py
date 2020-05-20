@@ -112,15 +112,6 @@ class langListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by langParser#intTypeLiteral.
-    def enterIntTypeLiteral(self, ctx):
-        pass
-
-    # Exit a parse tree produced by langParser#intTypeLiteral.
-    def exitIntTypeLiteral(self, ctx):
-        pass
-
-
     # Enter a parse tree produced by langParser#immediateDereference.
     def enterImmediateDereference(self, ctx):
         pass
@@ -202,6 +193,15 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#toFunctionExpression.
+    def enterToFunctionExpression(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#toFunctionExpression.
+    def exitToFunctionExpression(self, ctx):
+        pass
+
+
     # Enter a parse tree produced by langParser#invocation.
     def enterInvocation(self, ctx):
         pass
@@ -235,6 +235,15 @@ class langListener(ParseTreeListener):
 
     # Exit a parse tree produced by langParser#immediateAssignment.
     def exitImmediateAssignment(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#noParameterInvocation.
+    def enterNoParameterInvocation(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#noParameterInvocation.
+    def exitNoParameterInvocation(self, ctx):
         pass
 
 

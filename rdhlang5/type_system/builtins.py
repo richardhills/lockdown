@@ -1,5 +1,5 @@
 from rdhlang5.executor.flow_control import BreakTypesFactory
-from rdhlang5.executor.function_type import FunctionType
+from rdhlang5.executor.function_type import ClosedFunctionType
 from rdhlang5.type_system.core_types import NoValueType, IntegerType, Const
 from rdhlang5.type_system.exceptions import FatalError
 from rdhlang5.type_system.managers import get_manager
@@ -56,7 +56,7 @@ def ListInsertFunctionType(wildcard_type):
     break_types = BreakTypesFactory()
     argument_type = RDHListType([ Const(IntegerType()), Const(wildcard_type) ], None, allow_push=False, allow_wildcard_insert=False, allow_delete=False, is_sparse=False)
     break_types.add("value", NoValueType())
-    function_type = FunctionType(argument_type, break_types.build())
+    function_type = ClosedFunctionType(argument_type, break_types.build())
 
     class ListInsertFunction(RDHFunction):
         def __init__(self, target):
@@ -66,7 +66,7 @@ def ListInsertFunctionType(wildcard_type):
         def get_type(self):
             return function_type
 
-        def invoke(self, argument, outer_context, flow_manager):
+        def invoke(self, argument, flow_manager):
             our_type = self.get_type()
 
             argument_manager = get_manager(argument)

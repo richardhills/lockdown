@@ -132,11 +132,23 @@ class TestBasicFunction(TestCase):
         self.assertEquals(result.mode, "value")
         self.assertEquals(result.value, 42)
 
-    def test_many_const_locals(self):
+    def test_some_const_locals(self):
         code = parse("""
             function() {
                 int foo = 1;
-                int bar = foo + 40;
+                int bar = foo + 37;
+                return bar + 4;
+            }
+        """)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 42)
+
+    def test_many_const_locals(self):
+        code = parse("""
+            function() {
+                int foom = 1;
+                int bar = foom + 40;
                 int baz = bar - 3;
                 return baz + 4;
             }
@@ -284,6 +296,68 @@ class TestBasicFunction(TestCase):
         result = bootstrap_function(code)
         self.assertEquals(result.mode, "value")
         self.assertEquals(result.value, 6)
+
+class TestInferredTypes(TestCase):
+    def test_inferred_locals(self):
+        code = parse("""
+            function() {
+                var x = 5;
+                var y = 37;
+                var z = x + y;
+                return z;
+            }
+        """)
+        result = bootstrap_function(code)
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 42)
+
+class TestFunctionDeclaration(TestCase):
+    def test_local_function(self):
+        code = parse("""
+            function() {
+                var x = function() {
+                    return 42;
+                };
+                return x();
+            }
+        """)
+        result = bootstrap_function(code)
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 42)
+
+    def test_access_outer_context(self):
+        code = parse("""
+            function() {
+                int x = 4;
+                var y = function() {
+                    return x * 3;
+                };
+                return y();
+            }
+        """)
+        result = bootstrap_function(code)
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 12)
+
+    def test_mutate_outer_context(self):
+        code = parse("""
+            function() {
+                int x = 4;
+                var doubler = function() {
+                    x = x * 2;
+                };
+                var getter = function() {
+                    return x;
+                };
+                doubler();
+                doubler();
+                doubler();
+                return getter();
+            }
+        """)
+        result = bootstrap_function(code)
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 32)
 
 class TestMisc(TestCase):
     def test_invalid_list_assignment(self):

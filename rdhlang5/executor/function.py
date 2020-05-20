@@ -1,18 +1,15 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-from _collections import defaultdict
-
 from rdhlang5.executor.exceptions import PreparationException
-from rdhlang5.executor.flow_control import FlowManager, BreakTypesFactory
-from rdhlang5.executor.function_type import FunctionType, enrich_break_type
+from rdhlang5.executor.flow_control import BreakTypesFactory
+from rdhlang5.executor.function_type import enrich_break_type, OpenFunctionType, \
+    ClosedFunctionType
 from rdhlang5.executor.opcodes import enrich_opcode, get_context_type, evaluate, \
-    TypeErrorFactory, get_expression_break_types, flatten_out_types
-from rdhlang5.executor.raw_code_factories import dereference_op, assignment_op, \
-    literal_op
+    get_expression_break_types, flatten_out_types
 from rdhlang5.executor.type_factories import enrich_type
 from rdhlang5.type_system.composites import CompositeType
-from rdhlang5.type_system.core_types import Type
+from rdhlang5.type_system.core_types import Type, NoValueType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     DEFAULT_DICT_TYPE
 from rdhlang5.type_system.exceptions import FatalError
@@ -30,31 +27,45 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
     actual_break_types_factory = BreakTypesFactory()
 
     context = RDHObject({
-        "outer": outer_context,
-        "types": RDHObject({
-            "outer": get_context_type(outer_context)
-        })
+        "prepare": outer_context
     }, bind=DEFAULT_OBJECT_TYPE)
 
-    static = evaluate(enrich_opcode(data.static, UnboundDereferenceBinder(context)), context, flow_manager)
+    static = evaluate(
+        enrich_opcode(data.static, UnboundDereferenceBinder(context)),
+        context, flow_manager
+    )
 
     get_manager(static).add_composite_type(DEFAULT_OBJECT_TYPE)
 
     argument_type = enrich_type(static.argument)
+    outer_type = enrich_type(static.outer)
+
+    suggested_argument_type = suggested_outer_type = None
 
     if immediate_context:
         suggested_argument_type = immediate_context.get("suggested_argument_type", None)
-        if not isinstance(suggested_argument_type, Type):
-            raise PreparationException()
-        if suggested_argument_type:
-            argument_type = argument_type.replace_inferred_types(suggested_argument_type)
-            argument_type = argument_type.reify_revconst_types()
+        suggested_outer_type = immediate_context.get("suggested_outer_type", None)
+
+    if suggested_argument_type is None:
+        suggested_argument_type = NoValueType()
+    if suggested_outer_type is None:
+        suggested_outer_type = NoValueType()
+
+    if not isinstance(suggested_argument_type, Type):
+        raise PreparationException()
+    if not isinstance(suggested_outer_type, Type):
+        raise PreparationException()
+
+    argument_type = argument_type.replace_inferred_types(suggested_argument_type)
+    argument_type = argument_type.reify_revconst_types()
+    outer_type = outer_type.replace_inferred_types(suggested_outer_type)
+    outer_type = outer_type.reify_revconst_types()
 
     context = RDHObject({
-        "outer": outer_context,
+        "prepare": outer_context, 
         "static": static,
         "types": RDHObject({
-            "outer": get_context_type(outer_context),
+            "outer": outer_type,
             "argument": argument_type
         })
     }, bind=DEFAULT_OBJECT_TYPE)
@@ -84,10 +95,10 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
     get_manager(declared_break_types).add_composite_type(DEFAULT_DICT_TYPE)
 
     context = RDHObject({
-        "outer": outer_context,
+        "prepare": outer_context,
         "static": static,
         "types": RDHObject({
-            "outer": get_context_type(outer_context),
+            "outer": outer_type,
             "argument": argument_type,
             "local": local_type
         })
@@ -129,46 +140,98 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
                     mode, actual_break_type, declared_break_types, local_other_break_types, code_break_types
                 ))
 
-    return PreparedFunction(data, code, argument_type, local_type, local_initializer, final_declared_break_types.build())
+    return OpenFunction(data, code, outer_context, static, argument_type, outer_type, local_type, local_initializer, final_declared_break_types.build())
 
 
 class UnboundDereferenceBinder(object):
-    def __init__(self, context):
+    def __init__(self, context, search_types=True):
         self.context = context
+        self.search_types = search_types
+        self.context_type = get_context_type(self.context)
 
-    def search_for_reference(self, reference, prepend_context=[]):
-        from rdhlang5.executor.raw_code_factories import dereference
+#     def search_outer_type_for_reference(self, reference, outer_type, prepend_context):
+#         from rdhlang5.executor.raw_code_factories import dereference
+# 
+#         getter = outer_type.micro_op_types.get(("get", reference))
+#         if getter:
+#             return dereference(prepend_context, "outer")
+# 
+#         next_outer = outer_type.micro_op_types.get(("get", "outer"))
+#         if next_outer:
+#             return self.search_outer_type_for_reference(reference, next_outer.type, prepend_context + [ "outer" ])
+
+    def search_context_type_area_for_reference(self, reference, area, context_type, prepend_context):
+        from rdhlang5.executor.raw_code_factories import dereference_op, assignment_op, \
+            literal_op, dereference, context_op
+
+        area_getter = context_type.micro_op_types.get(("get", area), None)
+        if not area_getter:
+            return None
+        area_type = area_getter.type
+        if not isinstance(area_type, CompositeType):
+            return None
+        getter = area_type.micro_op_types.get(("get", reference), None)
+        if getter:
+            return dereference(prepend_context, area)
+
+    def search_context_type_for_reference(self, reference, context_type, prepend_context):
+        from rdhlang5.executor.raw_code_factories import dereference_op, assignment_op, \
+            literal_op, dereference, context_op
+
+        argument_search = self.search_context_type_area_for_reference(reference, "argument", context_type, prepend_context)
+        if argument_search:
+            return argument_search
+        local_search = self.search_context_type_area_for_reference(reference, "local", context_type, prepend_context)
+        if local_search:
+            return local_search
+
+        outer_getter = context_type.micro_op_types.get(("get", "outer"), None)
+        if outer_getter:
+            outer_search = self.search_context_type_for_reference(reference, outer_getter.type, prepend_context + [ "outer" ])
+            if outer_search:
+                return outer_search
+
+    def search_statics_for_reference(self, reference, context, prepend_context):
+        from rdhlang5.executor.raw_code_factories import dereference_op, assignment_op, \
+            literal_op, dereference, context_op
+
+        static = getattr(context, "static", None)
+        if static and hasattr(static, reference):
+            return dereference(prepend_context, "static")
+
+        prepare = getattr(context, "prepare", None)
+        if prepare:
+            prepare_search = self.search_statics_for_reference(reference, prepare, prepend_context + [ "prepare" ])
+            if prepare_search:
+                return prepare_search
+
+    def search_for_reference(self, reference):
+        from rdhlang5.executor.raw_code_factories import dereference_op, assignment_op, \
+            literal_op, dereference, context_op
 
         if not isinstance(reference, basestring):
             raise FatalError()
 
-        if reference in ("local", "argument", "outer", "static"):
-            return dereference(prepend_context)
+        if reference in ("prepare", "local", "argument", "outer", "static"):
+            return context_op()
 
-        types = getattr(self.context, "types", None)
-        if types:
-            argument_type = getattr(self.context.types, "argument", None)
-            if isinstance(argument_type, CompositeType):
-                getter = argument_type.micro_op_types.get(("get", reference), None)
-                if getter:
-                    return dereference(prepend_context, "argument")
-            local_type = getattr(self.context.types, "local", None)
-            if isinstance(local_type, CompositeType):
-                getter = local_type.micro_op_types.get(("get", reference), None)
-                if getter:
-                    return dereference(prepend_context, "local")
-        static = getattr(self.context, "static", None)
-        if static and hasattr(static, reference):
-            return dereference(prepend_context, "static"), reference
-        outer_context = getattr(self.context, "outer", None)
-        if outer_context:
-            return UnboundDereferenceBinder(outer_context).search_for_reference(reference, prepend_context + [ "outer" ])
+        types_search = self.search_context_type_for_reference(reference, self.context_type, [])
+        if types_search:
+            return types_search
+        statics_search = self.search_statics_for_reference(reference, self.context, [])
+        if statics_search:
+            return statics_search
 
         return None
 
     def __call__(self, expression):
+        from rdhlang5.executor.raw_code_factories import dereference_op, assignment_op, \
+            literal_op, dereference, context_op
+
         if getattr(expression, "opcode", None) == "unbound_dereference":
             reference = expression.reference
+            if reference == "foom":
+                pass
             bound_countext_op = self.search_for_reference(reference)
 
             if bound_countext_op:
@@ -176,7 +239,7 @@ class UnboundDereferenceBinder(object):
                 get_manager(new_dereference).add_composite_type(DEFAULT_OBJECT_TYPE)
                 return new_dereference
             else:
-                raise FatalError() # TODO, dynamic dereference
+                raise FatalError(reference) # TODO, dynamic dereference
 
         if getattr(expression, "opcode", None) == "unbound_assignment":
             reference = expression.reference
@@ -193,40 +256,77 @@ class UnboundDereferenceBinder(object):
 
 class RDHFunction(object):
     def get_type(self):
+        raise NotImplementedError(self)
+
+    def invoke(self, argument, flow_manager):
         raise NotImplementedError()
 
-    def invoke(self, argument, outer_context, flow_manager):
-        raise NotImplementedError()
-
-class PreparedFunction(RDHFunction):
-    DID_NOT_TERMINATE = TypeErrorFactory("PreparedFunction: did_not_terminate")
-
-    def __init__(self, data, code, argument_type, local_type, local_initializer, break_types):
+class OpenFunction(object):
+    def __init__(self, data, code, prepare_context, static, argument_type, outer_type, local_type, local_initializer, break_types):
         self.data = data
         self.code = code
+        self.prepare_context = prepare_context
+        self.static = static
         self.argument_type = argument_type
+        self.outer_type = outer_type
         self.local_type = local_type
         self.local_initializer = local_initializer
         self.break_types = break_types
 
     def get_type(self):
-        return FunctionType(self.argument_type, self.break_types)
+        return OpenFunctionType(self.argument_type, self.outer_type, self.break_types)
 
-    def invoke(self, argument, outer_context, flow_manager):
+    def close(self, outer_context):
+        if not self.outer_type.is_copyable_from(get_type_of_value(outer_context)):
+            raise FatalError()
+
+        return ClosedFunction(
+            self.data,
+            self.code,
+            self.prepare_context,
+            self.static,
+            self.argument_type,
+            self.outer_type,
+            self.local_type,
+            outer_context,
+            self.local_initializer,
+            self.break_types
+        )
+
+class ClosedFunction(RDHFunction):
+    def __init__(self, data, code, prepare_context, static, argument_type, outer_type, local_type, outer_context, local_initializer, break_types):
+        self.data = data
+        self.code = code
+        self.prepare_context = prepare_context
+        self.static = static
+        self.argument_type = argument_type
+        self.outer_type = outer_type
+        self.local_type = local_type
+        self.outer_context = outer_context
+        self.local_initializer = local_initializer
+        self.break_types = break_types
+
+    def get_type(self):
+        return ClosedFunctionType(
+            self.argument_type, self.break_types
+        )
+
+    def invoke(self, argument, flow_manager):
         if not self.argument_type.is_copyable_from(get_type_of_value(argument)):
-            self.argument_type.is_copyable_from(get_type_of_value(argument))
             raise FatalError()
 
         with flow_manager.get_next_frame(self) as frame:
             new_context = RDHObject({
-                "outer": outer_context,
+                "prepare": self.prepare_context,
+                "outer": self.outer_context,
                 "argument": argument,
+                "static": self.static,
                 "types": RDHObject({
-                    "outer": get_context_type(outer_context),
+                    "outer": self.outer_type,
                     "argument": self.argument_type
                 })
             }, bind=RDHObjectType({
-                "outer": get_context_type(outer_context),
+                "outer": self.outer_type,
                 "argument": self.argument_type,
                 "types": DEFAULT_OBJECT_TYPE
             }))
@@ -237,17 +337,21 @@ class PreparedFunction(RDHFunction):
                 raise FatalError()
 
             new_context = RDHObject({
-                "outer": outer_context,
+                "prepare": self.prepare_context,
+                "outer": self.outer_context,
                 "argument": argument,
+                "static": self.static,
                 "local": local,
                 "types": RDHObject({
-                    "outer": get_context_type(outer_context),
+                    "outer": self.outer_type,
                     "argument": self.argument_type,
                     "local": self.local_type
                 })
             }, bind=RDHObjectType({
-                "outer": get_context_type(outer_context),
+                "prepare": DEFAULT_OBJECT_TYPE,
+                "outer": self.outer_type,
                 "argument": self.argument_type,
+                "static": DEFAULT_OBJECT_TYPE,
                 "local": self.local_type,
                 "types": DEFAULT_OBJECT_TYPE
             }))

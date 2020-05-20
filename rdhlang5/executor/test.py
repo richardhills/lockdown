@@ -14,7 +14,7 @@ from rdhlang5.executor.raw_code_factories import function_lit, no_value_type, \
     equality_op, nop, inferred_type, infer_all, invoke_op, static_op, prepare_op, \
     unbound_dereference, match_op, dereference, prepared_function, one_of_type, \
     string_type, bool_type, try_catch_op, throw_op, const_string_type, \
-    function_type
+    function_type, close_op
 from rdhlang5.type_system.core_types import IntegerType, AnyType, StringType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     rich_composite_type
@@ -154,15 +154,15 @@ class TestComma(TestCase):
                 ))
             ),
             context, create_no_escape_flow_manager()
-        )
+        ).close(None)
 
-        first_yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: func.invoke(NO_VALUE, context, new_fm))
+        first_yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: func.invoke(NO_VALUE, new_fm))
         self.assertEquals(first_yielder.result, "first")
 
-        second_yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: first_yielder.restart_continuation.invoke(4, context, new_fm))
+        second_yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: first_yielder.restart_continuation.invoke(4, new_fm))
         self.assertEquals(second_yielder.result, "second")
 
-        returner = flow_manager.capture("return", { "out": AnyType() }, lambda new_fm: second_yielder.restart_continuation.invoke(42, context, new_fm))
+        returner = flow_manager.capture("return", { "out": AnyType() }, lambda new_fm: second_yielder.restart_continuation.invoke(42, new_fm))
 
         self.assertEquals(returner.result, 42)
 
@@ -339,13 +339,13 @@ class TestLocals(TestCase):
                 return_op(dereference_op(context_op(), literal_op("local")))
             ),
             context, create_no_escape_flow_manager()
-        )
+        ).close(None)
 
-        yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: func.invoke(NO_VALUE, context, new_fm))
+        yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: func.invoke(NO_VALUE, new_fm))
 
         self.assertEquals(yielder.result, "hello")
 
-        returner = flow_manager.capture("return", { "out": AnyType() }, lambda new_fm: yielder.restart_continuation.invoke(32, context, new_fm))
+        returner = flow_manager.capture("return", { "out": AnyType() }, lambda new_fm: yielder.restart_continuation.invoke(32, new_fm))
 
         self.assertEquals(returner.result, 32)
 
@@ -360,14 +360,14 @@ class TestLocals(TestCase):
                 return_op(addition_op(dereference_op(context_op(), literal_op("local")), yield_op(literal_op("second"), int_type())))
             ),
             context, create_no_escape_flow_manager()
-        )
+        ).close(None)
 
-        first_yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: func.invoke(NO_VALUE, context, new_fm))
+        first_yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: func.invoke(NO_VALUE, new_fm))
         self.assertEquals(first_yielder.result, "first")
-        second_yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: first_yielder.restart_continuation.invoke(40, context, new_fm))
+        second_yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: first_yielder.restart_continuation.invoke(40, new_fm))
         self.assertEquals(second_yielder.result, "second")
 
-        returner = flow_manager.capture("return", { "out": AnyType() }, lambda new_fm: second_yielder.restart_continuation.invoke(2, context, new_fm))
+        returner = flow_manager.capture("return", { "out": AnyType() }, lambda new_fm: second_yielder.restart_continuation.invoke(2, new_fm))
 
         self.assertEquals(returner.result, 42)
 
@@ -526,9 +526,9 @@ class TestFunctionPreparation(TestCase):
         result = bootstrap_function(
             function_lit(
                 no_value_type(), build_break_types(int_type()),
-                return_op(invoke_op(static_op(prepare_op(literal_op(function_lit(
+                return_op(invoke_op(close_op(static_op(prepare_op(literal_op(function_lit(
                     no_value_type(), build_break_types(int_type()), return_op(literal_op(42))
-                ))))))
+                )))), context_op())))
             )
         )
 
@@ -541,9 +541,9 @@ class TestFunctionInvocation(TestCase):
             function_lit(
                 no_value_type(), build_break_types(int_type()),
                 function_type(no_value_type(), build_break_types(int_type())),
-                static_op(prepare_op(literal_op(function_lit(
+                close_op(static_op(prepare_op(literal_op(function_lit(
                     no_value_type(), build_break_types(int_type()), return_op(literal_op(42))
-                )))),
+                )))), context_op()),
                 return_op(invoke_op(dereference_op(context_op(), literal_op("local"))))
             ), check_safe_exit=True
         )
@@ -556,9 +556,9 @@ class TestFunctionInvocation(TestCase):
             function_lit(
                 no_value_type(), infer_all(),
                 function_type(no_value_type(), build_break_types(int_type())),
-                static_op(prepare_op(literal_op(function_lit(
+                close_op(static_op(prepare_op(literal_op(function_lit(
                     no_value_type(), infer_all(), return_op(literal_op(42))
-                )))),
+                )))), context_op()),
                 return_op(invoke_op(dereference_op(context_op(), literal_op("local"))))
             ), check_safe_exit=True
         )
@@ -571,9 +571,9 @@ class TestFunctionInvocation(TestCase):
             function_lit(
                 no_value_type(), infer_all(),
                 inferred_type(),
-                static_op(prepare_op(literal_op(function_lit(
+                close_op(static_op(prepare_op(literal_op(function_lit(
                     no_value_type(), infer_all(), return_op(literal_op(42))
-                )))),
+                )))), context_op()),
                 return_op(invoke_op(dereference_op(context_op(), literal_op("local"))))
             ), check_safe_exit=True
         )
@@ -899,13 +899,13 @@ class TestContinuations(TestCase):
                 return_op(addition_op(yield_op(literal_op("hello"), int_type()), literal_op(40)))
             ),
             context, create_no_escape_flow_manager()
-        )
+        ).close(None)
 
-        yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: func.invoke(NO_VALUE, context, new_fm))
+        yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: func.invoke(NO_VALUE, new_fm))
 
         self.assertEquals(yielder.result, "hello")
 
-        returner = flow_manager.capture("return", { "out": AnyType() }, lambda new_fm: yielder.restart_continuation.invoke(2, context, new_fm))
+        returner = flow_manager.capture("return", { "out": AnyType() }, lambda new_fm: yielder.restart_continuation.invoke(2, new_fm))
 
         self.assertEquals(returner.result, 42)
 
@@ -919,15 +919,15 @@ class TestContinuations(TestCase):
                 return_op(addition_op(yield_op(literal_op("first"), int_type()), yield_op(literal_op("second"), int_type())))
             ),
             context, create_no_escape_flow_manager()
-        )
+        ).close(None)
 
-        first_yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: func.invoke(NO_VALUE, context, new_fm))
+        first_yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: func.invoke(NO_VALUE, new_fm))
         self.assertEquals(first_yielder.result, "first")
 
-        second_yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: first_yielder.restart_continuation.invoke(39, context, new_fm))
+        second_yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: first_yielder.restart_continuation.invoke(39, new_fm))
         self.assertEquals(second_yielder.result, "second")
 
-        returner = flow_manager.capture("return", { "out": AnyType() }, lambda new_fm: second_yielder.restart_continuation.invoke(3, context, new_fm))
+        returner = flow_manager.capture("return", { "out": AnyType() }, lambda new_fm: second_yielder.restart_continuation.invoke(3, new_fm))
 
         self.assertEquals(returner.result, 42)
 
@@ -941,16 +941,16 @@ class TestContinuations(TestCase):
                 return_op(addition_op(yield_op(literal_op("first"), int_type()), yield_op(literal_op("second"), int_type())))
             ),
             context, create_no_escape_flow_manager()
-        )
+        ).close(None)
 
         with flow_manager.capture("return", { "out": AnyType() }) as returner:
-            first_yielder = returner.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_bm: func.invoke(NO_VALUE, context, new_bm))
+            first_yielder = returner.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_bm: func.invoke(NO_VALUE, new_bm))
             self.assertEquals(first_yielder.result, "first")
 
-            second_yielder = returner.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_bm: first_yielder.restart_continuation.invoke(39, context, new_bm))
+            second_yielder = returner.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_bm: first_yielder.restart_continuation.invoke(39, new_bm))
             self.assertEquals(second_yielder.result, "second")
 
-            second_yielder.restart_continuation.invoke(3, context, returner)
+            second_yielder.restart_continuation.invoke(3, returner)
 
         self.assertEquals(returner.result, 42)
 
@@ -964,19 +964,19 @@ class TestContinuations(TestCase):
                 return_op(addition_op(yield_op(literal_op(30), int_type()), yield_op(literal_op(10), int_type())))
             ),
             context, create_no_escape_flow_manager()
-        )
+        ).close(None)
 
         first_yielder = flow_manager.capture(
             "yield", { "out": AnyType(), "in": IntegerType() },
-            lambda new_fm: func.invoke(NO_VALUE, context, new_fm)
+            lambda new_fm: func.invoke(NO_VALUE, new_fm)
         )
         second_yielder = flow_manager.capture(
             "yield", { "out": AnyType(), "in": IntegerType() },
-            lambda new_fm: first_yielder.restart_continuation.invoke(first_yielder.result + 1, context, new_fm)
+            lambda new_fm: first_yielder.restart_continuation.invoke(first_yielder.result + 1, new_fm)
         )
         returner = flow_manager.capture(
             "return", { "out": AnyType() },
-            lambda new_fm: second_yielder.restart_continuation.invoke(second_yielder.result + 1, context, new_fm)
+            lambda new_fm: second_yielder.restart_continuation.invoke(second_yielder.result + 1, new_fm)
         )
 
         self.assertEquals(returner.result, 42)
