@@ -1,4 +1,5 @@
 from collections import OrderedDict
+import json
 
 from rdhlang5.type_system.composites import InferredType, bind_type_to_value, \
     unbind_type_to_value, DefaultFactoryType, CompositeType, Composite
@@ -782,4 +783,3 @@ class RDHObject(Composite, object):
 
     def __str__(self):
         return str(self.__dict__)
-

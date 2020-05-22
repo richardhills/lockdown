@@ -71,12 +71,21 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False)
 
         function_break_types = open_function.get_type().break_types
 
+        error_msgs = []
+
         for mode, break_types in function_break_types.items():
             if mode not in ("exit", "return", "value") and check_safe_exit:
-                raise BootstrapException("break mode {}: {} not safe".format(mode, break_types))
+                error_msgs.append("""break mode {} is not safe
+
+{}
+""".format(mode, break_types))
+                continue
             for break_type in break_types:
                 break_manager = stack.enter_context(break_manager.capture(mode, break_type, top_level=True))
                 break_managers[mode].append(break_manager)
+
+        if error_msgs:
+            raise BootstrapException("\n\n".join(error_msgs))
 
         closed_function = open_function.close(context)
         closed_function.invoke(argument, break_manager)

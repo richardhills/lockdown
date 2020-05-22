@@ -8,6 +8,7 @@ from rdhlang5.parser.parser import parse
 from rdhlang5.type_system.object_types import RDHObject
 from rdhlang5.executor.bootstrap import bootstrap_function
 from rdhlang5.executor.exceptions import PreparationException
+import jsonpickle
 
 
 class TestJSONParsing(TestCase):
@@ -355,9 +356,47 @@ class TestFunctionDeclaration(TestCase):
                 return getter();
             }
         """)
-        result = bootstrap_function(code)
+        result = bootstrap_function(code, check_safe_exit=True)
         self.assertEquals(result.mode, "value")
         self.assertEquals(result.value, 32)
+
+    def test_mutate_outer_context_loop(self):
+        code = parse("""
+            function() {
+                int x = 1;
+                var doubler = function() {
+                    x = x * 2;
+                };
+                int i = 0;
+                while(i < 3) {
+                    int j = 0;
+                    while(j < 3) {
+                        doubler();
+                        j = j + 1;
+                    };
+                    i = i + 1;
+                };
+                return x;
+            }
+        """)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 2 ** (3 * 3))
+
+class TestLoops(TestCase):
+    def test_counter(self):
+        code = parse("""
+            function() {
+                int foo = 1;
+                while(foo < 10) {
+                    foo = foo + 1;
+                };
+                return foo;
+            }
+        """)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 10)
 
 class TestMisc(TestCase):
     def test_invalid_list_assignment(self):
@@ -370,6 +409,95 @@ class TestMisc(TestCase):
         """)
         with self.assertRaises(PreparationException):
             bootstrap_function(code)
+
+class TestEuler(TestCase):
+    """
+    https://projecteuler.net/
+    https://github.com/luckytoilet/projecteuler-solutions/blob/master/Solutions.md
+    """
+
+    def test_1(self):
+        return
+        code = parse("""
+            function() {
+                int i = 1, result = 0;
+                while(i < 1000) {
+                    if(i % 3 == 0 || i % 5 == 0) {
+                        result = result + i;
+                    };
+                    i = i + 1;
+                };
+                return result;
+            }
+        """)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.value, 233168)
+
+    def test_2(self):
+        return
+        code = parse("""
+            function() {
+                int i = 1, j = 2, result = 0;
+                while(j < 4000000) {
+                    if(j % 2 == 0) {
+                        result = result + j;
+                    };
+                    var k = j;
+                    j = i + j;
+                    i = k;
+                };
+                return result;
+            }
+        """)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.value, 4613732)
+
+    def test_3(self):
+        return
+        code = parse("""
+            function() {
+                int test = 2, result = 600851475143;
+                while(result != 1) {
+                    if(result % test == 0) {
+                        result = result / test;
+                    } else {
+                        test = test + 1;
+                    };
+                };
+                return test;
+            }
+        """)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.value, 6857)
+
+    def test_4(self):
+        code = parse("""
+            function() {
+                int bestResult = 0;
+                var getDigit = function(Tuple<int, int>) {
+                    return (argument[0] / argument[1]) % 10;
+                };
+                int i = 100;
+                while(i < 1000) {
+                    int j = 100;
+                    while(j < 1000) {
+                        var testResult = i * j;
+                        if(testResult > 100000
+                                && testResult > bestResult
+                                && getDigit([testResult, 1]) == getDigit([testResult, 100000])
+                                && getDigit([testResult, 10]) == getDigit([testResult, 10000])
+                                && getDigit([testResult, 100]) == getDigit([testResult, 1000])) {
+                            bestResult = testResult;
+                        };
+                        j = j + 1;
+                    };
+                    i = i + 1;
+                };
+                return bestResult;
+            }
+        """)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.value, 6857)
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

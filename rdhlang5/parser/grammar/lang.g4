@@ -29,7 +29,7 @@ value
    | 'true'
    | 'false'
    | 'null'
-   | function
+   | function // Where our language extends json...
    ;
 
 
@@ -98,7 +98,7 @@ expression
    | objectTemplate			# toObjectTemplate
    | listTemplate			# toListTemplate
    | expression '(' expression ')' # invocation
-   | expression '(' ')' # noParameterInvocation
+   | expression '(' ')'     # noParameterInvocation
    | '(' expression ')'     # parenthesis
    | SYMBOL					# immediateDereference
    | expression '.' SYMBOL  # staticDereference
@@ -107,12 +107,24 @@ expression
    | expression '/' expression # division
    | expression '+' expression # addition
    | expression '-' expression # subtraction
+   | expression '%' expression # mod
+   | expression '==' expression # eq
+   | expression '!=' expression # neq
+   | expression '<' expression # lt
+   | expression '<=' expression # lte
+   | expression '>' expression # gt
+   | expression '>=' expression # gte
+   | expression '||' expression # boolOr
+   | expression '&&' expression # boolAnd
    | SYMBOL '=' expression  # immediateAssignment
    | expression '.' SYMBOL '=' expression  # staticAssignment
    | expression '[' expression ']' '=' expression # dynamicAssignment
    | 'return' expression    # returnStatement
+   | ifStatement			# toIfStatement
+   | whileLoop				# toWhileLoop
    | objectType				# toObjectType
    | listType				# toListType
+   | tupleType				# toTupleType
    | function				# toFunctionExpression
    ;
 
@@ -136,6 +148,18 @@ listTemplate
    : '[' expression? (',' expression)* ']'
    ;
 
+tupleType
+   : 'Tuple' '<' expression (',' expression)* '>'
+   ;
+
 listType
    : 'List' '<' expression '>'
+   ;
+
+ifStatement
+   : 'if' '(' expression ')' '{' codeBlock '}' ( 'else' '{' codeBlock '}' )?
+   ;
+
+whileLoop
+   : 'while' '(' expression ')' '{' codeBlock '}'
    ;

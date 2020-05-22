@@ -14,7 +14,8 @@ from rdhlang5.executor.raw_code_factories import function_lit, nop, comma_op, \
     transform_op, int_type, multiplication_op, division_op, subtraction_op, \
     object_type, prepare_op, is_opcode, object_template_op, infer_all, \
     no_value_type, combine_opcodes, static_op, invoke_op, assignment_op, \
-    unbound_assignment, list_template_op, list_type, close_op, context_op
+    unbound_assignment, list_template_op, list_type, close_op, context_op, \
+    loop_op, condition_op, binary_integer_op
 from rdhlang5.parser.grammar.langLexer import langLexer
 from rdhlang5.parser.grammar.langParser import langParser
 from rdhlang5.parser.grammar.langVisitor import langVisitor
@@ -210,7 +211,7 @@ class RDHLang5Visitor(langVisitor):
         return addition_op(
             lvalue, rvalue
         )
-        
+
     def visitSubtraction(self, ctx):
         lvalue, rvalue = ctx.expression()
         lvalue = self.visit(lvalue)
@@ -219,10 +220,91 @@ class RDHLang5Visitor(langVisitor):
             lvalue, rvalue
         )
 
+    def visitMod(self, ctx):
+        lvalue, rvalue = ctx.expression()
+        lvalue = self.visit(lvalue)
+        rvalue = self.visit(rvalue)
+        return binary_integer_op("mod", lvalue, rvalue)
+
+    def visitEq(self, ctx):
+        lvalue, rvalue = ctx.expression()
+        lvalue = self.visit(lvalue)
+        rvalue = self.visit(rvalue)
+        return binary_integer_op("eq", lvalue, rvalue)
+
+    def visitNeq(self, ctx):
+        lvalue, rvalue = ctx.expression()
+        lvalue = self.visit(lvalue)
+        rvalue = self.visit(rvalue)
+        return binary_integer_op("neq", lvalue, rvalue)
+
+    def visitLt(self, ctx):
+        lvalue, rvalue = ctx.expression()
+        lvalue = self.visit(lvalue)
+        rvalue = self.visit(rvalue)
+        return binary_integer_op("lt", lvalue, rvalue)
+
+    def visitLte(self, ctx):
+        lvalue, rvalue = ctx.expression()
+        lvalue = self.visit(lvalue)
+        rvalue = self.visit(rvalue)
+        return binary_integer_op("lte", lvalue, rvalue)
+
+    def visitGt(self, ctx):
+        lvalue, rvalue = ctx.expression()
+        lvalue = self.visit(lvalue)
+        rvalue = self.visit(rvalue)
+        return binary_integer_op("gt", lvalue, rvalue)
+
+    def visitGte(self, ctx):
+        lvalue, rvalue = ctx.expression()
+        lvalue = self.visit(lvalue)
+        rvalue = self.visit(rvalue)
+        return binary_integer_op("gte", lvalue, rvalue)
+
+    def visitBoolOr(self, ctx):
+        lvalue, rvalue = ctx.expression()
+        lvalue = self.visit(lvalue)
+        rvalue = self.visit(rvalue)
+        return binary_integer_op("or", lvalue, rvalue)
+
+    def visitBoolAnd(self, ctx):
+        lvalue, rvalue = ctx.expression()
+        lvalue = self.visit(lvalue)
+        rvalue = self.visit(rvalue)
+        return binary_integer_op("and", lvalue, rvalue)
+
     def visitReturnStatement(self, ctx):
         expression = self.visit(ctx.expression())
         return transform_op(
             "value", "return", expression
+        )
+
+    def visitIfStatement(self, ctx):
+        condition = self.visit(ctx.expression())
+        outcomes = ctx.codeBlock()
+
+        if len(outcomes) == 1:
+            when_true, = outcomes
+            when_false = nop()
+        else:
+            when_true, when_false = outcomes
+            when_false = self.visit(when_false).create("expression")
+
+        when_true = self.visit(when_true).create("expression")
+
+        return condition_op(condition, when_true, when_false)
+
+    def visitWhileLoop(self, ctx):
+        continue_expression = self.visit(ctx.expression())
+        loop_code = self.visit(ctx.codeBlock())
+
+        return transform_op(
+            "break", "value",
+            loop_op(comma_op(
+                condition_op(continue_expression, nop(), transform_op("break")),
+                loop_code.create("expression")
+            ))
         )
 
     def visitObjectTemplate(self, ctx):
@@ -249,6 +331,10 @@ class RDHLang5Visitor(langVisitor):
         return list_template_op([
             self.visit(e) for e in ctx.expression()
         ])
+
+    def visitTupleType(self, ctx):
+        types = [self.visit(e) for e in ctx.expression()]
+        return list_type(types, no_value_type())
 
     def visitListType(self, ctx):
         type = self.visit(ctx.expression())

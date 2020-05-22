@@ -391,6 +391,22 @@ class DereferenceOp(Opcode):
             except InvalidDereferenceKey:
                 raise flow_manager.exception(self.INVALID_DEREFERENCE(), self)
 
+class DynamicDereferenceOp(Opcode):
+    INVALID_DEREFERENCE = TypeErrorFactory("DereferenceOpcode: invalid_dereference")
+
+    def __init__(self, data, visitor):
+        super(DynamicDereferenceOp, self).__init__(data, visitor)
+        self.reference = enrich_opcode(data.reference, visitor)
+
+    def get_break_types(self, context, flow_manager, immediate_context=None):
+        break_types = BreakTypesFactory()
+
+        break_types.add("exception", self.INVALID_DEREFERENCE.get_type())
+
+        return break_types.build()
+
+    def jump(self, context, flow_manager, immediate_context=None):
+        raise FatalError()
 
 class AssignmentOp(Opcode):
     INVALID_LVALUE = TypeErrorFactory("AssignmentOp: invalid_lvalue")
@@ -453,6 +469,9 @@ class AssignmentOp(Opcode):
             reference, _ = frame.step("reference", lambda: evaluate(self.reference, context, flow_manager))
             rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, flow_manager))
 
+            if reference in ("result", "test"):
+                print "{} = {}".format(reference, rvalue)
+
             manager = get_manager(of)
 
             try:
@@ -479,12 +498,12 @@ class AssignmentOp(Opcode):
                 raise flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
 
 
-def BinaryIntegerOp(name, func, result_type):
-    class _BinaryIntegerOp(Opcode):
-        MISSING_INTEGERS = TypeErrorFactory("{}: missing_integers".format(name))
+def BinaryOp(name, func, argument_type, result_type):
+    class _BinaryOp(Opcode):
+        MISSING_OPERANDS = TypeErrorFactory("{}: missing_integers".format(name))
 
         def __init__(self, data, visitor):
-            super(_BinaryIntegerOp, self).__init__(data, visitor)
+            super(_BinaryOp, self).__init__(data, visitor)
             self.lvalue = enrich_opcode(self.data.lvalue, visitor)
             self.rvalue = enrich_opcode(self.data.rvalue, visitor)
 
@@ -501,28 +520,26 @@ def BinaryIntegerOp(name, func, result_type):
                 rvalue_type = flatten_out_types(rvalue_type)
             break_types.merge(rvalue_break_types)
 
-            int_type = IntegerType()
-
             if lvalue_type is not MISSING and rvalue_type is not MISSING:
                 break_types.add("value", result_type)
-            if not int_type.is_copyable_from(lvalue_type) or not int_type.is_copyable_from(rvalue_type):
-                break_types.add("exception", self.MISSING_INTEGERS.get_type())
+            if not argument_type.is_copyable_from(lvalue_type) or not argument_type.is_copyable_from(rvalue_type):
+                break_types.add("exception", self.MISSING_OPERANDS.get_type())
 
             return break_types.build()
 
         def jump(self, context, break_manager, immediate_context=None):
             with break_manager.get_next_frame(self) as frame:
                 lvalue, _ = frame.step("lvalue", lambda: evaluate(self.lvalue, context, break_manager))
-                if not isinstance(lvalue, int):
-                    break_manager.exception(self.MISSING_INTEGERS(), self)
+                if not argument_type.is_copyable_from(get_type_of_value(lvalue)):
+                    break_manager.exception(self.MISSING_OPERANDS(), self)
     
                 rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, break_manager))
-                if not isinstance(rvalue, int):
-                    break_manager.exception(self.MISSING_INTEGERS(), self)
+                if not argument_type.is_copyable_from(get_type_of_value(rvalue)):
+                    break_manager.exception(self.MISSING_OPERANDS(), self)
 
             return break_manager.value(func(lvalue, rvalue), self)
 
-    return _BinaryIntegerOp
+    return _BinaryOp
 
 
 class TransformOp(Opcode):
@@ -580,7 +597,7 @@ class TransformOp(Opcode):
             if self.expression:
                 with break_manager.capture(self.input, { "out": AnyType() }) as new_break_manager:
                     self.expression.jump(context, new_break_manager)
-    
+
                 raise break_manager.unwind(self.output, new_break_manager.result, self, can_restart)
             else:
                 raise break_manager.unwind(self.output, NO_VALUE, self, can_restart)
@@ -779,6 +796,9 @@ class StaticOp(Opcode):
         flow_manager.value(self.value, self)
 
 class InvokeOp(Opcode):
+    INVALID_FUNCTION_TYPE = TypeErrorFactory("Invoke: invalid_function_type")
+    INVALID_ARGUMENT_TYPE = TypeErrorFactory("Invoke: invalid_argument_type")
+
     def __init__(self, data, visitor):
         self.function = enrich_opcode(data.function, visitor)
         self.argument = enrich_opcode(data.argument, visitor)
@@ -793,22 +813,35 @@ class InvokeOp(Opcode):
         function_type, other_function_break_types = get_expression_break_types(
             self.function, context, flow_manager, immediate_context={ "suggested_argument_type": argument_type }
         )
-
-        if function_type is MISSING:
-            # Be more liberal
-            raise FatalError()
-
-        function_type = flatten_out_types(function_type)
-
-        break_types.merge(function_type.break_types)
         break_types.merge(other_function_break_types)
+
+        if function_type is not MISSING:
+            function_type = flatten_out_types(function_type)
+
+            argument_type_is_safe = False
+
+            if isinstance(function_type, ClosedFunctionType):
+                break_types.merge(function_type.break_types)
+                if function_type.argument_type.is_copyable_from(argument_type):
+                    argument_type_is_safe = True
+            else:
+                break_types.add("exception", self.INVALID_FUNCTION_TYPE.get_type())
+
+            if not argument_type_is_safe:
+                break_types.add("exception", self.INVALID_ARGUMENT_TYPE.get_type())
 
         return break_types.build()
 
     def jump(self, context, flow_manager, immediate_context=None):
+        from rdhlang5.executor.function import RDHFunction
         function = evaluate(self.function, context, flow_manager)
         argument = evaluate(self.argument, context, flow_manager)
-        # TODO: check argument type
+
+        if not isinstance(function, RDHFunction):
+            flow_manager.exception(self.INVALID_FUNCTION_TYPE(), self)
+
+        if not function.get_type().argument_type.is_copyable_from(get_type_of_value(argument)):
+            flow_manager.exception(self.INVALID_ARGUMENT_TYPE(), self) 
 
         function.invoke(argument, flow_manager)
 
@@ -913,12 +946,21 @@ OPCODES = {
     "object_template": ObjectTemplateOp,
     "dict_template": DictTemplateOp,
     "list_template": ListTemplateOp,
-    "multiplication": BinaryIntegerOp("Multiplication", lambda lvalue, rvalue: lvalue * rvalue, IntegerType()),
-    "division": BinaryIntegerOp("Division", lambda lvalue, rvalue: lvalue / rvalue, IntegerType()),
-    "addition": BinaryIntegerOp("Addition", lambda lvalue, rvalue: lvalue + rvalue, IntegerType()),
-    "subtraction": BinaryIntegerOp("Subtraction", lambda lvalue, rvalue: lvalue - rvalue, IntegerType()),
-    "equality": BinaryIntegerOp("Equality", lambda lvalue, rvalue: lvalue == rvalue, BooleanType()),
+    "multiplication": BinaryOp("Multiplication", lambda lvalue, rvalue: lvalue * rvalue, IntegerType(), IntegerType()),
+    "division": BinaryOp("Division", lambda lvalue, rvalue: lvalue / rvalue, IntegerType(), IntegerType()),
+    "addition": BinaryOp("Addition", lambda lvalue, rvalue: lvalue + rvalue, IntegerType(), IntegerType()),
+    "subtraction": BinaryOp("Subtraction", lambda lvalue, rvalue: lvalue - rvalue, IntegerType(), IntegerType()),
+    "mod": BinaryOp("Modulus", lambda lvalue, rvalue: lvalue % rvalue, IntegerType(), IntegerType()),
+    "lt": BinaryOp("LessThan", lambda lvalue, rvalue: lvalue < rvalue, IntegerType(), BooleanType()),
+    "lte": BinaryOp("LessThanOrEqual", lambda lvalue, rvalue: lvalue <= rvalue, IntegerType(), BooleanType()),
+    "gt": BinaryOp("GreaterThan", lambda lvalue, rvalue: lvalue > rvalue, IntegerType(), BooleanType()),
+    "gte": BinaryOp("GreaterThanOrEqual", lambda lvalue, rvalue: lvalue >= rvalue, IntegerType(), BooleanType()),
+    "eq": BinaryOp("Equality", lambda lvalue, rvalue: lvalue == rvalue, IntegerType(), BooleanType()),
+    "neq": BinaryOp("Inequality", lambda lvalue, rvalue: lvalue != rvalue, IntegerType(), BooleanType()),
+    "or": BinaryOp("Or", lambda lvalue, rvalue: lvalue or rvalue, BooleanType(), BooleanType()),
+    "and": BinaryOp("And", lambda lvalue, rvalue: lvalue and rvalue, BooleanType(), BooleanType()),
     "dereference": DereferenceOp,
+    "dynamic_dereference": DynamicDereferenceOp,
     "assignment": AssignmentOp,
     "context": ContextOp,
     "comma": CommaOp,

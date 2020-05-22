@@ -103,6 +103,177 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#mod.
+    def enterMod(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#mod.
+    def exitMod(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#numberExpression.
+    def enterNumberExpression(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#numberExpression.
+    def exitNumberExpression(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#lt.
+    def enterLt(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#lt.
+    def exitLt(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#subtraction.
+    def enterSubtraction(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#subtraction.
+    def exitSubtraction(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#returnStatement.
+    def enterReturnStatement(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#returnStatement.
+    def exitReturnStatement(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#division.
+    def enterDivision(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#division.
+    def exitDivision(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#toListType.
+    def enterToListType(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#toListType.
+    def exitToListType(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#staticDereference.
+    def enterStaticDereference(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#staticDereference.
+    def exitStaticDereference(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#stringExpression.
+    def enterStringExpression(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#stringExpression.
+    def exitStringExpression(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#boolAnd.
+    def enterBoolAnd(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#boolAnd.
+    def exitBoolAnd(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#toWhileLoop.
+    def enterToWhileLoop(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#toWhileLoop.
+    def exitToWhileLoop(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#gte.
+    def enterGte(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#gte.
+    def exitGte(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#noParameterInvocation.
+    def enterNoParameterInvocation(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#noParameterInvocation.
+    def exitNoParameterInvocation(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#multiplication.
+    def enterMultiplication(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#multiplication.
+    def exitMultiplication(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#neq.
+    def enterNeq(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#neq.
+    def exitNeq(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#lte.
+    def enterLte(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#lte.
+    def exitLte(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#dynamicAssignment.
+    def enterDynamicAssignment(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#dynamicAssignment.
+    def exitDynamicAssignment(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#toIfStatement.
+    def enterToIfStatement(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#toIfStatement.
+    def exitToIfStatement(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#addition.
+    def enterAddition(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#addition.
+    def exitAddition(self, ctx):
+        pass
+
+
     # Enter a parse tree produced by langParser#dynamicDereference.
     def enterDynamicDereference(self, ctx):
         pass
@@ -130,12 +301,12 @@ class langListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by langParser#numberExpression.
-    def enterNumberExpression(self, ctx):
+    # Enter a parse tree produced by langParser#boolOr.
+    def enterBoolOr(self, ctx):
         pass
 
-    # Exit a parse tree produced by langParser#numberExpression.
-    def exitNumberExpression(self, ctx):
+    # Exit a parse tree produced by langParser#boolOr.
+    def exitBoolOr(self, ctx):
         pass
 
 
@@ -148,21 +319,12 @@ class langListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by langParser#subtraction.
-    def enterSubtraction(self, ctx):
+    # Enter a parse tree produced by langParser#eq.
+    def enterEq(self, ctx):
         pass
 
-    # Exit a parse tree produced by langParser#subtraction.
-    def exitSubtraction(self, ctx):
-        pass
-
-
-    # Enter a parse tree produced by langParser#returnStatement.
-    def enterReturnStatement(self, ctx):
-        pass
-
-    # Exit a parse tree produced by langParser#returnStatement.
-    def exitReturnStatement(self, ctx):
+    # Exit a parse tree produced by langParser#eq.
+    def exitEq(self, ctx):
         pass
 
 
@@ -175,21 +337,12 @@ class langListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by langParser#division.
-    def enterDivision(self, ctx):
+    # Enter a parse tree produced by langParser#gt.
+    def enterGt(self, ctx):
         pass
 
-    # Exit a parse tree produced by langParser#division.
-    def exitDivision(self, ctx):
-        pass
-
-
-    # Enter a parse tree produced by langParser#toListType.
-    def enterToListType(self, ctx):
-        pass
-
-    # Exit a parse tree produced by langParser#toListType.
-    def exitToListType(self, ctx):
+    # Exit a parse tree produced by langParser#gt.
+    def exitGt(self, ctx):
         pass
 
 
@@ -211,21 +364,12 @@ class langListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by langParser#staticDereference.
-    def enterStaticDereference(self, ctx):
+    # Enter a parse tree produced by langParser#toTupleType.
+    def enterToTupleType(self, ctx):
         pass
 
-    # Exit a parse tree produced by langParser#staticDereference.
-    def exitStaticDereference(self, ctx):
-        pass
-
-
-    # Enter a parse tree produced by langParser#stringExpression.
-    def enterStringExpression(self, ctx):
-        pass
-
-    # Exit a parse tree produced by langParser#stringExpression.
-    def exitStringExpression(self, ctx):
+    # Exit a parse tree produced by langParser#toTupleType.
+    def exitToTupleType(self, ctx):
         pass
 
 
@@ -235,24 +379,6 @@ class langListener(ParseTreeListener):
 
     # Exit a parse tree produced by langParser#immediateAssignment.
     def exitImmediateAssignment(self, ctx):
-        pass
-
-
-    # Enter a parse tree produced by langParser#noParameterInvocation.
-    def enterNoParameterInvocation(self, ctx):
-        pass
-
-    # Exit a parse tree produced by langParser#noParameterInvocation.
-    def exitNoParameterInvocation(self, ctx):
-        pass
-
-
-    # Enter a parse tree produced by langParser#multiplication.
-    def enterMultiplication(self, ctx):
-        pass
-
-    # Exit a parse tree produced by langParser#multiplication.
-    def exitMultiplication(self, ctx):
         pass
 
 
@@ -271,24 +397,6 @@ class langListener(ParseTreeListener):
 
     # Exit a parse tree produced by langParser#staticAssignment.
     def exitStaticAssignment(self, ctx):
-        pass
-
-
-    # Enter a parse tree produced by langParser#dynamicAssignment.
-    def enterDynamicAssignment(self, ctx):
-        pass
-
-    # Exit a parse tree produced by langParser#dynamicAssignment.
-    def exitDynamicAssignment(self, ctx):
-        pass
-
-
-    # Enter a parse tree produced by langParser#addition.
-    def enterAddition(self, ctx):
-        pass
-
-    # Exit a parse tree produced by langParser#addition.
-    def exitAddition(self, ctx):
         pass
 
 
@@ -337,12 +445,39 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#tupleType.
+    def enterTupleType(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#tupleType.
+    def exitTupleType(self, ctx):
+        pass
+
+
     # Enter a parse tree produced by langParser#listType.
     def enterListType(self, ctx):
         pass
 
     # Exit a parse tree produced by langParser#listType.
     def exitListType(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#ifStatement.
+    def enterIfStatement(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#ifStatement.
+    def exitIfStatement(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#whileLoop.
+    def enterWhileLoop(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#whileLoop.
+    def exitWhileLoop(self, ctx):
         pass
 
 

@@ -7,6 +7,7 @@ from rdhlang5.executor.function_type import enrich_break_type, OpenFunctionType,
     ClosedFunctionType
 from rdhlang5.executor.opcodes import enrich_opcode, get_context_type, evaluate, \
     get_expression_break_types, flatten_out_types
+from rdhlang5.executor.raw_code_factories import dynamic_dereference_op
 from rdhlang5.executor.type_factories import enrich_type
 from rdhlang5.type_system.composites import CompositeType
 from rdhlang5.type_system.core_types import Type, NoValueType
@@ -239,7 +240,9 @@ class UnboundDereferenceBinder(object):
                 get_manager(new_dereference).add_composite_type(DEFAULT_OBJECT_TYPE)
                 return new_dereference
             else:
-                raise FatalError(reference) # TODO, dynamic dereference
+                new_dereference = dynamic_dereference_op(reference)
+                get_manager(new_dereference).add_composite_type(DEFAULT_OBJECT_TYPE)
+                return new_dereference
 
         if getattr(expression, "opcode", None) == "unbound_assignment":
             reference = expression.reference

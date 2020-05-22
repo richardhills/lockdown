@@ -303,6 +303,13 @@ def dereference_op(of, reference):
         "reference": reference
     })
 
+def dynamic_dereference_op(reference):
+    if not isinstance(reference, basestring):
+        raise FatalError()
+    return RDHObject({
+        "opcode": "dynamic_dereference",
+        "reference": reference
+    })
 
 def assignment_op(of, reference, rvalue):
     check_is_opcode(of)
