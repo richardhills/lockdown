@@ -17,7 +17,22 @@ WILDCARD = object()
 MISSING = object()
 
 def get_key_and_type(micro_op_type):
-    return getattr(micro_op_type, "key", None), getattr(micro_op_type, "type", None)
+    return getattr(micro_op_type, "key", WILDCARD), getattr(micro_op_type, "type", MISSING)
+
+#     if isinstance(micro_op_type, (ObjectWildcardGetterType, ObjectWildcardSetterType, ObjectWildcardDeletterType)):
+#         key = WILDCARD
+#     elif isinstance(micro_op_type, (ObjectGetterType, ObjectSetterType, ObjectDeletterType)):
+#         key = micro_op_type.key
+#     else:
+#         raise FatalError()
+# 
+#     if isinstance(micro_op_type, (ObjectWildcardGetterType, ObjectGetterType, ObjectWildcardSetterType, ObjectSetterType)):
+#         type = micro_op_type.type
+#     else:
+#         type = MISSING
+# 
+#     return key, type
+
 
 def get_key_and_new_value(micro_op, args):
     if isinstance(micro_op, (ObjectWildcardGetter, ObjectWildcardDeletter)):
@@ -95,6 +110,7 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
             if not k in target.__dict__:
                 continue
             unbind_type_to_value(target, k, self.type, target.__dict__[k])
+
 
     def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
         default_factories = [ o for o in micro_op_types.values() if isinstance(o, DefaultFactoryType)]
