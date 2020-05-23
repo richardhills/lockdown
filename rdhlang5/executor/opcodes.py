@@ -79,7 +79,7 @@ class TypeErrorFactory(object):
         }
         if self.message:
             properties["message"] = Const(UnitType(self.message))
-        return RDHObjectType(properties)
+        return RDHObjectType(properties, name=self.message)
 
 
 class Opcode(object):
@@ -96,6 +96,8 @@ class Opcode(object):
     def jump(self, context, flow_manager, immediate_context=None):
         raise NotImplementedError()
 
+    def get_line_and_column(self):
+        return getattr(self.data, "line", None), getattr(self.data, "column", None)
 
 class Nop(Opcode):
     def get_break_types(self, context, flow_manager, immediate_context=None):
@@ -469,7 +471,7 @@ class AssignmentOp(Opcode):
             reference, _ = frame.step("reference", lambda: evaluate(self.reference, context, flow_manager))
             rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, flow_manager))
 
-            if reference in ("result", "test"):
+            if reference in ("result", "test", "i", "j", "testResult"):
                 print "{} = {}".format(reference, rvalue)
 
             manager = get_manager(of)
@@ -529,15 +531,19 @@ def BinaryOp(name, func, argument_type, result_type):
 
         def jump(self, context, break_manager, immediate_context=None):
             with break_manager.get_next_frame(self) as frame:
-                lvalue, _ = frame.step("lvalue", lambda: evaluate(self.lvalue, context, break_manager))
-                if not argument_type.is_copyable_from(get_type_of_value(lvalue)):
-                    break_manager.exception(self.MISSING_OPERANDS(), self)
+                def get_lvalue():
+                    lvalue, _ = frame.step("lvalue", lambda: evaluate(self.lvalue, context, break_manager))
+                    if not argument_type.is_copyable_from(get_type_of_value(lvalue)):
+                        break_manager.exception(self.MISSING_OPERANDS(), self)
+                    return lvalue
     
-                rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, break_manager))
-                if not argument_type.is_copyable_from(get_type_of_value(rvalue)):
-                    break_manager.exception(self.MISSING_OPERANDS(), self)
+                def get_rvalue():
+                    rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, break_manager))
+                    if not argument_type.is_copyable_from(get_type_of_value(rvalue)):
+                        break_manager.exception(self.MISSING_OPERANDS(), self)
+                    return rvalue
 
-            return break_manager.value(func(lvalue, rvalue), self)
+            return break_manager.value(func(get_lvalue, get_rvalue), self)
 
     return _BinaryOp
 
@@ -800,6 +806,7 @@ class InvokeOp(Opcode):
     INVALID_ARGUMENT_TYPE = TypeErrorFactory("Invoke: invalid_argument_type")
 
     def __init__(self, data, visitor):
+        super(InvokeOp, self).__init__(data, visitor)
         self.function = enrich_opcode(data.function, visitor)
         self.argument = enrich_opcode(data.argument, visitor)
 
@@ -825,10 +832,10 @@ class InvokeOp(Opcode):
                 if function_type.argument_type.is_copyable_from(argument_type):
                     argument_type_is_safe = True
             else:
-                break_types.add("exception", self.INVALID_FUNCTION_TYPE.get_type())
+                break_types.add("exception", self.INVALID_FUNCTION_TYPE.get_type(), opcode=self)
 
             if not argument_type_is_safe:
-                break_types.add("exception", self.INVALID_ARGUMENT_TYPE.get_type())
+                break_types.add("exception", self.INVALID_ARGUMENT_TYPE.get_type(), opcode=self)
 
         return break_types.build()
 
@@ -852,6 +859,7 @@ class MatchOp(Opcode):
     NO_MATCH = TypeErrorFactory("Match: no_match")
 
     def __init__(self, data, visitor):
+        super(MatchOp, self).__init__(data, visitor)
         self.value = enrich_opcode(data.value, visitor)
         self.matchers = [ enrich_opcode(m, visitor) for m in data.matchers ]
 
@@ -946,19 +954,19 @@ OPCODES = {
     "object_template": ObjectTemplateOp,
     "dict_template": DictTemplateOp,
     "list_template": ListTemplateOp,
-    "multiplication": BinaryOp("Multiplication", lambda lvalue, rvalue: lvalue * rvalue, IntegerType(), IntegerType()),
-    "division": BinaryOp("Division", lambda lvalue, rvalue: lvalue / rvalue, IntegerType(), IntegerType()),
-    "addition": BinaryOp("Addition", lambda lvalue, rvalue: lvalue + rvalue, IntegerType(), IntegerType()),
-    "subtraction": BinaryOp("Subtraction", lambda lvalue, rvalue: lvalue - rvalue, IntegerType(), IntegerType()),
-    "mod": BinaryOp("Modulus", lambda lvalue, rvalue: lvalue % rvalue, IntegerType(), IntegerType()),
-    "lt": BinaryOp("LessThan", lambda lvalue, rvalue: lvalue < rvalue, IntegerType(), BooleanType()),
-    "lte": BinaryOp("LessThanOrEqual", lambda lvalue, rvalue: lvalue <= rvalue, IntegerType(), BooleanType()),
-    "gt": BinaryOp("GreaterThan", lambda lvalue, rvalue: lvalue > rvalue, IntegerType(), BooleanType()),
-    "gte": BinaryOp("GreaterThanOrEqual", lambda lvalue, rvalue: lvalue >= rvalue, IntegerType(), BooleanType()),
-    "eq": BinaryOp("Equality", lambda lvalue, rvalue: lvalue == rvalue, IntegerType(), BooleanType()),
-    "neq": BinaryOp("Inequality", lambda lvalue, rvalue: lvalue != rvalue, IntegerType(), BooleanType()),
-    "or": BinaryOp("Or", lambda lvalue, rvalue: lvalue or rvalue, BooleanType(), BooleanType()),
-    "and": BinaryOp("And", lambda lvalue, rvalue: lvalue and rvalue, BooleanType(), BooleanType()),
+    "multiplication": BinaryOp("Multiplication", lambda lvalue, rvalue: lvalue() * rvalue(), IntegerType(), IntegerType()),
+    "division": BinaryOp("Division", lambda lvalue, rvalue: lvalue() / rvalue(), IntegerType(), IntegerType()),
+    "addition": BinaryOp("Addition", lambda lvalue, rvalue: lvalue() + rvalue(), IntegerType(), IntegerType()),
+    "subtraction": BinaryOp("Subtraction", lambda lvalue, rvalue: lvalue() - rvalue(), IntegerType(), IntegerType()),
+    "mod": BinaryOp("Modulus", lambda lvalue, rvalue: lvalue() % rvalue(), IntegerType(), IntegerType()),
+    "lt": BinaryOp("LessThan", lambda lvalue, rvalue: lvalue() < rvalue(), IntegerType(), BooleanType()),
+    "lte": BinaryOp("LessThanOrEqual", lambda lvalue, rvalue: lvalue() <= rvalue(), IntegerType(), BooleanType()),
+    "gt": BinaryOp("GreaterThan", lambda lvalue, rvalue: lvalue() > rvalue(), IntegerType(), BooleanType()),
+    "gte": BinaryOp("GreaterThanOrEqual", lambda lvalue, rvalue: lvalue() >= rvalue(), IntegerType(), BooleanType()),
+    "eq": BinaryOp("Equality", lambda lvalue, rvalue: lvalue() == rvalue(), IntegerType(), BooleanType()),
+    "neq": BinaryOp("Inequality", lambda lvalue, rvalue: lvalue() != rvalue(), IntegerType(), BooleanType()),
+    "or": BinaryOp("Or", lambda lvalue, rvalue: lvalue() or rvalue(), BooleanType(), BooleanType()),
+    "and": BinaryOp("And", lambda lvalue, rvalue: lvalue() and rvalue(), BooleanType(), BooleanType()),
     "dereference": DereferenceOp,
     "dynamic_dereference": DynamicDereferenceOp,
     "assignment": AssignmentOp,

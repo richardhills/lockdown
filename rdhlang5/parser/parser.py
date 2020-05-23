@@ -19,8 +19,10 @@ from rdhlang5.executor.raw_code_factories import function_lit, nop, comma_op, \
 from rdhlang5.parser.grammar.langLexer import langLexer
 from rdhlang5.parser.grammar.langParser import langParser
 from rdhlang5.parser.grammar.langVisitor import langVisitor
-from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE
+from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
+    rich_composite_type
 from rdhlang5.type_system.exceptions import FatalError
+from rdhlang5.type_system.managers import get_manager
 from rdhlang5.type_system.object_types import RDHObject
 from rdhlang5.utils import MISSING, default, spread_dict
 
@@ -141,10 +143,10 @@ class RDHLang5Visitor(langVisitor):
         function, argument = ctx.expression()
         function = self.visit(function)
         argument = self.visit(argument)
-        return invoke_op(function, argument)
+        return invoke_op(function, argument, **get_debug_info(ctx))
 
     def visitNoParameterInvocation(self, ctx):
-        return invoke_op(self.visit(ctx.expression()))
+        return invoke_op(self.visit(ctx.expression()), **get_debug_info(ctx))
 
     def visitImmediateAssignment(self, ctx):
         return unbound_assignment(
@@ -334,7 +336,7 @@ class RDHLang5Visitor(langVisitor):
 
     def visitTupleType(self, ctx):
         types = [self.visit(e) for e in ctx.expression()]
-        return list_type(types, no_value_type())
+        return list_type(types, None)
 
     def visitListType(self, ctx):
         type = self.visit(ctx.expression())
@@ -469,6 +471,14 @@ class CodeBlockBuilder(object):
                 argument_type, break_types, local_type, local_initializer, combine_opcodes(code_expressions)
             )))), context_op()))
 
+def get_debug_info(ctx):
+    return {
+        "column": ctx.start.column,
+        "line": ctx.start.line,
+        "start_token": getattr(ctx.start, "token", ""),
+        "end_token": getattr(getattr(ctx, "end", None), "token", "")
+    }
+
 class ParseError(Exception):
     pass
 
@@ -478,7 +488,7 @@ class AlwaysFailErrorListener(ConsoleErrorListener):
         raise ParseError()
 
 
-def parse(code):
+def parse(code, debug=False):
     lexer = langLexer(InputStream(code))
     lexer.addErrorListener(AlwaysFailErrorListener())
     tokens = CommonTokenStream(lexer)
@@ -486,4 +496,8 @@ def parse(code):
     parser.addErrorListener(AlwaysFailErrorListener())
     ast = parser.json()
     visitor = RDHLang5Visitor()
-    return visitor.visit(ast)
+    ast = visitor.visit(ast)
+    if debug:
+        get_manager(ast).add_composite_type(DEFAULT_OBJECT_TYPE)
+        ast.raw_code = code
+    return ast

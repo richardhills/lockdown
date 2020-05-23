@@ -105,6 +105,8 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
         else:
             keys = target.__dict__.keys()
         for k in keys:
+            if not k in target.__dict__:
+                continue
             unbind_type_to_value(target, k, self.type, target.__dict__[k])
 
 
@@ -667,7 +669,7 @@ class ObjectDeletter(MicroOp):
 
         del self.target.__dict__[self.key]
 
-def RDHObjectType(properties=None, wildcard_type=None, initial_data=None):
+def RDHObjectType(properties=None, wildcard_type=None, initial_data=None, **kwargs):
     if not properties:
         properties = {}
     micro_ops = OrderedDict({})
@@ -686,7 +688,7 @@ def RDHObjectType(properties=None, wildcard_type=None, initial_data=None):
         micro_ops[("get-wildcard",)] = ObjectWildcardGetterType(wildcard_type, True, False)
         micro_ops[("set-wildcard",)] = ObjectWildcardSetterType(wildcard_type, True, True)
     
-    return CompositeType(micro_ops, initial_data=initial_data)
+    return CompositeType(micro_ops, initial_data=initial_data, **kwargs)
 
 class PythonObjectType(CompositeType):
     def __init__(self):

@@ -27,11 +27,13 @@ class BreakTypesFactory(object):
     def __init__(self):
         self.result = defaultdict(list)
 
-    def add(self, mode, out_type, in_type=None):
+    def add(self, mode, out_type, in_type=None, opcode=None):
         if not isinstance(out_type, Type):
             raise FatalError()
         if in_type and not isinstance(in_type, Type):
             raise FatalError()
+        if opcode:
+            out_type.from_opcode = opcode
         break_type = {
             "out": out_type,
         }

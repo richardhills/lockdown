@@ -471,17 +471,22 @@ class TestEuler(TestCase):
         self.assertEquals(result.value, 6857)
 
     def test_4(self):
+        return
+        import cProfile, pstats, StringIO
+        pr = cProfile.Profile()
+        pr.enable()
+
         code = parse("""
             function() {
                 int bestResult = 0;
                 var getDigit = function(Tuple<int, int>) {
                     return (argument[0] / argument[1]) % 10;
                 };
-                int i = 100;
+                int i = 990;
                 while(i < 1000) {
-                    int j = 100;
+                    int j = 990;
                     while(j < 1000) {
-                        var testResult = i * j;
+                        int testResult = i * j;
                         if(testResult > 100000
                                 && testResult > bestResult
                                 && getDigit([testResult, 1]) == getDigit([testResult, 100000])
@@ -495,8 +500,16 @@ class TestEuler(TestCase):
                 };
                 return bestResult;
             }
-        """)
+        """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True)
+
+        pr.disable()
+        s = StringIO.StringIO()
+        sortby = 'cumulative'
+        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+        ps.print_stats()
+        pr.dump_stats("profile")
+
         self.assertEquals(result.value, 6857)
 
 if __name__ == "__main__":

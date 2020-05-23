@@ -31,36 +31,40 @@ def get_manager(obj):
         return None
 
     manager = managers_by_id.get(id(obj), None)
-    if not manager:
-        old_obj = obj
-        if isinstance(obj, RDHObject):
-            manager = CompositeObjectManager(obj)
-        elif isinstance(obj, RDHList):
-            manager = CompositeObjectManager(obj)
-        elif isinstance(obj, RDHDict):
-            manager = CompositeObjectManager(obj)
-        elif isinstance(obj, list):
-            obj = RDHList(obj)
-            replace_all_refs(old_obj, obj)            
-            manager = CompositeObjectManager(obj)
-        elif isinstance(obj, tuple):
-            obj = RDHList(obj)
-            replace_all_refs(old_obj, obj)            
-            manager = CompositeObjectManager(obj)
-        elif isinstance(obj, dict):
-            obj = RDHDict(obj)
-            replace_all_refs(old_obj, obj)
-            manager = CompositeObjectManager(obj)
-        elif isinstance(obj, object) and hasattr(obj, "__dict__"):
-            original_type = obj.__class__
-            new_type = type("RDH{}".format(original_type.__name__), (RDHObject, original_type,), {})
-            obj = new_type(obj.__dict__)
-            replace_all_refs(old_obj, obj)
-            manager = CompositeObjectManager(obj)
-        else:
-            raise FatalError()
-        weak_objs_by_id[id(obj)] = weakref.ref(obj, obj_cleared_callback)
-        managers_by_id[id(obj)] = manager
+    if manager:
+        return manager
+
+    old_obj = obj
+    if isinstance(obj, RDHObject):
+        manager = CompositeObjectManager(obj)
+    elif isinstance(obj, RDHList):
+        manager = CompositeObjectManager(obj)
+    elif isinstance(obj, RDHDict):
+        manager = CompositeObjectManager(obj)
+    elif isinstance(obj, list):
+        obj = RDHList(obj)
+        replace_all_refs(old_obj, obj)            
+        manager = CompositeObjectManager(obj)
+    elif isinstance(obj, tuple):
+        obj = RDHList(obj)
+        replace_all_refs(old_obj, obj)            
+        manager = CompositeObjectManager(obj)
+    elif isinstance(obj, dict):
+        obj = RDHDict(obj)
+        replace_all_refs(old_obj, obj)
+        manager = CompositeObjectManager(obj)
+    elif isinstance(obj, object) and hasattr(obj, "__dict__"):
+        original_type = obj.__class__
+        new_type = type("RDH{}".format(original_type.__name__), (RDHObject, original_type,), {})
+        obj = new_type(obj.__dict__)
+        replace_all_refs(old_obj, obj)
+        manager = CompositeObjectManager(obj)
+    else:
+        raise FatalError()
+
+    weak_objs_by_id[id(obj)] = weakref.ref(obj, obj_cleared_callback)
+    managers_by_id[id(obj)] = manager
+
     return manager
 
 

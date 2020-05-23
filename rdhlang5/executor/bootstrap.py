@@ -47,6 +47,30 @@ def get_default_global_context():
         })
     }, bind=DEFAULT_OBJECT_TYPE)
 
+def format_unhandled_break_type(break_type, raw_code):
+    if not raw_code:
+        return str(break_type)
+
+    out_break_type = break_type["out"]
+
+    opcode = getattr(out_break_type, "from_opcode", None)
+    if not opcode:
+        return str(break_type)
+
+    line, column = opcode.get_line_and_column()
+
+    if line is None or column is None:
+        return str(break_type)
+
+    lines = raw_code.split("\n")
+
+    padding = " " * column
+
+    return """
+{}
+{}^
+{}| {}""".format(lines[line - 1], padding, padding, getattr(out_break_type, "name", None) or str(out_break_type))
+
 def bootstrap_function(data, argument=None, context=None, check_safe_exit=False):
     if argument is None:
         argument = NO_VALUE
@@ -75,10 +99,11 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False)
 
         for mode, break_types in function_break_types.items():
             if mode not in ("exit", "return", "value") and check_safe_exit:
-                error_msgs.append("""break mode {} is not safe
+                breaks_messages = [format_unhandled_break_type(break_type, getattr(data, "raw_code", None)) for break_type in break_types]
+                for break_message in breaks_messages:
+                    error_msgs.append("""---- break mode {} is not safe ----
 
-{}
-""".format(mode, break_types))
+{}""".format(mode, break_message))
                 continue
             for break_type in break_types:
                 break_manager = stack.enter_context(break_manager.capture(mode, break_type, top_level=True))

@@ -98,20 +98,21 @@ class CompositeType(Type):
         return True
 
     def is_copyable_from(self, other):
+        if self is other:
+            return True
+
+        if isinstance(other, OneOfType):
+            return other.is_copyable_to(self)
+
+        if not isinstance(other, CompositeType):
+            return False
+
         try:
             cache_started_empty = False
             if getattr(composite_type_is_copyable_cache, "_is_copyable_from_cache", None) is None:
                 composite_type_is_copyable_cache._is_copyable_from_cache = defaultdict(lambda: defaultdict(lambda: None))
                 cache_started_empty = True
             cache = composite_type_is_copyable_cache._is_copyable_from_cache
-
-            if isinstance(other, OneOfType):
-                return other.is_copyable_to(self)
-
-            if not isinstance(other, CompositeType):
-                return False
-            if self is other:
-                return True
 
             result = results_by_target_id[id(self)][id(other)]
 
@@ -195,11 +196,7 @@ def bind_type_to_value(source, key, type, value):
 
     from rdhlang5.type_system.object_types import RDHObject
 
-    if isinstance(value, RDHObject) and value.__dict__.get("x", None) == 5:
-        pass
-
     manager = get_manager(value)
-
     source_manager = get_manager(source)
 
     something_worked = False
@@ -215,14 +212,6 @@ def bind_type_to_value(source, key, type, value):
             something_worked = True
 
     if not something_worked:
-        for sub_type in unwrap_types(type):
-            if isinstance(sub_type, CompositeType):
-                try:
-                    manager.add_composite_type(sub_type)
-                    source_manager.child_type_references[key].append(sub_type)
-                except MicroOpTypeConflict as e:
-                    pass
-
         raise MicroOpTypeConflict()
 
 def unbind_type_to_value(source, key, type, value):

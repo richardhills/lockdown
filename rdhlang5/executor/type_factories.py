@@ -43,9 +43,12 @@ def build_object_type(data):
     return RDHObjectType(properties)
 
 def build_list_type(data):
+    wildcard_type = getattr(data, "wildcard_type", None)
+    if wildcard_type:
+        wildcard_type = enrich_type(wildcard_type)
     return RDHListType(
         [ enrich_type(type) for type in data.entry_types ],
-        enrich_type(data.wildcard_type)
+        wildcard_type
     )
 
 TYPES = {

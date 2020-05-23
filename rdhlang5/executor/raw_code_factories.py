@@ -5,6 +5,7 @@ from rdhlang5.type_system.dict_types import RDHDict
 from rdhlang5.type_system.exceptions import FatalError
 from rdhlang5.type_system.list_types import RDHList
 from rdhlang5.type_system.object_types import RDHObject
+from rdhlang5.utils import spread_dict
 
 
 def is_opcode(data):
@@ -45,11 +46,13 @@ def object_type(properties):
     })
 
 def list_type(entry_types, wildcard_type):
-    return object_template_op({
+    type = {
         "type": literal_op("List"),
-        "entry_types": list_template_op(entry_types),
-        "wildcard_type": wildcard_type
-    })
+        "entry_types": list_template_op(entry_types)
+    }
+    if wildcard_type:
+        type["wildcard_type"] = wildcard_type
+    return object_template_op(type)
 
 
 def function_type(argument_type, break_types):
@@ -361,16 +364,16 @@ def static_op(expression):
     })
 
 
-def invoke_op(function_expression, argument_expression=None):
+def invoke_op(function_expression, argument_expression=None, **kwargs):
     if argument_expression is None:
         argument_expression = nop()
     check_is_opcode(function_expression)
     check_is_opcode(argument_expression)
-    return RDHObject({
+    return RDHObject(spread_dict({
         "opcode": "invoke",
         "function": function_expression,
         "argument": argument_expression
-    })
+    }, kwargs))
 
 
 def match_op(value_expression, matchers):
