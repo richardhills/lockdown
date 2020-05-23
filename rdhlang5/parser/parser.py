@@ -15,7 +15,7 @@ from rdhlang5.executor.raw_code_factories import function_lit, nop, comma_op, \
     object_type, prepare_op, is_opcode, object_template_op, infer_all, \
     no_value_type, combine_opcodes, static_op, invoke_op, assignment_op, \
     unbound_assignment, list_template_op, list_type, close_op, context_op, \
-    loop_op, condition_op, binary_integer_op
+    loop_op, condition_op, binary_integer_op, equality_op
 from rdhlang5.parser.grammar.langLexer import langLexer
 from rdhlang5.parser.grammar.langParser import langParser
 from rdhlang5.parser.grammar.langVisitor import langVisitor
@@ -232,7 +232,7 @@ class RDHLang5Visitor(langVisitor):
         lvalue, rvalue = ctx.expression()
         lvalue = self.visit(lvalue)
         rvalue = self.visit(rvalue)
-        return binary_integer_op("eq", lvalue, rvalue)
+        return equality_op(lvalue, rvalue)
 
     def visitNeq(self, ctx):
         lvalue, rvalue = ctx.expression()

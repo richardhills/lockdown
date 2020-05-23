@@ -189,7 +189,7 @@ def subtraction_op(lvalue, rvalue):
 
 
 def equality_op(lvalue, rvalue):
-    return binary_integer_op("equality", lvalue, rvalue)
+    return binary_integer_op("eq", lvalue, rvalue)
 
 
 def comma_op(*opcodes):

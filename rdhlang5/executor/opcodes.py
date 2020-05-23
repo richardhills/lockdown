@@ -543,7 +543,7 @@ def BinaryOp(name, func, argument_type, result_type):
                         break_manager.exception(self.MISSING_OPERANDS(), self)
                     return rvalue
 
-            return break_manager.value(func(get_lvalue, get_rvalue), self)
+                return break_manager.value(func(get_lvalue, get_rvalue), self)
 
     return _BinaryOp
 
