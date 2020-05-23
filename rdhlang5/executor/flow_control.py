@@ -83,7 +83,11 @@ class FlowManager(object):
         try:
             self.callback(self)
         except BreakException as e:
-            if e.mode == self.our_break_mode and self.our_break_types["out"].is_copyable_from(get_type_of_value(e.value)):
+            accepted_out_type = self.our_break_types["out"]
+            if e.mode == self.our_break_mode and (
+                accepted_out_type.always_is_copyable_from
+                or accepted_out_type.is_copyable_from(get_type_of_value(e.value))
+            ):
                 self._result = e.value
                 if "in" in self.our_break_types:
                     self._restart_continuation = self.frame_manager.create_continuation(self.callback, self.our_break_types["in"])
@@ -122,12 +126,20 @@ class FlowManager(object):
         return self._restart_continuation
 
     def unwind(self, mode, value, opcode, can_restart):
-        type_of_value = get_type_of_value(value)
+        type_of_value = None # lazily calculated if we need it
+
         for allowed_types in self.allowed_break_types[mode]:
-            if not allowed_types["out"].is_copyable_from(type_of_value):
-                continue
+            allowed_out = allowed_types["out"]
+
+            if not allowed_out.always_is_copyable_from:
+                if type_of_value is None:
+                    type_of_value = get_type_of_value(value)
+                if not allowed_out.is_copyable_from(type_of_value):
+                    continue
+
             if can_restart and "in" not in allowed_types:
                 continue
+
             raise BreakException(mode, value, opcode, can_restart)
         raise FatalError("Can not unwind {} with type {}, allowed {}".format(mode, type_of_value, self.allowed_break_types))
 
@@ -152,7 +164,11 @@ class FlowManager(object):
 
     def __exit__(self, exc_type, exc_value, traceback):
         if isinstance(exc_value, BreakException):
-            if exc_value.mode == self.our_break_mode and self.our_break_types["out"].is_copyable_from(get_type_of_value(exc_value.value)):
+            out_break_type = self.our_break_types["out"]
+            if exc_value.mode == self.our_break_mode and (
+                out_break_type.always_is_copyable_from
+                or out_break_type.is_copyable_from(get_type_of_value(exc_value.value))
+            ):
                 self._result = exc_value.value
                 return True
             else:

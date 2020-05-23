@@ -1,5 +1,6 @@
 import weakref
 
+from log import logger
 from rdhlang5.type_system.core_types import Type, UnitType, NoValueType
 from rdhlang5.type_system.exceptions import FatalError, InvalidData
 from rdhlang5.type_system.runtime import replace_all_refs
@@ -29,9 +30,11 @@ def get_manager(obj):
 
     if isinstance(obj, Type):
         return None
-
+    
     manager = managers_by_id.get(id(obj), None)
+
     if manager:
+        logger.debug( "{}:{}:{}:{}".format(len(managers_by_id), id(obj), type(obj), getattr(manager, "debug_reason", None)))
         return manager
 
     old_obj = obj
@@ -50,7 +53,7 @@ def get_manager(obj):
         replace_all_refs(old_obj, obj)            
         manager = CompositeObjectManager(obj)
     elif isinstance(obj, dict):
-        obj = RDHDict(obj)
+        obj = RDHDict(obj, debug_reason="monkey-patch")
         replace_all_refs(old_obj, obj)
         manager = CompositeObjectManager(obj)
     elif isinstance(obj, object) and hasattr(obj, "__dict__"):
@@ -59,6 +62,7 @@ def get_manager(obj):
         obj = new_type(obj.__dict__)
         replace_all_refs(old_obj, obj)
         manager = CompositeObjectManager(obj)
+        manager.debug_reason = "monkey-patch"
     else:
         raise FatalError()
 
@@ -88,10 +92,7 @@ def get_type_of_value(value):
     if value is NO_VALUE:
         return NoValueType()
     if isinstance(value, (RDHObject, RDHList, RDHDict)):
-        manager = get_manager(value)
-        if manager is None:
-            pass
-        return CompositeType(manager.get_merged_micro_op_types(), value)
+        return get_manager(value).get_effective_composite_type()
     if isinstance(value, (RDHFunction, OpenFunction)):
         return value.get_type()
     if isinstance(value, Type):

@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
 
+from rdhlang5.type_system.core_types import Type
 from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict
 
 
@@ -71,13 +72,23 @@ def raise_micro_op_conflicts(micro_op, args, other_micro_op_types):
     for other_micro_op_type in other_micro_op_types:
         other_micro_op_type.raise_on_runtime_micro_op_conflict(micro_op, args)
 
-def merge_micro_op_types(micro_op_types_for_types):
+def merge_composite_types(types, initial_data, name=None):
+    from rdhlang5.type_system.composites import CompositeType
+
+    for t in types:
+        if not isinstance(t, Type):
+            raise FatalError()
+
+    if len(types) == 1:
+        return CompositeType(types[0].micro_op_types, initial_data=initial_data, name=name) 
+
     result = {}
-    for micro_op_types in micro_op_types_for_types:
-        for tag, micro_op_type in micro_op_types.items():
+    for type in types:
+        for tag, micro_op_type in type.micro_op_types.items():
             if tag in result:
                 result[tag] = result[tag].merge(micro_op_type)
             else:
                 result[tag] = micro_op_type
-    return result
+
+    return CompositeType(result, initial_data=initial_data, name=name)
 

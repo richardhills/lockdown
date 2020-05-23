@@ -245,6 +245,8 @@ class ObjectGetterType(ObjectMicroOpType):
     def unbind(self, key, target):
         if key is not None and key != self.key:
             return
+        if key not in target.__dict__:
+            return
         unbind_type_to_value(target, key, self.type, target.__dict__[key])
 
     def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
@@ -714,12 +716,13 @@ class DefaultDictType(CompositeType):
         super(DefaultDictType, self).__init__(micro_ops)
 
 class RDHObject(Composite, object):
-    def __init__(self, initial_data=None, default_factory=None, bind=None):
+    def __init__(self, initial_data=None, default_factory=None, bind=None, debug_reason=None):
         if initial_data is None:
             initial_data = {}
         for key, value in initial_data.items():
             self.__dict__[key] = value
         get_manager(self).default_factory = default_factory
+        get_manager(self).debug_reason = debug_reason
         if bind:
             get_manager(self).add_composite_type(bind)
 

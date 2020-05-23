@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 
 from abc import abstractmethod, ABCMeta
 
+from log import logger
 from rdhlang5.executor.exceptions import PreparationException
 from rdhlang5.executor.flow_control import BreakTypesFactory
 from rdhlang5.executor.function_type import OpenFunctionType, ClosedFunctionType
@@ -71,7 +72,7 @@ class TypeErrorFactory(object):
         }
         if self.message:
             data["message"] = self.message
-        return RDHObject(data, bind=self.get_type())
+        return RDHObject(data, bind=self.get_type(), debug_reason="type-error")
 
     def get_type(self):
         properties = {
@@ -98,6 +99,7 @@ class Opcode(object):
 
     def get_line_and_column(self):
         return getattr(self.data, "line", None), getattr(self.data, "column", None)
+
 
 class Nop(Opcode):
     def get_break_types(self, context, flow_manager, immediate_context=None):
@@ -176,7 +178,7 @@ class ObjectTemplateOp(Opcode):
             for key, opcode in self.opcodes.items():
                 result[key], _ = frame.step(key, lambda: evaluate(opcode, context, flow_manager))
 
-        return flow_manager.value(RDHObject(result), self)
+        return flow_manager.value(RDHObject(result, debug_reason="object-template"), self)
 
 
 class DictTemplateOp(Opcode):
@@ -354,7 +356,7 @@ class DereferenceOp(Opcode):
                             if isinstance(of_type, CompositeType):
                                 micro_op = of_type.get_micro_op_type(("get", reference))
                                 if micro_op is None:
-                                    micro_op = of_type.get_micro_op_type(("get-wildcard", ))
+                                    micro_op = of_type.get_micro_op_type(("get-wildcard",))
 
                             if micro_op:
                                 break_types.add("value", micro_op.type)
@@ -365,7 +367,7 @@ class DereferenceOp(Opcode):
                 except AllowedValuesNotAvailable:
                     completely_safe = False
             if not completely_safe:
-                break_types.add("exception", self.INVALID_DEREFERENCE.get_type())
+                break_types.add("exception", self.INVALID_DEREFERENCE.get_type(), opcode=self)
 
         return break_types.build()
 
@@ -382,7 +384,7 @@ class DereferenceOp(Opcode):
                     micro_op = direct_micro_op_type.create(of)
                     return flow_manager.value(micro_op.invoke(), self)
 
-                wildcard_micro_op_type = manager.get_micro_op_type(("get-wildcard", ))
+                wildcard_micro_op_type = manager.get_micro_op_type(("get-wildcard",))
                 if wildcard_micro_op_type:
                     micro_op = wildcard_micro_op_type.create(of)
                     return flow_manager.value(micro_op.invoke(reference), self)
@@ -393,12 +395,13 @@ class DereferenceOp(Opcode):
             except InvalidDereferenceKey:
                 raise flow_manager.exception(self.INVALID_DEREFERENCE(), self)
 
+
 class DynamicDereferenceOp(Opcode):
     INVALID_DEREFERENCE = TypeErrorFactory("DereferenceOpcode: invalid_dereference")
 
     def __init__(self, data, visitor):
         super(DynamicDereferenceOp, self).__init__(data, visitor)
-        self.reference = enrich_opcode(data.reference, visitor)
+        self.reference = data.reference
 
     def get_break_types(self, context, flow_manager, immediate_context=None):
         break_types = BreakTypesFactory()
@@ -409,6 +412,7 @@ class DynamicDereferenceOp(Opcode):
 
     def jump(self, context, flow_manager, immediate_context=None):
         raise FatalError()
+
 
 class AssignmentOp(Opcode):
     INVALID_LVALUE = TypeErrorFactory("AssignmentOp: invalid_lvalue")
@@ -448,7 +452,7 @@ class AssignmentOp(Opcode):
                                 micro_op = of_type.get_micro_op_type(("set", reference))
 
                                 if not micro_op:
-                                    micro_op = of_type.get_micro_op_type(("set-wildcard", ))
+                                    micro_op = of_type.get_micro_op_type(("set-wildcard",))
 
                             if micro_op:
                                 if not micro_op.type.is_copyable_from(rvalue_type):
@@ -472,7 +476,7 @@ class AssignmentOp(Opcode):
             rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, flow_manager))
 
             if reference in ("result", "test", "i", "j", "testResult"):
-                print "{} = {}".format(reference, rvalue)
+                logger.debug( "{} = {}".format(reference, rvalue))
 
             manager = get_manager(of)
 
@@ -485,7 +489,7 @@ class AssignmentOp(Opcode):
                     micro_op = direct_micro_op_type.create(of)
                     return flow_manager.value(micro_op.invoke(rvalue), self)
 
-                wildcard_micro_op_type = manager.get_micro_op_type(("set-wildcard", ))
+                wildcard_micro_op_type = manager.get_micro_op_type(("set-wildcard",))
                 if wildcard_micro_op_type:
                     if not wildcard_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
                         raise flow_manager.exception(self.INVALID_RVALUE(), self)
@@ -732,6 +736,7 @@ class PrepareOp(Opcode):
 
         flow_manager.value(function, self)
 
+
 class CloseOp(Opcode):
     INVALID_FUNCTION = TypeErrorFactory("Close: invalid_function")
     INVALID_OUTER_CONTEXT = TypeErrorFactory("Close: invalid_outer_context")
@@ -784,6 +789,7 @@ class CloseOp(Opcode):
 
         flow_manager.value(open_function.close(outer_context), self)
 
+
 class StaticOp(Opcode):
     def __init__(self, data, visitor):
         self.code = enrich_opcode(data.code, visitor)
@@ -800,6 +806,7 @@ class StaticOp(Opcode):
 
     def jump(self, context, flow_manager, immediate_context=None):
         flow_manager.value(self.value, self)
+
 
 class InvokeOp(Opcode):
     INVALID_FUNCTION_TYPE = TypeErrorFactory("Invoke: invalid_function_type")
@@ -840,16 +847,20 @@ class InvokeOp(Opcode):
         return break_types.build()
 
     def jump(self, context, flow_manager, immediate_context=None):
+        logger.debug("Invoke:jump")
         from rdhlang5.executor.function import RDHFunction
         function = evaluate(self.function, context, flow_manager)
+        logger.debug("Invoke:jump:function")
         argument = evaluate(self.argument, context, flow_manager)
+        logger.debug("Invoke:jump:argument")
 
         if not isinstance(function, RDHFunction):
             flow_manager.exception(self.INVALID_FUNCTION_TYPE(), self)
 
+        logger.debug("Invoke:jump:argument_check")
         if not function.get_type().argument_type.is_copyable_from(get_type_of_value(argument)):
             flow_manager.exception(self.INVALID_ARGUMENT_TYPE(), self) 
-
+        logger.debug("Invoke:jump:invoke")
         function.invoke(argument, flow_manager)
 
         raise FatalError()
@@ -946,6 +957,7 @@ class MatchOp(Opcode):
 #         get_manager(value).add_composite_type(type)
 # 
 #         flow_manager.value(value)
+
 
 OPCODES = {
     "nop": Nop,

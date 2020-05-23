@@ -7,8 +7,8 @@ from rdhlang5.type_system.core_types import Type, unwrap_types, AnyType, \
     OneOfType
 from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict
 from rdhlang5.type_system.managers import get_manager
-from rdhlang5.type_system.micro_ops import merge_micro_op_types, MicroOpType, \
-    MicroOp
+from rdhlang5.type_system.micro_ops import MicroOpType, \
+    MicroOp, merge_composite_types
 
 
 class InferredType(Type):
@@ -226,15 +226,19 @@ def unbind_type_to_value(source, key, type, value):
 class CompositeObjectManager(object):
     def __init__(self, obj):
         self.obj = obj
-        self.micro_op_types = defaultdict(dict)
-        self.type_references = defaultdict(int)
-        # A dictionary of key (names) to a list of types bound to the remote object
+        self.attached_types = {}
+        self.attached_type_counts = defaultdict(int)
         self.child_type_references = defaultdict(list)
 
-        self.default_factory = None
+        self.cached_effective_composite_type = None
 
-    def get_merged_micro_op_types(self, new_micro_op_types={}):
-        return merge_micro_op_types(self.micro_op_types.values() + [ new_micro_op_types ])
+        self.default_factory = None
+        self.debug_reason = None
+
+    def get_effective_composite_type(self):
+        if not self.cached_effective_composite_type:
+            self.cached_effective_composite_type = merge_composite_types(self.attached_types.values(), self.obj, "Composed from {}".format(self.debug_reason))
+        return self.cached_effective_composite_type
 
     def check_for_runtime_data_conflicts(self, type):
         if isinstance(type, AnyType):
@@ -255,50 +259,50 @@ class CompositeObjectManager(object):
         return False
 
     def check_for_runtime_micro_op_conflicts(self, type):
+        new_merged_composite_type = merge_composite_types([ self.get_effective_composite_type(), type ], "check_for_runtime_micro_op_conflicts")
+
         for micro_op_type in type.micro_op_types.values():
             micro_op_type.check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(
-                self.obj, self.get_merged_micro_op_types(type.micro_op_types)
+                self.obj, new_merged_composite_type.micro_op_types
             )
 
     def add_composite_type(self, type):
-        if self.check_for_runtime_data_conflicts(type):
-            self.check_for_runtime_data_conflicts(type)
-            raise MicroOpTypeConflict()
-            
-        self.check_for_runtime_micro_op_conflicts(type)
+        type_id = id(type)
 
-        self.type_references[id(type)] += 1
+        new = type_id not in self.attached_types
 
-        if id(type) in self.micro_op_types:
-            return
+        if new:
+            if self.check_for_runtime_data_conflicts(type):
+                self.check_for_runtime_data_conflicts(type)
+                raise MicroOpTypeConflict()
 
-        self.micro_op_types[id(type)] = dict(type.micro_op_types)
+            self.check_for_runtime_micro_op_conflicts(type)
+
+            self.cached_effective_composite_type = None
+            self.attached_types[type_id] = type
 
         for tag, micro_op_type in type.micro_op_types.items():
             micro_op_type.bind(None, self.obj)
 
+        self.attached_type_counts[type_id] += 1
+
     def remove_composite_type(self, type):
         type_id = id(type)
-        if self.type_references[type_id] > 0:
-            self.type_references[type_id] -= 1
-        if self.type_references[type_id] == 0:
-            del self.micro_op_types[type_id]
+        if self.attached_type_counts[type_id] > 0:
+            self.attached_type_counts[type_id] -= 1
+        if self.attached_type_counts[type_id] == 0:
+            self.cached_effective_composite_type = None
+            del self.attached_types[type_id]
+
+        for tag, micro_op_type in type.micro_op_types.items():
+            micro_op_type.unbind(None, self.obj)
 
     def get_micro_op_type(self, tag):
-        merged_micro_op_types = self.get_merged_micro_op_types()
-        return merged_micro_op_types.get(tag, None)
-#         if id(type) not in self.micro_op_types:
-#             raise FatalError()
-#         return self.micro_op_types.get(id(type)).get(tag, None)
+        effective_composite_type = self.get_effective_composite_type()
+        return effective_composite_type.micro_op_types.get(tag, None)
 
     def get_flattened_micro_op_types(self):
-        # TODO: consider replacing with self.get_merged_micro_op_types().values()
-        result = []
-        for micro_op_types in self.micro_op_types.values():
-            for micro_op_type in micro_op_types.values():
-                result.append(micro_op_type)
-        return result
-
+        return self.get_effective_composite_type().micro_op_types.values()
 
 class DefaultFactoryType(MicroOpType):
     def __init__(self, type):

@@ -40,12 +40,12 @@ def get_default_global_context():
         "static": RDHObject({
             "int": RDHObject({
                 "type": "Integer"
-            }),
+            }, debug_reason="default-global-context"),
             "var": RDHObject({
                 "type": "Inferred"
-            })
-        })
-    }, bind=DEFAULT_OBJECT_TYPE)
+            }, debug_reason="default-global-context")
+        }, debug_reason="default-global-context")
+    }, bind=DEFAULT_OBJECT_TYPE, debug_reason="default-global-context")
 
 def format_unhandled_break_type(break_type, raw_code):
     if not raw_code:

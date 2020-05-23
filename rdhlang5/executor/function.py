@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+from log import logger
 from rdhlang5.executor.exceptions import PreparationException
 from rdhlang5.executor.flow_control import BreakTypesFactory
 from rdhlang5.executor.function_type import enrich_break_type, OpenFunctionType, \
@@ -29,7 +30,7 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
 
     context = RDHObject({
         "prepare": outer_context
-    }, bind=DEFAULT_OBJECT_TYPE)
+    }, bind=DEFAULT_OBJECT_TYPE, debug_reason="static-prepare-context")
 
     static = evaluate(
         enrich_opcode(data.static, UnboundDereferenceBinder(context)),
@@ -68,8 +69,8 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
         "types": RDHObject({
             "outer": outer_type,
             "argument": argument_type
-        })
-    }, bind=DEFAULT_OBJECT_TYPE)
+        }, debug_reason="local-prepare-context")
+    }, bind=DEFAULT_OBJECT_TYPE, debug_reason="local-prepare-context")
 
     local_type = enrich_type(static.local)
     local_initializer = enrich_opcode(data.local_initializer, UnboundDereferenceBinder(context))
@@ -102,8 +103,8 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
             "outer": outer_type,
             "argument": argument_type,
             "local": local_type
-        })
-    }, bind=DEFAULT_OBJECT_TYPE)
+        }, debug_reason="code-prepare-context")
+    }, bind=DEFAULT_OBJECT_TYPE, debug_reason="code-prepare-context")
 
     code = enrich_opcode(data.code, UnboundDereferenceBinder(context))
 
@@ -149,17 +150,6 @@ class UnboundDereferenceBinder(object):
         self.context = context
         self.search_types = search_types
         self.context_type = get_context_type(self.context)
-
-#     def search_outer_type_for_reference(self, reference, outer_type, prepend_context):
-#         from rdhlang5.executor.raw_code_factories import dereference
-# 
-#         getter = outer_type.micro_op_types.get(("get", reference))
-#         if getter:
-#             return dereference(prepend_context, "outer")
-# 
-#         next_outer = outer_type.micro_op_types.get(("get", "outer"))
-#         if next_outer:
-#             return self.search_outer_type_for_reference(reference, next_outer.type, prepend_context + [ "outer" ])
 
     def search_context_type_area_for_reference(self, reference, area, context_type, prepend_context):
         from rdhlang5.executor.raw_code_factories import dereference_op, assignment_op, \
@@ -315,8 +305,10 @@ class ClosedFunction(RDHFunction):
         )
 
     def invoke(self, argument, flow_manager):
+        logger.debug("ClosedFunction")
         if not self.argument_type.is_copyable_from(get_type_of_value(argument)):
             raise FatalError()
+        logger.debug("ClosedFunction:argument_check")
 
         with flow_manager.get_next_frame(self) as frame:
             new_context = RDHObject({
@@ -327,18 +319,21 @@ class ClosedFunction(RDHFunction):
                 "types": RDHObject({
                     "outer": self.outer_type,
                     "argument": self.argument_type
-                })
+                }, debug_reason="local-initialization-context")
             }, bind=RDHObjectType({
                 "outer": self.outer_type,
                 "argument": self.argument_type,
                 "types": DEFAULT_OBJECT_TYPE
-            }))
+            }), debug_reason="local-initialization-context")
 
+            logger.debug( "ClosedFunction:local_initializer")
             local, _ = frame.step("local", lambda: evaluate(self.local_initializer, new_context, flow_manager))
 
+            logger.debug( "ClosedFunction:local_check")
             if not self.local_type.is_copyable_from(get_type_of_value(local)):
                 raise FatalError()
 
+            logger.debug( "ClosedFunction:code_context")
             new_context = RDHObject({
                 "prepare": self.prepare_context,
                 "outer": self.outer_context,
@@ -349,7 +344,7 @@ class ClosedFunction(RDHFunction):
                     "outer": self.outer_type,
                     "argument": self.argument_type,
                     "local": self.local_type
-                })
+                }, debug_reason="code-execution-context")
             }, bind=RDHObjectType({
                 "prepare": DEFAULT_OBJECT_TYPE,
                 "outer": self.outer_type,
@@ -357,8 +352,9 @@ class ClosedFunction(RDHFunction):
                 "static": DEFAULT_OBJECT_TYPE,
                 "local": self.local_type,
                 "types": DEFAULT_OBJECT_TYPE
-            }))
+            }), debug_reason="code-execution-context")
 
+            logger.debug("ClosedFunction:code_execute")
             result, _ = frame.step("code", lambda: evaluate(self.code, new_context, flow_manager))
 
         raise flow_manager.value(result, self)

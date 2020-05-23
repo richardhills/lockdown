@@ -22,28 +22,28 @@ def check_is_opcode(data):
 def type_lit(name):
     return literal_op(RDHObject({
         "type": name
-    }))
+    }, debug_reason="type-literal"))
 
 
 def unit_type(value):
     return object_template_op({
         "type": literal_op("Unit"),
         "value": literal_op(value)
-    })
+    }, debug_reason="type-literal")
 
 
 def one_of_type(types):
     return object_template_op({
         "type": literal_op("OneOf"),
         "types": list_template_op(types)
-    })
+    }, debug_reason="type-literal")
 
 
 def object_type(properties):
     return object_template_op({
         "type": literal_op("Object"),
         "properties": object_template_op(properties)
-    })
+    }, debug_reason="type-literal")
 
 def list_type(entry_types, wildcard_type):
     type = {
@@ -52,7 +52,7 @@ def list_type(entry_types, wildcard_type):
     }
     if wildcard_type:
         type["wildcard_type"] = wildcard_type
-    return object_template_op(type)
+    return object_template_op(type, debug_reason="type-literal")
 
 
 def function_type(argument_type, break_types):
@@ -62,7 +62,7 @@ def function_type(argument_type, break_types):
         "type": literal_op("Function"),
         "argument": argument_type,
         "break_types": dict_template_op(break_types)
-    })
+    }, debug_reason="type-literal")
 
 
 def build_break_types(return_type=None, exception_type=None, yield_types=None, value_type=None):
@@ -132,16 +132,16 @@ def literal_op(value):
     return RDHObject({
         "opcode": "literal",
         "value": value
-    })
+    }, debug_reason="code")
 
 
-def object_template_op(values):
+def object_template_op(values, debug_reason="code"):
     for v in values.values():
         check_is_opcode(v)
     return RDHObject({
         "opcode": "object_template",
-        "opcodes": RDHDict(values)
-    })
+        "opcodes": RDHDict(values, debug_reason=debug_reason)
+    }, debug_reason=debug_reason)
 
 
 def dict_template_op(values):
@@ -149,8 +149,8 @@ def dict_template_op(values):
         check_is_opcode(v)
     return RDHObject({
         "opcode": "dict_template",
-        "opcodes": RDHDict(values)
-    })
+        "opcodes": RDHDict(values, debug_reason="code")
+    }, debug_reason="code")
 
 
 def list_template_op(values):
@@ -159,7 +159,7 @@ def list_template_op(values):
     return RDHObject({
         "opcode": "list_template",
         "opcodes": RDHList(values)
-    })
+    }, debug_reason="code")
 
 
 def binary_integer_op(name, lvalue, rvalue):
@@ -169,7 +169,7 @@ def binary_integer_op(name, lvalue, rvalue):
         "opcode": name,
         "lvalue": lvalue,
         "rvalue": rvalue
-    })
+    }, debug_reason="code")
 
 
 def multiplication_op(lvalue, rvalue):
@@ -198,7 +198,7 @@ def comma_op(*opcodes):
     return RDHObject({
         "opcode": "comma",
         "opcodes": RDHList(opcodes)
-    })
+    }, debug_reason="code")
 
 
 def loop_op(opcode):
@@ -206,7 +206,7 @@ def loop_op(opcode):
     return RDHObject({
         "opcode": "loop",
         "code": opcode
-    })
+    }, debug_reason="code")
 
 
 def transform_op(*args):
@@ -238,7 +238,7 @@ def transform_op(*args):
     if restart:
         op["restart"] = restart
         op["restart_type"] = restart_type
-    return RDHObject(op)
+    return RDHObject(op, debug_reason="code")
 
 
 def return_op(code):
@@ -294,17 +294,17 @@ def throw_op(code):
 def context_op():
     return RDHObject({
         "opcode": "context",
-    })
+    }, debug_reason="code")
 
 
-def dereference_op(of, reference):
+def dereference_op(of, reference, **kwargs):
     check_is_opcode(of)
     check_is_opcode(reference)
-    return RDHObject({
+    return RDHObject(spread_dict({
         "opcode": "dereference",
         "of": of,
         "reference": reference
-    })
+    }, **kwargs), debug_reason="code")
 
 def dynamic_dereference_op(reference):
     if not isinstance(reference, basestring):
@@ -312,7 +312,7 @@ def dynamic_dereference_op(reference):
     return RDHObject({
         "opcode": "dynamic_dereference",
         "reference": reference
-    })
+    }, debug_reason="code")
 
 def assignment_op(of, reference, rvalue):
     check_is_opcode(of)
@@ -323,7 +323,7 @@ def assignment_op(of, reference, rvalue):
         "of": of,
         "reference": reference,
         "rvalue": rvalue
-    })
+    }, debug_reason="code")
 
 
 def condition_op(condition, when_true, when_false):
@@ -335,7 +335,7 @@ def condition_op(condition, when_true, when_false):
         "condition": condition,
         "when_true": when_true,
         "when_false": when_false
-    })
+    }, debug_reason="code")
 
 
 def prepare_op(function_expression):
@@ -343,7 +343,7 @@ def prepare_op(function_expression):
     return RDHObject({
         "opcode": "prepare",
         "code": function_expression
-    })
+    }, debug_reason="code")
 
 
 def close_op(function, context):
@@ -353,7 +353,7 @@ def close_op(function, context):
         "opcode": "close",
         "function": function,
         "outer_context": context
-    })
+    }, debug_reason="code")
 
 
 def static_op(expression):
@@ -361,7 +361,7 @@ def static_op(expression):
     return RDHObject({
         "opcode": "static",
         "code": expression
-    })
+    }, debug_reason="code")
 
 
 def invoke_op(function_expression, argument_expression=None, **kwargs):
@@ -373,7 +373,7 @@ def invoke_op(function_expression, argument_expression=None, **kwargs):
         "opcode": "invoke",
         "function": function_expression,
         "argument": argument_expression
-    }, kwargs))
+    }, kwargs), debug_reason="code")
 
 
 def match_op(value_expression, matchers):
@@ -384,11 +384,11 @@ def match_op(value_expression, matchers):
         "opcode": "match",
         "value": value_expression,
         "matchers": RDHList(matchers)
-    })
+    }, debug_reason="code")
 
 
 def nop():
-    return RDHObject({ "opcode": "nop" })
+    return RDHObject({ "opcode": "nop" }, debug_reason="code")
 
 
 def no_value_type():
@@ -437,16 +437,16 @@ def const_string_type():
     return literal_op(RDHObject({
         "type": "String",
         "const": True
-    }))
+    }, debug_reason="type-literal"))
 
 
-def unbound_dereference(name):
+def unbound_dereference(name, **kwargs):
     if not isinstance(name, basestring):
         raise FatalError()
-    return RDHObject({
+    return RDHObject(spread_dict({
         "opcode": "unbound_dereference",
         "reference": name
-    })
+    }, **kwargs), debug_reason="code")
 
 
 def unbound_assignment(name, rvalue):
@@ -457,23 +457,23 @@ def unbound_assignment(name, rvalue):
         "opcode": "unbound_assignment",
         "reference": name,
         "rvalue": rvalue
-    })
+    }, debug_reason="code")
 
 
 def prepared_function(*args):
     return close_op(static_op(prepare_op(literal_op(function_lit(*args)))), context_op())
 
 
-def dereference(*vars):
+def dereference(*vars, **kwargs):
     result = context_op()
 
     for var in vars:
         if isinstance(var, basestring):
             for v in var.split("."):
-                result = dereference_op(result, literal_op(v))
+                result = dereference_op(result, literal_op(v), **kwargs)
         elif isinstance(var, list):
             for v in var:
-                result = dereference_op(result, literal_op(v))
+                result = dereference_op(result, literal_op(v), **kwargs)
         else:
             raise FatalError(var)
 

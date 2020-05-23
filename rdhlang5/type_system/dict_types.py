@@ -640,8 +640,9 @@ class RDHDictType(CompositeType):
 
 
 class RDHDict(Composite, DictMixin, object):
-    def __init__(self, initial_data, bind=None):
+    def __init__(self, initial_data, bind=None, debug_reason=None):
         self.wrapped = dict(initial_data)
+        get_manager(self).debug_reason = debug_reason
         if isinstance(self.wrapped, RDHDict):
             raise FatalError()
         if bind:

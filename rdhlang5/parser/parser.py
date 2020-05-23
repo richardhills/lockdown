@@ -173,7 +173,7 @@ class RDHLang5Visitor(langVisitor):
         )
 
     def visitImmediateDereference(self, ctx):
-        return unbound_dereference(ctx.SYMBOL().getText())
+        return unbound_dereference(ctx.SYMBOL().getText(), **get_debug_info(ctx))
 
     def visitStaticDereference(self, ctx):
         return dereference_op(

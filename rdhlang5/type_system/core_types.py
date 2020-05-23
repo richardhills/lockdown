@@ -18,6 +18,8 @@ class Type(object):
     def is_copyable_from(self, other):
         raise NotImplementedError()
 
+    always_is_copyable_from = False
+
     def get_allowed_values(self):
         raise AllowedValuesNotAvailable(self)
 
@@ -36,6 +38,8 @@ class Type(object):
 class AnyType(Type):
     def is_copyable_from(self, other):
         return True
+
+    always_is_copyable_from = True
 
     def __repr__(self):
         return "AnyType"

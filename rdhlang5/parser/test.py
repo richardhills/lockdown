@@ -410,6 +410,38 @@ class TestMisc(TestCase):
         with self.assertRaises(PreparationException):
             bootstrap_function(code)
 
+class TestSpeed(TestCase):
+    def test_loops(self):
+        import cProfile, pstats, StringIO
+        pr = cProfile.Profile()
+        pr.enable()
+
+        code = parse("""
+            function() {
+                int i = 0, j = 0;
+                while(i < 20) {
+                    j = 0;
+                    while(j < 20) {
+                        int foo = i * j;
+                        int bar = i * j;
+                        int baz = i * j;
+                        j = j + 1;
+                    };
+                    i = i + 1;
+                };
+                return i * j;
+            }
+        """, debug=True)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.value, 20 * 20)
+
+        pr.disable()
+        s = StringIO.StringIO()
+        sortby = 'cumulative'
+        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+        ps.print_stats()
+        pr.dump_stats("loop_test")
+
 class TestEuler(TestCase):
     """
     https://projecteuler.net/
@@ -471,7 +503,6 @@ class TestEuler(TestCase):
         self.assertEquals(result.value, 6857)
 
     def test_4(self):
-        return
         import cProfile, pstats, StringIO
         pr = cProfile.Profile()
         pr.enable()
@@ -508,7 +539,7 @@ class TestEuler(TestCase):
         sortby = 'cumulative'
         ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
         ps.print_stats()
-        pr.dump_stats("profile")
+        pr.dump_stats("profile2")
 
         self.assertEquals(result.value, 6857)
 

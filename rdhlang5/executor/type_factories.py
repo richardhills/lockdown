@@ -19,7 +19,7 @@ def build_closed_function_type(data):
         RDHDict({
             mode: [ enrich_break_type(b) for b in break_types ]
             for mode, break_types in data.break_types.items()
-        }, bind=DEFAULT_DICT_TYPE)
+        }, bind=DEFAULT_DICT_TYPE, debug_reason="type")
     )
 
 def build_unit_type(data):
