@@ -40,7 +40,7 @@ def build_object_type(data):
         properties[name] = enrich_type(type)
         if getattr(type, "const", False):
             properties[name] = Const(properties[name])
-    return RDHObjectType(properties)
+    return RDHObjectType(properties, name="declared-object-type")
 
 def build_list_type(data):
     wildcard_type = getattr(data, "wildcard_type", None)

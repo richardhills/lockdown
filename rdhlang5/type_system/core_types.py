@@ -12,7 +12,7 @@ class AllowedValuesNotAvailable(Exception):
 REPLACE = InternalMarker("Replace")
 
 class Type(object):
-    __metaclass__ = ABCMeta
+#    __metaclass__ = ABCMeta
 
     @abstractmethod
     def is_copyable_from(self, other):

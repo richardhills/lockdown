@@ -5,7 +5,7 @@ from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict
 
 
 class MicroOpType(object):
-    __metaclass__ = ABCMeta
+#    __metaclass__ = ABCMeta
 
     @abstractmethod
     def replace_inferred_type(self, other_micro_op_type):

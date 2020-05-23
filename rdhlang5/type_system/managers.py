@@ -11,13 +11,18 @@ weak_objs_by_id = {}
 managers_by_id = {}
 
 
-def get_manager(obj):
+def get_manager(obj, trigger=None):
     from rdhlang5.type_system.object_types import RDHObject
     from rdhlang5.type_system.dict_types import RDHDict
     from rdhlang5.type_system.list_types import RDHList
     from rdhlang5.type_system.composites import CompositeObjectManager, CompositeType
     from rdhlang5.type_system.composites import Composite
     from rdhlang5.executor.function import *
+
+    manager = managers_by_id.get(id(obj), None)
+    if manager:
+        logger.debug( "{}:{}:{}:{}:{}".format(len(managers_by_id), trigger, id(obj), type(obj), getattr(manager, "debug_reason", None)))
+        return manager
 
     if isinstance(obj, InternalMarker):
         return None
@@ -30,12 +35,6 @@ def get_manager(obj):
 
     if isinstance(obj, Type):
         return None
-    
-    manager = managers_by_id.get(id(obj), None)
-
-    if manager:
-        logger.debug( "{}:{}:{}:{}".format(len(managers_by_id), id(obj), type(obj), getattr(manager, "debug_reason", None)))
-        return manager
 
     old_obj = obj
     if isinstance(obj, RDHObject):
@@ -92,7 +91,7 @@ def get_type_of_value(value):
     if value is NO_VALUE:
         return NoValueType()
     if isinstance(value, (RDHObject, RDHList, RDHDict)):
-        return get_manager(value).get_effective_composite_type()
+        return get_manager(value, "get_type_of_value").get_effective_composite_type()
     if isinstance(value, (RDHFunction, OpenFunction)):
         return value.get_type()
     if isinstance(value, Type):

@@ -17,20 +17,7 @@ WILDCARD = object()
 MISSING = object()
 
 def get_key_and_type(micro_op_type):
-    if isinstance(micro_op_type, (ObjectWildcardGetterType, ObjectWildcardSetterType, ObjectWildcardDeletterType)):
-        key = WILDCARD
-    elif isinstance(micro_op_type, (ObjectGetterType, ObjectSetterType, ObjectDeletterType)):
-        key = micro_op_type.key
-    else:
-        raise FatalError()
-
-    if isinstance(micro_op_type, (ObjectWildcardGetterType, ObjectGetterType, ObjectWildcardSetterType, ObjectSetterType)):
-        type = micro_op_type.type
-    else:
-        type = MISSING
-
-    return key, type
-
+    return getattr(micro_op_type, "key", None), getattr(micro_op_type, "type", None)
 
 def get_key_and_new_value(micro_op, args):
     if isinstance(micro_op, (ObjectWildcardGetter, ObjectWildcardDeletter)):
@@ -47,7 +34,7 @@ def get_key_and_new_value(micro_op, args):
     else:
         raise FatalError()
     if new_value is not None:
-        get_manager(new_value)
+        get_manager(new_value, "get_key_and_new_value")
     return key, new_value
 
 class ObjectMicroOpType(MicroOpType):
@@ -96,7 +83,7 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
             keys = target.__dict__.keys()
         for k in keys:
             value = target.__dict__[k]
-            get_manager(value)
+            get_manager(value, "ObjectWildcardGetterType.bind")
             bind_type_to_value(target, k, self.type, value)
 
     def unbind(self, key, target):
@@ -108,7 +95,6 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
             if not k in target.__dict__:
                 continue
             unbind_type_to_value(target, k, self.type, target.__dict__[k])
-
 
     def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
         default_factories = [ o for o in micro_op_types.values() if isinstance(o, DefaultFactoryType)]
@@ -155,12 +141,12 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
         if super(ObjectWildcardGetterType, self).check_for_runtime_data_conflict(obj):
             return True
 
-        if not self.key_error and get_manager(obj).default_factory is None:
+        if not self.key_error and get_manager(obj, "ObjectWildcardGetterType.check_for_runtime_data_conflict obj").default_factory is None:
             return True
 
         if not self.type_error:
             for value in obj.__dict__.values():
-                get_manager(value)
+                get_manager(value, "ObjectWildcardGetterType.check_for_runtime_data_conflict value")
                 if not self.type.is_copyable_from(get_type_of_value(value)):
                     return True
 
@@ -186,20 +172,18 @@ class ObjectWildcardGetter(MicroOp):
         self.type_error = type_error
 
     def invoke(self, key):
-        raise_micro_op_conflicts(self, [ key ], get_manager(self.target).get_flattened_micro_op_types())
+        raise_micro_op_conflicts(self, [ key ], get_manager(self.target, "ObjectWildcardGetter.invoke.1").get_flattened_micro_op_types())
 
         if key in self.target.__dict__:
             value = self.target.__dict__[key]
         else:
-            default_factory_op_type = get_manager(self.target).get_micro_op_type(("default-factory", ))
+            default_factory_op_type = get_manager(self.target, "ObjectWildcardGetter.invoke.2").get_micro_op_type(("default-factory", ))
 
             if not default_factory_op_type:
                 raise_if_safe(InvalidDereferenceKey, self.key_error)
 
             default_factory_op = default_factory_op_type.create(self.target)
             value = default_factory_op.invoke(key)
-
-        get_manager(value)
 
         type_of_value = get_type_of_value(value)
         if not self.type.is_copyable_from(type_of_value):
@@ -239,7 +223,7 @@ class ObjectGetterType(ObjectMicroOpType):
         if key is not None and key != self.key:
             return
         value = target.__dict__[self.key]
-        get_manager(value)
+        get_manager(value, "ObjectGetterType.bind")
         bind_type_to_value(target, key, self.type, value)
 
     def unbind(self, key, target):
@@ -301,10 +285,9 @@ class ObjectGetterType(ObjectMicroOpType):
         if self.key not in obj.__dict__:
             return True
         value_in_place = obj.__dict__[self.key]
-        manager = get_manager(value_in_place)
+        manager = get_manager(value_in_place, "ObjectGetterType.check_for_runtime_data_conflict")
         if manager:
             if manager.check_for_runtime_data_conflicts(self.type):
-                manager.check_for_runtime_data_conflicts(self.type)
                 return True
         else:
             type_of_value = get_type_of_value(value_in_place)
@@ -335,19 +318,17 @@ class ObjectGetter(MicroOp):
         self.type_error = type_error
 
     def invoke(self):
-        raise_micro_op_conflicts(self, [], get_manager(self.target).get_flattened_micro_op_types())
+        raise_micro_op_conflicts(self, [], get_manager(self.target, "ObjectGetter.invoke.1").get_flattened_micro_op_types())
 
         if self.key in self.target.__dict__:
             value = self.target.__dict__[self.key]
         else:
-            default_factory_op = get_manager(self.target).get_micro_op_type(("default-factory", ))
+            default_factory_op = get_manager(self.target, "ObjectGetter.invoke.2").get_micro_op_type(("default-factory", ))
 
             if default_factory_op:
                 value = default_factory_op.invoke(self.key)
             else:
                 raise_if_safe(InvalidDereferenceKey, self.key_error)
-
-        get_manager(value)
 
         type_of_value = get_type_of_value(value)
 
@@ -425,19 +406,19 @@ class ObjectWildcardSetter(MicroOp):
         self.type_error = type_error
 
     def invoke(self, key, new_value):
-        get_manager(new_value)
-        raise_micro_op_conflicts(self, [ key, new_value ], get_manager(self.target).get_flattened_micro_op_types())
+        get_manager(new_value, "ObjectWildcardSetter.invoke.1")
+        raise_micro_op_conflicts(self, [ key, new_value ], get_manager(self.target, "ObjectWildcardSetter.invoke.2").get_flattened_micro_op_types())
 
         new_value_type = get_type_of_value(new_value)
         if not self.type.is_copyable_from(new_value_type):
             raise FatalError()
 
-        for other_micro_op_type in get_manager(self.target).get_flattened_micro_op_types():
+        for other_micro_op_type in get_manager(self.target, "ObjectWildcardSetter.invoke.3").get_flattened_micro_op_types():
             other_micro_op_type.unbind(key, self.target)
 
         self.target.__dict__[key] = new_value
 
-        for other_micro_op_type in get_manager(self.target).get_flattened_micro_op_types():
+        for other_micro_op_type in get_manager(self.target, "ObjectWildcardSetter.invoke.4").get_flattened_micro_op_types():
             other_micro_op_type.bind(key, self.target)
 
 class ObjectSetterType(ObjectMicroOpType):
@@ -522,19 +503,19 @@ class ObjectSetter(MicroOp):
         self.type_error = type_error
 
     def invoke(self, new_value):
-        get_manager(new_value)
-        raise_micro_op_conflicts(self, [ new_value ], get_manager(self.target).get_flattened_micro_op_types())
+        get_manager(new_value, "ObjectSetter.invoke.1")
+        raise_micro_op_conflicts(self, [ new_value ], get_manager(self.target, "ObjectSetter.invoke.2").get_flattened_micro_op_types())
 
         new_value_type = get_type_of_value(new_value)
         if not self.type.is_copyable_from(new_value_type):
             raise FatalError()
 
-        for other_micro_op_type in get_manager(self.target).get_flattened_micro_op_types():
+        for other_micro_op_type in get_manager(self.target, "ObjectSetter.invoke.3").get_flattened_micro_op_types():
             other_micro_op_type.unbind(self.key, self.target)
 
         self.target.__dict__[self.key] = new_value
 
-        for other_micro_op_type in get_manager(self.target).get_flattened_micro_op_types():
+        for other_micro_op_type in get_manager(self.target, "ObjectSetter.invoke.4").get_flattened_micro_op_types():
             other_micro_op_type.bind(self.key, self.target)
 
 
@@ -721,13 +702,14 @@ class RDHObject(Composite, object):
             initial_data = {}
         for key, value in initial_data.items():
             self.__dict__[key] = value
-        get_manager(self).default_factory = default_factory
-        get_manager(self).debug_reason = debug_reason
+        manager = get_manager(self, "RDHObject")
+        manager.default_factory = default_factory
+        manager.debug_reason = debug_reason
         if bind:
-            get_manager(self).add_composite_type(bind)
+            manager.add_composite_type(bind)
 
     def __setattr__(self, key, value):
-        manager = get_manager(self)
+        manager = get_manager(self, "RDHObject.__setattr__")
 
         micro_op_type = manager.get_micro_op_type(("set", key))
         if micro_op_type is not None:
@@ -748,7 +730,7 @@ class RDHObject(Composite, object):
             return super(RDHObject, self).__getattribute__(key)
 
         try:
-            manager = get_manager(self)
+            manager = get_manager(self, "RDHObject.__getattr__")
 
             micro_op_type = manager.get_micro_op_type(("get", key))
             if micro_op_type is not None:

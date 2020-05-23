@@ -8,7 +8,7 @@ from rdhlang5.type_system.object_types import RDHObjectType, \
     ObjectWildcardGetterType, ObjectWildcardSetterType
 
 
-DEFAULT_OBJECT_TYPE = RDHObjectType({}, None)
+DEFAULT_OBJECT_TYPE = RDHObjectType(name="default-object-type")
 DEFAULT_LIST_TYPE = RDHListType([], None)
 DEFAULT_DICT_TYPE = RDHDictType()
 

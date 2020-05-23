@@ -72,9 +72,16 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
         }, debug_reason="local-prepare-context")
     }, bind=DEFAULT_OBJECT_TYPE, debug_reason="local-prepare-context")
 
+    get_manager(context)._context_type = RDHObjectType({
+        "outer": outer_type,
+        "argument": argument_type
+    }, name="local-prepare-context-type")
+
     local_type = enrich_type(static.local)
     local_initializer = enrich_opcode(data.local_initializer, UnboundDereferenceBinder(context))
     actual_local_type, local_other_break_types = get_expression_break_types(local_initializer, context, flow_manager)
+
+    get_manager(context).remove_composite_type(DEFAULT_OBJECT_TYPE)
 
     if actual_local_type is MISSING:
         raise PreparationException()
@@ -106,9 +113,17 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
         }, debug_reason="code-prepare-context")
     }, bind=DEFAULT_OBJECT_TYPE, debug_reason="code-prepare-context")
 
+    get_manager(context)._context_type = RDHObjectType({
+        "outer": outer_type,
+        "argument": argument_type,
+        "local": local_type
+    }, name="code-prepare-context-type")
+
     code = enrich_opcode(data.code, UnboundDereferenceBinder(context))
 
     code_break_types = code.get_break_types(context, flow_manager)
+
+    get_manager(context).remove_composite_type(DEFAULT_OBJECT_TYPE)
 
     actual_break_types_factory.merge(code_break_types)
 
@@ -243,7 +258,7 @@ class UnboundDereferenceBinder(object):
                 get_manager(new_assignment).add_composite_type(DEFAULT_OBJECT_TYPE)
                 return new_assignment
             else:
-                raise FatalError() # TODO, dynamic dereference
+                raise FatalError() # TODO, dynamic assignment
 
         return expression
 
@@ -311,6 +326,12 @@ class ClosedFunction(RDHFunction):
         logger.debug("ClosedFunction:argument_check")
 
         with flow_manager.get_next_frame(self) as frame:
+            new_context_type = RDHObjectType({
+                "outer": self.outer_type,
+                "argument": self.argument_type,
+                "types": DEFAULT_OBJECT_TYPE
+            }, name="local-initialization-context-type")
+
             new_context = RDHObject({
                 "prepare": self.prepare_context,
                 "outer": self.outer_context,
@@ -320,18 +341,27 @@ class ClosedFunction(RDHFunction):
                     "outer": self.outer_type,
                     "argument": self.argument_type
                 }, debug_reason="local-initialization-context")
-            }, bind=RDHObjectType({
-                "outer": self.outer_type,
-                "argument": self.argument_type,
-                "types": DEFAULT_OBJECT_TYPE
-            }), debug_reason="local-initialization-context")
+            }, bind=new_context_type, debug_reason="local-initialization-context")
+
+            get_manager(new_context)._context_type = new_context_type
 
             logger.debug( "ClosedFunction:local_initializer")
             local, _ = frame.step("local", lambda: evaluate(self.local_initializer, new_context, flow_manager))
 
+            get_manager(new_context).remove_composite_type(new_context_type)
+
             logger.debug( "ClosedFunction:local_check")
             if not self.local_type.is_copyable_from(get_type_of_value(local)):
                 raise FatalError()
+
+            new_context_type = RDHObjectType({
+                "prepare": DEFAULT_OBJECT_TYPE,
+                "outer": self.outer_type,
+                "argument": self.argument_type,
+                "static": DEFAULT_OBJECT_TYPE,
+                "local": self.local_type,
+                "types": DEFAULT_OBJECT_TYPE
+            }, name="code-execution-context-type")
 
             logger.debug( "ClosedFunction:code_context")
             new_context = RDHObject({
@@ -345,16 +375,14 @@ class ClosedFunction(RDHFunction):
                     "argument": self.argument_type,
                     "local": self.local_type
                 }, debug_reason="code-execution-context")
-            }, bind=RDHObjectType({
-                "prepare": DEFAULT_OBJECT_TYPE,
-                "outer": self.outer_type,
-                "argument": self.argument_type,
-                "static": DEFAULT_OBJECT_TYPE,
-                "local": self.local_type,
-                "types": DEFAULT_OBJECT_TYPE
-            }), debug_reason="code-execution-context")
+            }, bind=new_context_type, debug_reason="code-execution-context")
+
+            # In conjunction with get_context_type, for performance
+            get_manager(new_context)._context_type = new_context_type
 
             logger.debug("ClosedFunction:code_execute")
             result, _ = frame.step("code", lambda: evaluate(self.code, new_context, flow_manager))
+
+            get_manager(new_context).remove_composite_type(new_context_type)
 
         raise flow_manager.value(result, self)

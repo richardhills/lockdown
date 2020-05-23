@@ -498,6 +498,6 @@ def parse(code, debug=False):
     visitor = RDHLang5Visitor()
     ast = visitor.visit(ast)
     if debug:
-        get_manager(ast).add_composite_type(DEFAULT_OBJECT_TYPE)
+        get_manager(ast, "parse-code").add_composite_type(DEFAULT_OBJECT_TYPE)
         ast.raw_code = code
     return ast

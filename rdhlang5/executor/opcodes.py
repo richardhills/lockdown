@@ -87,7 +87,7 @@ class Opcode(object):
     def __init__(self, data, visitor):
         self.data = data
 
-    __metaclass__ = ABCMeta
+#    __metaclass__ = ABCMeta
 
     @abstractmethod
     def get_break_types(self, context, flow_manager, immediate_context=None):
@@ -309,7 +309,7 @@ def get_context_type(context):
             value_type["prepare"] = get_type_of_value(context.prepare)
         if hasattr(context, "static"):
             value_type["static"] = get_type_of_value(context.static)
-        context_manager._context_type = RDHObjectType(value_type)
+        context_manager._context_type = RDHObjectType(value_type, name="context-type-{}".format(context_manager.debug_reason))
 
     return context_manager._context_type
 

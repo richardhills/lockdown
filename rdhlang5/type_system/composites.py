@@ -69,7 +69,6 @@ class CompositeType(Type):
         else:
             return self
 
-
     def get_micro_op_type(self, tag):
         return self.micro_op_types.get(tag, None)
 
@@ -106,6 +105,9 @@ class CompositeType(Type):
 
         if not isinstance(other, CompositeType):
             return False
+
+        if self.micro_op_types is other.micro_op_types:
+            return True
 
         try:
             cache_started_empty = False
@@ -194,10 +196,8 @@ def bind_type_to_value(source, key, type, value):
     if not isinstance(value, Composite):
         return
 
-    from rdhlang5.type_system.object_types import RDHObject
-
-    manager = get_manager(value)
-    source_manager = get_manager(source)
+    manager = get_manager(value, "bind_type_to_value.value")
+    source_manager = get_manager(source, "bind_type_to_value.source")
 
     something_worked = False
     for sub_type in unwrap_types(type):
@@ -217,9 +217,9 @@ def bind_type_to_value(source, key, type, value):
 def unbind_type_to_value(source, key, type, value):
     if not isinstance(value, Composite):
         return
-    source_manager = get_manager(source)
+    source_manager = get_manager(source, "unbind_type_to_value.value")
     for sub_type in source_manager.child_type_references[key]:
-        get_manager(value).remove_composite_type(sub_type)
+        get_manager(value, "unbind_type_to_value.sub_type").remove_composite_type(sub_type)
     source_manager.child_type_references[key] = []
 
 
@@ -273,7 +273,6 @@ class CompositeObjectManager(object):
 
         if new:
             if self.check_for_runtime_data_conflicts(type):
-                self.check_for_runtime_data_conflicts(type)
                 raise MicroOpTypeConflict()
 
             self.check_for_runtime_micro_op_conflicts(type)
@@ -281,8 +280,8 @@ class CompositeObjectManager(object):
             self.cached_effective_composite_type = None
             self.attached_types[type_id] = type
 
-        for tag, micro_op_type in type.micro_op_types.items():
-            micro_op_type.bind(None, self.obj)
+            for tag, micro_op_type in type.micro_op_types.items():
+                micro_op_type.bind(None, self.obj)
 
         self.attached_type_counts[type_id] += 1
 
@@ -290,12 +289,16 @@ class CompositeObjectManager(object):
         type_id = id(type)
         if self.attached_type_counts[type_id] > 0:
             self.attached_type_counts[type_id] -= 1
-        if self.attached_type_counts[type_id] == 0:
+
+        dead = self.attached_type_counts[type_id] == 0
+
+        if dead:
             self.cached_effective_composite_type = None
             del self.attached_types[type_id]
+            del self.attached_type_counts[type_id]
 
-        for tag, micro_op_type in type.micro_op_types.items():
-            micro_op_type.unbind(None, self.obj)
+            for tag, micro_op_type in type.micro_op_types.items():
+                micro_op_type.unbind(None, self.obj)
 
     def get_micro_op_type(self, tag):
         effective_composite_type = self.get_effective_composite_type()
@@ -333,7 +336,7 @@ class DefaultFactoryType(MicroOpType):
         pass
 
     def check_for_runtime_data_conflict(self, obj):
-        if get_manager(obj).default_factory is None:
+        if get_manager(obj, "defaultfactory.check_for_runtime_data_conflict").default_factory is None:
             raise MicroOpTypeConflict()
 
 class DefaultFactory(MicroOp):
@@ -341,4 +344,4 @@ class DefaultFactory(MicroOp):
         self.target = target
 
     def invoke(self, key):
-        return get_manager(self.target).default_factory(self.target, key)
+        return get_manager(self.target, "defaultfactory.invoke").default_factory(self.target, key)
