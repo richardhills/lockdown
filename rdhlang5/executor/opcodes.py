@@ -29,11 +29,9 @@ from rdhlang5.utils import MISSING, NO_VALUE, is_debug
 
 def evaluate(opcode, context, flow_manager, immediate_context=None):
     with flow_manager.capture("value", { "out": AnyType() }) as new_flow_manager:
-        result = opcode.jump(context, new_flow_manager, immediate_context)
-        if not isinstance(result, BreakException):
-            raise FatalError()
-        if not new_flow_manager.attempt_close(result):
-            raise result
+        mode, value, opcode = opcode.jump(context, new_flow_manager, immediate_context)
+        if not new_flow_manager.attempt_close(mode, value):
+            raise BreakException(mode, value, opcode, False)
     return new_flow_manager.result
 
 
@@ -622,9 +620,9 @@ class TransformOp(Opcode):
 
             if self.expression:
                 with flow_manager.capture(self.input, { "out": AnyType() }) as new_flow_manager:
-                    result = self.expression.jump(context, new_flow_manager)
-                    if not new_flow_manager.attempt_close(result):
-                        raise result
+                    mode, value, opcode = self.expression.jump(context, new_flow_manager)
+                    if not new_flow_manager.attempt_close(mode, value):
+                        raise BreakException(mode, value, opcode, False)
                 return flow_manager.unwind(self.output, new_flow_manager.result, self, can_restart)
             else:
                 return flow_manager.unwind(self.output, NO_VALUE, self, can_restart)

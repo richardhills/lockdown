@@ -81,13 +81,13 @@ class FlowManager(object):
         if self._result is not MISSING:
             raise FatalError()
         try:
-            result = self.callback(self)
-            if self.attempt_close(result):
+            mode, value, opcode = self.callback(self)
+            if self.attempt_close(mode, value):
                 return
             else:
-                raise result
+                raise BreakException(mode, value, opcode, False)
         except BreakException as e:
-            if self.attempt_close(e):
+            if self.attempt_close(e.mode, e.value):
                 return
             else:
                 raise
@@ -145,11 +145,10 @@ class FlowManager(object):
             else:
                 raise FatalError("Can not unwind {} with type {}, allowed {}".format(mode, type_of_value, self.allowed_break_types))
 
-        result = BreakException(mode, value, opcode, can_restart)
         if is_debug() or can_restart:
-            raise result
+            raise BreakException(mode, value, opcode, can_restart)
         else:
-            return result
+            return (mode, value, opcode)
 
     def value(self, value, opcode):
         return self.unwind("value", value, opcode, False)
@@ -163,15 +162,15 @@ class FlowManager(object):
     def yield_(self, value, opcode):
         return self.unwind("yield", value, opcode, True)
 
-    def attempt_close(self, break_exception):
+    def attempt_close(self, mode, value):
         if self._result is not MISSING:
             raise FatalError()
         accepted_out_type = self.our_break_types["out"]
-        if break_exception.mode == self.our_break_mode and (
+        if mode == self.our_break_mode and (
             accepted_out_type.always_is_copyable_from
-            or accepted_out_type.is_copyable_from(get_type_of_value(break_exception.value))
+            or accepted_out_type.is_copyable_from(get_type_of_value(value))
         ):
-            self._result = break_exception.value
+            self._result = value
             if "in" in self.our_break_types:
                 self._restart_continuation = self.frame_manager.create_continuation(self.callback, self.our_break_types["in"])
             return True
@@ -187,7 +186,7 @@ class FlowManager(object):
 
     def __exit__(self, exc_type, exc_value, traceback):
         if isinstance(exc_value, BreakException):
-            return self.attempt_close(exc_value)
+            return self.attempt_close(exc_value.mode, exc_value.value)
         if self._result is MISSING and exc_value is None and not self.top_level:
             raise FatalError()
 

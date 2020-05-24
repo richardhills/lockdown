@@ -6,7 +6,8 @@ from _collections import defaultdict
 from munch import munchify
 from pip._vendor.contextlib2 import ExitStack
 
-from rdhlang5.executor.flow_control import FrameManager, FlowManager
+from rdhlang5.executor.flow_control import FrameManager, FlowManager,\
+    BreakException
 from rdhlang5.executor.function import prepare
 from rdhlang5.type_system.core_types import AnyType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE
@@ -113,7 +114,8 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False)
             raise BootstrapException("\n\n".join(error_msgs))
 
         closed_function = open_function.close(context)
-        raise closed_function.invoke(argument, break_manager)
+        mode, value, opcode = closed_function.invoke(argument, break_manager)
+        raise BreakException(mode, value, opcode, False)
 
     for mode, break_managers in break_managers.items():
         for break_manager in break_managers:
