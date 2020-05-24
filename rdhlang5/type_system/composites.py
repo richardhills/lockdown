@@ -9,6 +9,7 @@ from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict
 from rdhlang5.type_system.managers import get_manager
 from rdhlang5.type_system.micro_ops import MicroOpType, \
     MicroOp, merge_composite_types
+from rdhlang5.utils import is_debug
 
 
 class InferredType(Type):
@@ -85,14 +86,25 @@ class CompositeType(Type):
         for our_tag, our_micro_op in self.micro_op_types.items():
             their_micro_op = other.micro_op_types.get(our_tag, None)
 
-            no_initial_data_to_make_safe = not other.initial_data or our_micro_op.check_for_runtime_data_conflict(other.initial_data)
-            if no_initial_data_to_make_safe: # and not our_micro_op.key_error:
+            if True:
+                only_safe_with_initial_data = False
                 if their_micro_op is None:
-                    our_micro_op.check_for_runtime_data_conflict(other.initial_data)
-                    return False
-                if not our_micro_op.can_be_derived_from(their_micro_op):
-                    our_micro_op.can_be_derived_from(their_micro_op)
-                    return False
+                    only_safe_with_initial_data = True
+                if their_micro_op and not our_micro_op.can_be_derived_from(their_micro_op):
+                    only_safe_with_initial_data = True
+
+                if only_safe_with_initial_data:
+                    if not other.initial_data:
+                        return False
+                    if our_micro_op.check_for_runtime_data_conflict(other.initial_data):
+                        return False
+            else:
+                no_initial_data_to_make_safe = not other.initial_data or our_micro_op.check_for_runtime_data_conflict(other.initial_data)
+                if no_initial_data_to_make_safe:
+                    if their_micro_op is None:
+                        return False
+                    if not our_micro_op.can_be_derived_from(their_micro_op):
+                        return False
 
         return True
 
@@ -263,16 +275,17 @@ class CompositeObjectManager(object):
                 self.obj, new_merged_composite_type.micro_op_types
             )
 
-    def add_composite_type(self, type):
+    def add_composite_type(self, type, caller_has_verified_type=False):
         type_id = id(type)
 
         new = type_id not in self.attached_types
 
         if new:
-            if self.check_for_runtime_data_conflicts(type):
-                raise MicroOpTypeConflict()
+            if is_debug() or not caller_has_verified_type:
+                if self.check_for_runtime_data_conflicts(type):
+                    raise MicroOpTypeConflict()
 
-            self.check_for_runtime_micro_op_conflicts(type)
+                self.check_for_runtime_micro_op_conflicts(type)
 
             self.cached_effective_composite_type = None
             self.attached_types[type_id] = type
@@ -340,5 +353,5 @@ class DefaultFactory(MicroOp):
     def __init__(self, target):
         self.target = target
 
-    def invoke(self, key):
+    def invoke(self, key, **kwargs):
         return get_manager(self.target, "defaultfactory.invoke").default_factory(self.target, key)

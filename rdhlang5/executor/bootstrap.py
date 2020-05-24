@@ -113,7 +113,7 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False)
             raise BootstrapException("\n\n".join(error_msgs))
 
         closed_function = open_function.close(context)
-        closed_function.invoke(argument, break_manager)
+        raise closed_function.invoke(argument, break_manager)
 
     for mode, break_managers in break_managers.items():
         for break_manager in break_managers:

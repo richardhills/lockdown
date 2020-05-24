@@ -21,7 +21,7 @@ from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
 from rdhlang5.type_system.list_types import RDHList, RDHListType
 from rdhlang5.type_system.managers import get_manager
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType
-from rdhlang5.utils import NO_VALUE
+from rdhlang5.utils import NO_VALUE, set_debug
 
 
 class TestPreparedFunction(TestCase):
@@ -982,4 +982,5 @@ class TestContinuations(TestCase):
         self.assertEquals(returner.result, 42)
 
 if __name__ == '__main__':
+    set_debug(True)
     main()

@@ -5,7 +5,7 @@ from abc import abstractmethod, ABCMeta
 
 from log import logger
 from rdhlang5.executor.exceptions import PreparationException
-from rdhlang5.executor.flow_control import BreakTypesFactory
+from rdhlang5.executor.flow_control import BreakTypesFactory, BreakException
 from rdhlang5.executor.function_type import OpenFunctionType, ClosedFunctionType
 from rdhlang5.executor.type_factories import enrich_type
 from rdhlang5.type_system.composites import CompositeType
@@ -29,8 +29,11 @@ from rdhlang5.utils import MISSING, NO_VALUE
 
 def evaluate(opcode, context, flow_manager, immediate_context=None):
     with flow_manager.capture("value", { "out": AnyType() }) as new_flow_manager:
-        opcode.jump(context, new_flow_manager, immediate_context)
-        raise FatalError()
+        result = opcode.jump(context, new_flow_manager, immediate_context)
+        if not isinstance(result, BreakException):
+            raise FatalError()
+        if not new_flow_manager.attempt_close(result):
+            raise result
     return new_flow_manager.result
 
 
@@ -382,12 +385,12 @@ class DereferenceOp(Opcode):
                 direct_micro_op_type = manager.get_micro_op_type(("get", reference))
                 if direct_micro_op_type:
                     micro_op = direct_micro_op_type.create(of)
-                    return flow_manager.value(micro_op.invoke(), self)
+                    return flow_manager.value(micro_op.invoke(trust_caller=True), self)
 
                 wildcard_micro_op_type = manager.get_micro_op_type(("get-wildcard",))
                 if wildcard_micro_op_type:
                     micro_op = wildcard_micro_op_type.create(of)
-                    return flow_manager.value(micro_op.invoke(reference), self)
+                    return flow_manager.value(micro_op.invoke(reference, trust_caller=True), self)
 
                 raise flow_manager.exception(self.INVALID_DEREFERENCE(), self)
             except InvalidDereferenceType:
@@ -476,7 +479,7 @@ class AssignmentOp(Opcode):
             rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, flow_manager))
 
             if reference in ("result", "test", "i", "j", "testResult"):
-                logger.debug( "{} = {}".format(reference, rvalue))
+                logger.debug("{} = {}".format(reference, rvalue))
 
             manager = get_manager(of)
 
@@ -487,7 +490,7 @@ class AssignmentOp(Opcode):
                         raise flow_manager.exception(self.INVALID_RVALUE(), self)
 
                     micro_op = direct_micro_op_type.create(of)
-                    return flow_manager.value(micro_op.invoke(rvalue), self)
+                    return flow_manager.value(micro_op.invoke(rvalue, trust_caller=True), self)
 
                 wildcard_micro_op_type = manager.get_micro_op_type(("set-wildcard",))
                 if wildcard_micro_op_type:
@@ -495,7 +498,7 @@ class AssignmentOp(Opcode):
                         raise flow_manager.exception(self.INVALID_RVALUE(), self)
 
                     micro_op = wildcard_micro_op_type.create(of)
-                    return flow_manager.value(micro_op.invoke(reference, rvalue), self)
+                    return flow_manager.value(micro_op.invoke(reference, rvalue, trust_caller=True), self)
 
                 raise flow_manager.exception(self.INVALID_LVALUE(), self)
             except InvalidAssignmentType:
@@ -538,13 +541,13 @@ def BinaryOp(name, func, argument_type, result_type):
                 def get_lvalue():
                     lvalue, _ = frame.step("lvalue", lambda: evaluate(self.lvalue, context, break_manager))
                     if not argument_type.is_copyable_from(get_type_of_value(lvalue)):
-                        break_manager.exception(self.MISSING_OPERANDS(), self)
+                        raise break_manager.exception(self.MISSING_OPERANDS(), self)
                     return lvalue
     
                 def get_rvalue():
                     rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, break_manager))
                     if not argument_type.is_copyable_from(get_type_of_value(rvalue)):
-                        break_manager.exception(self.MISSING_OPERANDS(), self)
+                        raise break_manager.exception(self.MISSING_OPERANDS(), self)
                     return rvalue
 
                 return break_manager.value(func(get_lvalue, get_rvalue), self)
@@ -593,24 +596,25 @@ class TransformOp(Opcode):
             break_types.add(self.restart, restart_type)
         return break_types.build()
 
-    def jump(self, context, break_manager, immediate_context=None):
-        with break_manager.get_next_frame(self) as frame:
+    def jump(self, context, flow_manager, immediate_context=None):
+        with flow_manager.get_next_frame(self) as frame:
             if frame.has_restart_value():
                 restart_value = frame.pop_restart_value()
-                restart_type = enrich_type(evaluate(self.restart_type, context, break_manager))
+                restart_type = enrich_type(evaluate(self.restart_type, context, flow_manager))
                 if not restart_type.is_copyable_from(get_type_of_value(restart_value)):
                     raise FatalError()
-                raise break_manager.unwind(self.restart, restart_value, self, False)
+                raise flow_manager.unwind(self.restart, restart_value, self, False)
 
             can_restart = self.restart is not None
 
             if self.expression:
-                with break_manager.capture(self.input, { "out": AnyType() }) as new_break_manager:
-                    self.expression.jump(context, new_break_manager)
-
-                raise break_manager.unwind(self.output, new_break_manager.result, self, can_restart)
+                with flow_manager.capture(self.input, { "out": AnyType() }) as new_flow_manager:
+                    result = self.expression.jump(context, new_flow_manager)
+                    if not new_flow_manager.attempt_close(result):
+                        raise result
+                return flow_manager.unwind(self.output, new_flow_manager.result, self, can_restart)
             else:
-                raise break_manager.unwind(self.output, NO_VALUE, self, can_restart)
+                return flow_manager.unwind(self.output, NO_VALUE, self, can_restart)
         raise FatalError()
 
 
@@ -734,7 +738,7 @@ class PrepareOp(Opcode):
 
         function = prepare(function_data, context, flow_manager, immediate_context)
 
-        flow_manager.value(function, self)
+        return flow_manager.value(function, self)
 
 
 class CloseOp(Opcode):
@@ -787,7 +791,7 @@ class CloseOp(Opcode):
             open_function.outer_type.is_copyable_from(get_type_of_value(outer_context))
             flow_manager.exception(self.INVALID_OUTER_CONTEXT(), self)
 
-        flow_manager.value(open_function.close(outer_context), self)
+        return flow_manager.value(open_function.close(outer_context), self)
 
 
 class StaticOp(Opcode):
@@ -805,7 +809,7 @@ class StaticOp(Opcode):
             raise PreparationException(e)
 
     def jump(self, context, flow_manager, immediate_context=None):
-        flow_manager.value(self.value, self)
+        return flow_manager.value(self.value, self)
 
 
 class InvokeOp(Opcode):
@@ -861,7 +865,7 @@ class InvokeOp(Opcode):
         if not function.get_type().argument_type.is_copyable_from(get_type_of_value(argument)):
             flow_manager.exception(self.INVALID_ARGUMENT_TYPE(), self) 
         logger.debug("Invoke:jump:invoke")
-        function.invoke(argument, flow_manager)
+        return function.invoke(argument, flow_manager)
 
         raise FatalError()
 
@@ -910,9 +914,9 @@ class MatchOp(Opcode):
             for index, matcher in enumerate(self.matchers):
                 matcher_function, _ = frame.step(index, lambda: evaluate(matcher, context, flow_manager))
                 if matcher_function.argument_type.is_copyable_from(value_type):
-                    matcher_function.invoke(value, flow_manager)
+                    return matcher_function.invoke(value, flow_manager)
             else:
-                flow_manager.exception(self.NO_MATCH(), self)
+                return flow_manager.exception(self.NO_MATCH(), self)
 
         raise FatalError()
 

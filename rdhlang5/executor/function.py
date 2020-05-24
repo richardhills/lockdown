@@ -70,7 +70,11 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
             "outer": outer_type,
             "argument": argument_type
         }, debug_reason="local-prepare-context")
-    }, bind=DEFAULT_OBJECT_TYPE, debug_reason="local-prepare-context")
+    },
+        bind=DEFAULT_OBJECT_TYPE,
+        instantiator_has_verified_bind=True,
+        debug_reason="local-prepare-context"
+    )
 
     get_manager(context)._context_type = RDHObjectType({
         "outer": outer_type,
@@ -111,7 +115,11 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
             "argument": argument_type,
             "local": local_type
         }, debug_reason="code-prepare-context")
-    }, bind=DEFAULT_OBJECT_TYPE, debug_reason="code-prepare-context")
+    },
+        bind=DEFAULT_OBJECT_TYPE,
+        instantiator_has_verified_bind=True,
+        debug_reason="code-prepare-context"
+    )
 
     get_manager(context)._context_type = RDHObjectType({
         "outer": outer_type,
@@ -341,7 +349,11 @@ class ClosedFunction(RDHFunction):
                     "outer": self.outer_type,
                     "argument": self.argument_type
                 }, debug_reason="local-initialization-context")
-            }, bind=new_context_type, debug_reason="local-initialization-context")
+            },
+                bind=new_context_type,
+                instantiator_has_verified_bind=True,
+                debug_reason="local-initialization-context"
+            )
 
             get_manager(new_context)._context_type = new_context_type
 
@@ -375,7 +387,11 @@ class ClosedFunction(RDHFunction):
                     "argument": self.argument_type,
                     "local": self.local_type
                 }, debug_reason="code-execution-context")
-            }, bind=new_context_type, debug_reason="code-execution-context")
+            },
+                bind=new_context_type,
+                instantiator_has_verified_bind=True,
+                debug_reason="code-execution-context"
+            )
 
             # In conjunction with get_context_type, for performance
             get_manager(new_context)._context_type = new_context_type
@@ -385,4 +401,4 @@ class ClosedFunction(RDHFunction):
 
             get_manager(new_context).remove_composite_type(new_context_type)
 
-        raise flow_manager.value(result, self)
+        return flow_manager.value(result, self)

@@ -90,10 +90,11 @@ def get_type_of_value(value):
         return NoValueType()
     if value is NO_VALUE:
         return NoValueType()
-    if isinstance(value, (RDHObject, RDHList, RDHDict)):
-        return get_manager(value, "get_type_of_value").get_effective_composite_type()
     if isinstance(value, (RDHFunction, OpenFunction)):
         return value.get_type()
     if isinstance(value, Type):
         return NoValueType()
+    manager = get_manager(value, "get_type_of_value")
+    if manager:
+        return manager.get_effective_composite_type()
     raise InvalidData(type(value), value)

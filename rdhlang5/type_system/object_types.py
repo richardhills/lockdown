@@ -11,6 +11,7 @@ from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict, \
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.micro_ops import MicroOpType, MicroOp, \
     raise_micro_op_conflicts
+from rdhlang5.utils import is_debug
 
 
 WILDCARD = object()
@@ -162,7 +163,6 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
 
         if not self.type_error:
             for value in obj.__dict__.values():
-                get_manager(value, "ObjectWildcardGetterType.check_for_runtime_data_conflict value")
                 if not self.type.is_copyable_from(get_type_of_value(value)):
                     return True
 
@@ -187,8 +187,9 @@ class ObjectWildcardGetter(MicroOp):
         self.key_error = key_error
         self.type_error = type_error
 
-    def invoke(self, key):
-        raise_micro_op_conflicts(self, [ key ], get_manager(self.target, "ObjectWildcardGetter.invoke.1").get_flattened_micro_op_types())
+    def invoke(self, key, trust_caller=False, **kwargs):
+        if is_debug() or not trust_caller or self.key_error or self.type_error:
+            raise_micro_op_conflicts(self, [ key ], get_manager(self.target, "ObjectWildcardGetter.invoke.1").get_flattened_micro_op_types())
 
         if key in self.target.__dict__:
             value = self.target.__dict__[key]
@@ -201,9 +202,11 @@ class ObjectWildcardGetter(MicroOp):
             default_factory_op = default_factory_op_type.create(self.target)
             value = default_factory_op.invoke(key)
 
-        type_of_value = get_type_of_value(value)
-        if not self.type.is_copyable_from(type_of_value):
-            raise raise_if_safe(InvalidDereferenceType, self.type_error)
+        if is_debug() or self.type_error:
+            type_of_value = get_type_of_value(value)
+            if not self.type.is_copyable_from(type_of_value):
+                raise raise_if_safe(InvalidDereferenceType, self.type_error)
+
         return value
 
 class ObjectGetterType(ObjectMicroOpType):
@@ -333,24 +336,26 @@ class ObjectGetter(MicroOp):
         self.key_error = key_error
         self.type_error = type_error
 
-    def invoke(self):
-        raise_micro_op_conflicts(self, [], get_manager(self.target, "ObjectGetter.invoke.1").get_flattened_micro_op_types())
+    def invoke(self, **kwargs):
+        target_manager = get_manager(self.target, "ObjectGetter.invoke")
+        if is_debug() or self.key_error or self.type_error:
+            raise_micro_op_conflicts(self, [], target_manager.get_flattened_micro_op_types())
 
         if self.key in self.target.__dict__:
             value = self.target.__dict__[self.key]
         else:
-            default_factory_op = get_manager(self.target, "ObjectGetter.invoke.2").get_micro_op_type(("default-factory", ))
+            default_factory_op = target_manager.get_micro_op_type(("default-factory", ))
 
             if default_factory_op:
                 value = default_factory_op.invoke(self.key)
             else:
                 raise_if_safe(InvalidDereferenceKey, self.key_error)
 
-        type_of_value = get_type_of_value(value)
+        if is_debug() or self.type_error:
+            type_of_value = get_type_of_value(value)
 
-        if not self.type.is_copyable_from(type_of_value):
-            self.type.is_copyable_from(type_of_value)
-            raise raise_if_safe(InvalidDereferenceType, self.type_error)
+            if not self.type.is_copyable_from(type_of_value):
+                raise raise_if_safe(InvalidDereferenceType, self.type_error)
 
         return value
 
@@ -421,13 +426,14 @@ class ObjectWildcardSetter(MicroOp):
         self.key_error = key_error
         self.type_error = type_error
 
-    def invoke(self, key, new_value):
-        get_manager(new_value, "ObjectWildcardSetter.invoke.new_value")
-        target_manager = get_manager(self.target, "ObjectWildcardSetter.invoke.target")
-        raise_micro_op_conflicts(self, [ key, new_value ], target_manager.get_flattened_micro_op_types())
-
+    def invoke(self, key, new_value, trust_caller=False, **kwargs):
         new_value_type = get_type_of_value(new_value)
-        if not self.type.is_copyable_from(new_value_type):
+        target_manager = get_manager(self.target, "ObjectWildcardSetter.invoke.target")
+
+        if is_debug() or not trust_caller or self.key_error or self.type_error:
+            raise_micro_op_conflicts(self, [ key, new_value ], target_manager.get_flattened_micro_op_types())
+
+        if (is_debug() or not trust_caller) and not self.type.is_copyable_from(new_value_type):
             raise FatalError()
 
         for other_micro_op_type in target_manager.get_flattened_micro_op_types():
@@ -519,13 +525,14 @@ class ObjectSetter(MicroOp):
         self.key_error = key_error
         self.type_error = type_error
 
-    def invoke(self, new_value):
-        get_manager(new_value, "ObjectSetter.invoke.new_value")
-        target_manager = get_manager(self.target, "ObjectSetter.invoke.target")
-        raise_micro_op_conflicts(self, [ new_value ], target_manager.get_flattened_micro_op_types())
-
+    def invoke(self, new_value, trust_caller=False, **kwargs):
         new_value_type = get_type_of_value(new_value)
-        if not self.type.is_copyable_from(new_value_type):
+        target_manager = get_manager(self.target, "ObjectSetter.invoke.target")
+
+        if is_debug() or not trust_caller or self.key_error or self.type_error:
+            raise_micro_op_conflicts(self, [ new_value ], target_manager.get_flattened_micro_op_types())
+
+        if (is_debug() or not trust_caller) and not self.type.is_copyable_from(new_value_type):
             raise FatalError()
 
         for other_micro_op_type in target_manager.get_flattened_micro_op_types():
@@ -598,9 +605,11 @@ class ObjectWildcardDeletter(MicroOp):
         self.target = target
         self.key_error = key_error
 
-    def invoke(self, key):
+    def invoke(self, key, **kwargs):
         target_manager = get_manager(self.target)
-        raise_micro_op_conflicts(self, [ key ], target_manager.get_flattened_micro_op_types())
+
+        if is_debug() or self.key_error:
+            raise_micro_op_conflicts(self, [ key ], target_manager.get_flattened_micro_op_types())
 
         for other_micro_op_type in target_manager.get_flattened_micro_op_types():
             other_micro_op_type.unbind(key, target_manager)
@@ -663,9 +672,11 @@ class ObjectDeletter(MicroOp):
         self.key = key
         self.key_error = key_error
 
-    def invoke(self):
+    def invoke(self, **kwargs):
         target_manager = get_manager(self.target)
-        raise_micro_op_conflicts(self, [ ], target_manager.get_flattened_micro_op_types())
+
+        if self.key_error:
+            raise_micro_op_conflicts(self, [ ], target_manager.get_flattened_micro_op_types())
 
         for other_micro_op_type in target_manager.get_flattened_micro_op_types():
             other_micro_op_type.unbind(self.key, target_manager)
@@ -717,7 +728,7 @@ class DefaultDictType(CompositeType):
         super(DefaultDictType, self).__init__(micro_ops)
 
 class RDHObject(Composite, object):
-    def __init__(self, initial_data=None, default_factory=None, bind=None, debug_reason=None):
+    def __init__(self, initial_data=None, default_factory=None, bind=None, instantiator_has_verified_bind=False, debug_reason=None):
         if initial_data is None:
             initial_data = {}
         for key, value in initial_data.items():
@@ -726,7 +737,7 @@ class RDHObject(Composite, object):
         manager.default_factory = default_factory
         manager.debug_reason = debug_reason
         if bind:
-            manager.add_composite_type(bind)
+            manager.add_composite_type(bind, caller_has_verified_type=instantiator_has_verified_bind)
 
     def __setattr__(self, key, value):
         manager = get_manager(self, "RDHObject.__setattr__")

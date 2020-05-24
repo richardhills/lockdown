@@ -181,7 +181,7 @@ class ListWildcardGetter(MicroOp):
         self.key_error = key_error
         self.type_error = type_error
 
-    def invoke(self, key):
+    def invoke(self, key, **kwargs):
         raise_micro_op_conflicts(self, [ key ], get_manager(self.target).get_flattened_micro_op_types())
 
         if key >= 0 and key < len(self.target):
@@ -347,7 +347,7 @@ class ListGetter(MicroOp):
         self.key_error = key_error
         self.type_error = type_error
 
-    def invoke(self):
+    def invoke(self, **kwargs):
         raise_micro_op_conflicts(self, [], get_manager(self.target).get_flattened_micro_op_types())
 
         if self.key >= 0 and self.key < len(self.target):
@@ -431,7 +431,7 @@ class ListWildcardSetter(MicroOp):
         self.key_error = key_error
         self.type_error = type_error
 
-    def invoke(self, key, new_value):
+    def invoke(self, key, new_value, **kwargs):
         target_manager = get_manager(self.target)
         raise_micro_op_conflicts(self, [ key, new_value ], target_manager.get_flattened_micro_op_types())
 
@@ -519,7 +519,7 @@ class ListSetter(MicroOp):
         self.key_error = key_error
         self.type_error = type_error
 
-    def invoke(self, new_value):
+    def invoke(self, new_value, **kwargs):
         target_manager = get_manager(self.target)
         raise_micro_op_conflicts(self, [ new_value ], target_manager.get_flattened_micro_op_types())
 
@@ -587,7 +587,7 @@ class ListWildcardDeletter(MicroOp):
         self.target = target
         self.key_error = key_error
 
-    def invoke(self, key):
+    def invoke(self, key, **kwargs):
         target_manager = get_manager(self.target)
         raise_micro_op_conflicts(self, [ key ], target_manager.get_flattened_micro_op_types())
 
@@ -651,7 +651,7 @@ class ListDeletter(MicroOp):
         self.target = target
         self.key = key
 
-    def invoke(self):
+    def invoke(self, **kwargs):
         target_manager = get_manager(self.target)
         raise_micro_op_conflicts(self, [ ], target_manager.get_flattened_micro_op_types())
 
@@ -723,7 +723,7 @@ class ListWildcardInsert(MicroOp):
         self.key_error = key_error
         self.type_error = type_error
 
-    def invoke(self, key, new_value):
+    def invoke(self, key, new_value, **kwargs):
         target_manager = get_manager(self.target)
         raise_micro_op_conflicts(self, [ key, new_value ], target_manager.get_flattened_micro_op_types())
 
@@ -817,7 +817,7 @@ class ListInsert(MicroOp):
         self.key_error = key_error
         self.type_error = type_error
 
-    def invoke(self, new_value):
+    def invoke(self, new_value, **kwargs):
         target_manager = get_manager(self.target)
         raise_micro_op_conflicts(self, [ new_value ], target_manager.get_flattened_micro_op_types())
 

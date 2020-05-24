@@ -9,6 +9,7 @@ from rdhlang5.type_system.object_types import RDHObject
 from rdhlang5.executor.bootstrap import bootstrap_function
 from rdhlang5.executor.exceptions import PreparationException
 import jsonpickle
+from rdhlang5.utils import set_debug
 
 
 class TestJSONParsing(TestCase):
@@ -419,9 +420,9 @@ class TestSpeed(TestCase):
         code = parse("""
             function() {
                 int i = 0, j = 0;
-                while(i < 20) {
+                while(i < 50) {
                     j = 0;
-                    while(j < 20) {
+                    while(j < 50) {
                         int foo = i * j;
                         int bar = i * j;
                         int baz = i * j;
@@ -433,7 +434,7 @@ class TestSpeed(TestCase):
             }
         """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True)
-        self.assertEquals(result.value, 20 * 20)
+        self.assertEquals(result.value, 50 * 50)
 
         pr.disable()
         s = StringIO.StringIO()
@@ -545,4 +546,5 @@ class TestEuler(TestCase):
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
+    set_debug(True)
     unittest.main()

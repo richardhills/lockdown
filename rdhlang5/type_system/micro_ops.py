@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod
 
 from rdhlang5.type_system.core_types import Type
 from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict
+from rdhlang5.utils import is_debug
 
 
 class MicroOpType(object):
@@ -43,15 +44,13 @@ class MicroOpType(object):
     def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
         for other_micro_op_type in micro_op_types.values():
             first_check = other_micro_op_type.check_for_new_micro_op_type_conflict(self, micro_op_types)
-            # These functions should be symmetrical so this second call shouldn't be necessary
-            # Remove for performance when confident about this!
-            second_check = self.check_for_new_micro_op_type_conflict(other_micro_op_type, micro_op_types)
-            if first_check != second_check:
-                other_micro_op_type.check_for_new_micro_op_type_conflict(self, micro_op_types)
-                self.check_for_new_micro_op_type_conflict(other_micro_op_type, micro_op_types)
-                raise FatalError()
+            if is_debug():
+                second_check = self.check_for_new_micro_op_type_conflict(other_micro_op_type, micro_op_types)
+                if first_check != second_check:
+                    other_micro_op_type.check_for_new_micro_op_type_conflict(self, micro_op_types)
+                    self.check_for_new_micro_op_type_conflict(other_micro_op_type, micro_op_types)
+                    raise FatalError()
             if first_check:
-                other_micro_op_type.check_for_new_micro_op_type_conflict(self, micro_op_types)
                 raise MicroOpTypeConflict()
 
     @abstractmethod
@@ -64,7 +63,7 @@ class MicroOpType(object):
 
 
 class MicroOp(object):
-    def invoke(self, *args):
+    def invoke(self, *args, **kwargs):
         raise NotImplementedError(self)
 
 

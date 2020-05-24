@@ -178,7 +178,7 @@ class DictWildcardGetter(MicroOp):
         self.key_error = key_error
         self.type_error = type_error
 
-    def invoke(self, key):
+    def invoke(self, key, **kwargs):
         raise_micro_op_conflicts(self, [ key ], get_manager(self.target).get_flattened_micro_op_types())
 
         if key in self.target.wrapped:
@@ -317,7 +317,7 @@ class DictGetter(MicroOp):
         self.key_error = key_error
         self.type_error = type_error
 
-    def invoke(self):
+    def invoke(self, **kwargs):
         raise_micro_op_conflicts(self, [], get_manager(self.target).get_flattened_micro_op_types())
 
         if self.key in self.target.wrapped:
@@ -402,7 +402,7 @@ class DictWildcardSetter(MicroOp):
         self.key_error = key_error
         self.type_error = type_error
 
-    def invoke(self, key, new_value):
+    def invoke(self, key, new_value, **kwargs):
         get_manager(new_value)
         target_manager = get_manager(self.target)
         raise_micro_op_conflicts(self, [ key, new_value ], target_manager.get_flattened_micro_op_types())
@@ -491,7 +491,7 @@ class DictSetter(MicroOp):
         self.key_error = key_error
         self.type_error = type_error
 
-    def invoke(self, new_value):
+    def invoke(self, new_value, **kwargs):
         get_manager(new_value)
         target_manager = get_manager(self.target)
         raise_micro_op_conflicts(self, [ new_value ], target_manager.get_flattened_micro_op_types())
@@ -562,7 +562,7 @@ class DictWildcardDeletter(MicroOp):
         self.target = target
         self.key_error = key_error
 
-    def invoke(self, key):
+    def invoke(self, key, **kwargs):
         target_manager = get_manager(self.target)
         raise_micro_op_conflicts(self, [ key ], target_manager.get_flattened_micro_op_types())
 
@@ -619,7 +619,7 @@ class DictDeletter(MicroOp):
         self.key = key
         self.key_error = key_error
 
-    def invoke(self):
+    def invoke(self, **kwargs):
         target_manager = get_manager(self.target)
         raise_micro_op_conflicts(self, [ ], target_manager.get_flattened_micro_op_types())
 

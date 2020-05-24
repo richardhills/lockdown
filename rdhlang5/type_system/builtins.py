@@ -46,7 +46,7 @@ class BuiltInFunctionGetter(MicroOp):
         self.function_class = function_class
         self.target = target
 
-    def invoke(self):
+    def invoke(self, **kwargs):
         raise_micro_op_conflicts(self, [ ], get_manager(self.target).get_flattened_micro_op_types())
         return self.function_class(self.target)
 
@@ -80,6 +80,6 @@ def ListInsertFunctionType(wildcard_type):
 
             insert_micro_op = insert_micro_op_type.create(self.target)
 
-            flow_manager.value(insert_micro_op.invoke(*argument), self)
+            return flow_manager.value(insert_micro_op.invoke(*argument), self)
 
     return ListInsertFunction

@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+from rdhlang5.type_system.exceptions import FatalError
+
+
 class InternalMarker(object):
     def __init__(self, name):
         self.name = name
@@ -22,6 +25,20 @@ def default(value, marker, default_if_marker):
     if value is marker:
         return default_if_marker
     return value
+
+DEBUG_MODE = None
+
+def is_debug():
+    global DEBUG_MODE
+    if DEBUG_MODE is None:
+        raise FatalError()
+    return DEBUG_MODE
+
+def set_debug(debug):
+    global DEBUG_MODE
+    if DEBUG_MODE is not None:
+        raise FatalError()
+    DEBUG_MODE = debug
 
 NO_VALUE = InternalMarker("NO_VALUE")
 MISSING = InternalMarker("MISSING")

@@ -10,4 +10,5 @@ from rdhlang5.parser.test import *
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
+    set_debug(True)
     unittest.main()

@@ -6,7 +6,7 @@ from _collections import defaultdict
 from rdhlang5.type_system.core_types import Type
 from rdhlang5.type_system.exceptions import FatalError
 from rdhlang5.type_system.managers import get_type_of_value
-from rdhlang5.utils import MISSING, InternalMarker
+from rdhlang5.utils import MISSING, InternalMarker, is_debug
 
 
 class BreakException(Exception):
@@ -71,9 +71,9 @@ class FlowManager(object):
         if our_break_types and not isinstance(our_break_types, dict):
             raise FatalError()
 
-        self.allowed_break_types = defaultdict(list, allowed_break_types)
+        self.allowed_break_types = defaultdict(lambda: defaultdict(list), allowed_break_types)
         if our_break_types:
-            self.allowed_break_types[our_break_mode].append(our_break_types)
+            self.permit(our_break_mode, our_break_types)
 
     def start(self):
         if not self.callback:
@@ -81,16 +81,13 @@ class FlowManager(object):
         if self._result is not MISSING:
             raise FatalError()
         try:
-            self.callback(self)
+            result = self.callback(self)
+            if self.attempt_close(result):
+                return
+            else:
+                raise result
         except BreakException as e:
-            accepted_out_type = self.our_break_types["out"]
-            if e.mode == self.our_break_mode and (
-                accepted_out_type.always_is_copyable_from
-                or accepted_out_type.is_copyable_from(get_type_of_value(e.value))
-            ):
-                self._result = e.value
-                if "in" in self.our_break_types:
-                    self._restart_continuation = self.frame_manager.create_continuation(self.callback, self.our_break_types["in"])
+            if self.attempt_close(e):
                 return
             else:
                 raise
@@ -111,7 +108,8 @@ class FlowManager(object):
         return self._result is not MISSING
 
     def permit(self, break_mode, break_types):
-        self.allowed_break_types[break_mode].append(break_types)
+        can_restart = "in" in break_types
+        self.allowed_break_types[break_mode][can_restart].append(break_types)
 
     def capture(self, break_mode, break_types, callback=None, top_level=False):
         break_block = FlowManager(break_mode, break_types, self.allowed_break_types, self.frame_manager, callback=callback, top_level=top_level)
@@ -126,22 +124,32 @@ class FlowManager(object):
         return self._restart_continuation
 
     def unwind(self, mode, value, opcode, can_restart):
-        type_of_value = None # lazily calculated if we need it
+        if is_debug():
+            type_of_value = None # lazily calculated if we need it
 
-        for allowed_types in self.allowed_break_types[mode]:
-            allowed_out = allowed_types["out"]
+            if can_restart:
+                allowed_break_types = self.allowed_break_types[mode][True] + self.allowed_break_types[mode][False]
+            else:
+                allowed_break_types = self.allowed_break_types[mode][False]
 
-            if not allowed_out.always_is_copyable_from:
-                if type_of_value is None:
-                    type_of_value = get_type_of_value(value)
-                if not allowed_out.is_copyable_from(type_of_value):
-                    continue
+            for allowed_types in allowed_break_types:
+                allowed_out = allowed_types["out"]
 
-            if can_restart and "in" not in allowed_types:
-                continue
+                if allowed_out.always_is_copyable_from:
+                    break
+                else:
+                    if type_of_value is None:
+                        type_of_value = get_type_of_value(value)
+                    if allowed_out.is_copyable_from(type_of_value):
+                        break
+            else:
+                raise FatalError("Can not unwind {} with type {}, allowed {}".format(mode, type_of_value, self.allowed_break_types))
 
-            raise BreakException(mode, value, opcode, can_restart)
-        raise FatalError("Can not unwind {} with type {}, allowed {}".format(mode, type_of_value, self.allowed_break_types))
+        result = BreakException(mode, value, opcode, can_restart)
+        if is_debug() or can_restart:
+            raise result
+        else:
+            return result
 
     def value(self, value, opcode):
         return self.unwind("value", value, opcode, False)
@@ -155,6 +163,21 @@ class FlowManager(object):
     def yield_(self, value, opcode):
         return self.unwind("yield", value, opcode, True)
 
+    def attempt_close(self, break_exception):
+        if self._result is not MISSING:
+            raise FatalError()
+        accepted_out_type = self.our_break_types["out"]
+        if break_exception.mode == self.our_break_mode and (
+            accepted_out_type.always_is_copyable_from
+            or accepted_out_type.is_copyable_from(get_type_of_value(break_exception.value))
+        ):
+            self._result = break_exception.value
+            if "in" in self.our_break_types:
+                self._restart_continuation = self.frame_manager.create_continuation(self.callback, self.our_break_types["in"])
+            return True
+        else:
+            return False
+
     def __enter__(self):
         if self.callback:
             raise FatalError()
@@ -164,16 +187,8 @@ class FlowManager(object):
 
     def __exit__(self, exc_type, exc_value, traceback):
         if isinstance(exc_value, BreakException):
-            out_break_type = self.our_break_types["out"]
-            if exc_value.mode == self.our_break_mode and (
-                out_break_type.always_is_copyable_from
-                or out_break_type.is_copyable_from(get_type_of_value(exc_value.value))
-            ):
-                self._result = exc_value.value
-                return True
-            else:
-                return False
-        if exc_value is None and not self.top_level:
+            return self.attempt_close(exc_value)
+        if self._result is MISSING and exc_value is None and not self.top_level:
             raise FatalError()
 
 class Continuation(object):
@@ -191,7 +206,7 @@ class Continuation(object):
             raise FatalError()
         self.restarted = True
         self.frame_manager.prepare_restart(self.frames, restart_value)
-        self.callback(break_manager)
+        raise self.callback(break_manager)
 
 class FrameManager(object):
     def __init__(self):
@@ -250,6 +265,8 @@ class Frame(object):
 
     def __exit__(self, exc_type, exc_value, traceback):
         exc_type_allows_restart = exc_value and isinstance(exc_value, BreakException) and exc_value.can_restart
+
         if not exc_type_allows_restart and self.manager.index == len(self.manager.frames):
             del self.manager.frames[-1]
+
         self.manager.index -= 1
