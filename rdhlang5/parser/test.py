@@ -546,5 +546,5 @@ class TestEuler(TestCase):
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
-    set_debug(True)
+    set_debug(False)
     unittest.main()

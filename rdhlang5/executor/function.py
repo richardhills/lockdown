@@ -17,7 +17,7 @@ from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
 from rdhlang5.type_system.exceptions import FatalError
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType
-from rdhlang5.utils import MISSING
+from rdhlang5.utils import MISSING, is_debug
 
 
 def prepare(data, outer_context, flow_manager, immediate_context=None):
@@ -289,11 +289,26 @@ class OpenFunction(object):
         self.local_initializer = local_initializer
         self.break_types = break_types
 
+        self.local_initialization_context_type = RDHObjectType({
+            "outer": self.outer_type,
+            "argument": self.argument_type,
+            "types": DEFAULT_OBJECT_TYPE
+        }, name="local-initialization-context-type")
+
+        self.execution_context_type = RDHObjectType({
+            "prepare": DEFAULT_OBJECT_TYPE,
+            "outer": self.outer_type,
+            "argument": self.argument_type,
+            "static": DEFAULT_OBJECT_TYPE,
+            "local": self.local_type,
+            "types": DEFAULT_OBJECT_TYPE
+        }, name="code-execution-context-type")
+
     def get_type(self):
         return OpenFunctionType(self.argument_type, self.outer_type, self.break_types)
 
     def close(self, outer_context):
-        if not self.outer_type.is_copyable_from(get_type_of_value(outer_context)):
+        if is_debug() and not self.outer_type.is_copyable_from(get_type_of_value(outer_context)):
             raise FatalError()
 
         return ClosedFunction(
@@ -306,11 +321,13 @@ class OpenFunction(object):
             self.local_type,
             outer_context,
             self.local_initializer,
-            self.break_types
+            self.break_types,
+            self.local_initialization_context_type,
+            self.execution_context_type
         )
 
 class ClosedFunction(RDHFunction):
-    def __init__(self, data, code, prepare_context, static, argument_type, outer_type, local_type, outer_context, local_initializer, break_types):
+    def __init__(self, data, code, prepare_context, static, argument_type, outer_type, local_type, outer_context, local_initializer, break_types, local_initialization_context_type, execution_context_type):
         self.data = data
         self.code = code
         self.prepare_context = prepare_context
@@ -322,6 +339,9 @@ class ClosedFunction(RDHFunction):
         self.local_initializer = local_initializer
         self.break_types = break_types
 
+        self.local_initialization_context_type = local_initialization_context_type
+        self.execution_context_type = execution_context_type
+
     def get_type(self):
         return ClosedFunctionType(
             self.argument_type, self.break_types
@@ -329,76 +349,63 @@ class ClosedFunction(RDHFunction):
 
     def invoke(self, argument, flow_manager):
         logger.debug("ClosedFunction")
-        if not self.argument_type.is_copyable_from(get_type_of_value(argument)):
+        if is_debug() and not self.argument_type.is_copyable_from(get_type_of_value(argument)):
             raise FatalError()
         logger.debug("ClosedFunction:argument_check")
 
         with flow_manager.get_next_frame(self) as frame:
-            new_context_type = RDHObjectType({
-                "outer": self.outer_type,
-                "argument": self.argument_type,
-                "types": DEFAULT_OBJECT_TYPE
-            }, name="local-initialization-context-type")
-
-            new_context = RDHObject({
-                "prepare": self.prepare_context,
-                "outer": self.outer_context,
-                "argument": argument,
-                "static": self.static,
-                "types": RDHObject({
-                    "outer": self.outer_type,
-                    "argument": self.argument_type
-                }, debug_reason="local-initialization-context")
-            },
-                bind=new_context_type,
-                instantiator_has_verified_bind=True,
-                debug_reason="local-initialization-context"
+            new_context, _ = frame.step("local_initialization_context", lambda: RDHObject({
+                    "prepare": self.prepare_context,
+                    "outer": self.outer_context,
+                    "argument": argument,
+                    "static": self.static,
+                    "types": RDHObject({
+                        "outer": self.outer_type,
+                        "argument": self.argument_type
+                    }, debug_reason="local-initialization-context")
+                },
+                    bind=self.local_initialization_context_type,
+                    instantiator_has_verified_bind=True,
+                    debug_reason="local-initialization-context"
+                )
             )
 
-            get_manager(new_context)._context_type = new_context_type
+            get_manager(new_context)._context_type = self.local_initialization_context_type
 
             logger.debug( "ClosedFunction:local_initializer")
             local, _ = frame.step("local", lambda: evaluate(self.local_initializer, new_context, flow_manager))
 
-            get_manager(new_context).remove_composite_type(new_context_type)
+            frame.step("remove_local_initialization_context_type", lambda: get_manager(new_context).remove_composite_type(self.local_initialization_context_type))
 
             logger.debug( "ClosedFunction:local_check")
-            if not self.local_type.is_copyable_from(get_type_of_value(local)):
+            if is_debug() and not self.local_type.is_copyable_from(get_type_of_value(local)):
                 raise FatalError()
 
-            new_context_type = RDHObjectType({
-                "prepare": DEFAULT_OBJECT_TYPE,
-                "outer": self.outer_type,
-                "argument": self.argument_type,
-                "static": DEFAULT_OBJECT_TYPE,
-                "local": self.local_type,
-                "types": DEFAULT_OBJECT_TYPE
-            }, name="code-execution-context-type")
-
             logger.debug( "ClosedFunction:code_context")
-            new_context = RDHObject({
-                "prepare": self.prepare_context,
-                "outer": self.outer_context,
-                "argument": argument,
-                "static": self.static,
-                "local": local,
-                "types": RDHObject({
-                    "outer": self.outer_type,
-                    "argument": self.argument_type,
-                    "local": self.local_type
-                }, debug_reason="code-execution-context")
-            },
-                bind=new_context_type,
-                instantiator_has_verified_bind=True,
-                debug_reason="code-execution-context"
+            new_context, _ = frame.step("code_execution_context", lambda: RDHObject({
+                    "prepare": self.prepare_context,
+                    "outer": self.outer_context,
+                    "argument": argument,
+                    "static": self.static,
+                    "local": local,
+                    "types": RDHObject({
+                        "outer": self.outer_type,
+                        "argument": self.argument_type,
+                        "local": self.local_type
+                    }, debug_reason="code-execution-context")
+                },
+                    bind=self.execution_context_type,
+                    instantiator_has_verified_bind=True,
+                    debug_reason="code-execution-context"
+                )
             )
 
             # In conjunction with get_context_type, for performance
-            get_manager(new_context)._context_type = new_context_type
+            get_manager(new_context)._context_type = self.execution_context_type
 
             logger.debug("ClosedFunction:code_execute")
             result, _ = frame.step("code", lambda: evaluate(self.code, new_context, flow_manager))
 
-            get_manager(new_context).remove_composite_type(new_context_type)
+            frame.step("remove_code_execution_context_type", lambda: get_manager(new_context).remove_composite_type(self.execution_context_type))
 
         return flow_manager.value(result, self)

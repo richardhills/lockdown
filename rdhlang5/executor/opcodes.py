@@ -24,7 +24,7 @@ from rdhlang5.type_system.managers import get_type_of_value, get_manager
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType, \
     ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
     ObjectWildcardSetterType
-from rdhlang5.utils import MISSING, NO_VALUE
+from rdhlang5.utils import MISSING, NO_VALUE, is_debug
 
 
 def evaluate(opcode, context, flow_manager, immediate_context=None):
@@ -348,8 +348,9 @@ class DereferenceOp(Opcode):
         if of_types is not MISSING:
             of_types = flatten_out_types(of_types)
 
+        self.invalid_dereference_error = False
+
         if reference_types is not MISSING and of_types is not MISSING:
-            completely_safe = True
             for reference_type in unwrap_types(reference_types):
                 try:
                     for reference in reference_type.get_allowed_values():
@@ -364,13 +365,14 @@ class DereferenceOp(Opcode):
                             if micro_op:
                                 break_types.add("value", micro_op.type)
                                 if micro_op.type_error or micro_op.key_error:
-                                    completely_safe = False
+                                    self.invalid_dereference_error = True
                             else:
-                                completely_safe = False
+                                self.invalid_dereference_error = True
                 except AllowedValuesNotAvailable:
-                    completely_safe = False
-            if not completely_safe:
-                break_types.add("exception", self.INVALID_DEREFERENCE.get_type(), opcode=self)
+                    self.invalid_dereference_error = True
+
+        if self.invalid_dereference_error:
+            break_types.add("exception", self.INVALID_DEREFERENCE.get_type(), opcode=self)
 
         return break_types.build()
 
@@ -445,6 +447,10 @@ class AssignmentOp(Opcode):
         if rvalue_type is not MISSING:
             rvalue_type = flatten_out_types(rvalue_type)
 
+        self.invalid_assignment_error = False
+        self.invalid_rvalue_error = False
+        self.invalid_lvalue_error = False
+
         if reference_types is not MISSING and of_types is not MISSING and rvalue_type is not MISSING:
             for reference_type in unwrap_types(reference_types):
                 try:
@@ -459,16 +465,23 @@ class AssignmentOp(Opcode):
 
                             if micro_op:
                                 if not micro_op.type.is_copyable_from(rvalue_type):
-                                    break_types.add("exception", self.INVALID_RVALUE.get_type())
-        
+                                    self.invalid_rvalue_error = True
+
                                 break_types.add("value", NoValueType())
-        
+
                                 if micro_op.type_error or micro_op.key_error:
-                                    break_types.add("exception", self.INVALID_ASSIGNMENT.get_type())
+                                    self.invalid_assignment_error = True
                             else:
-                                break_types.add("exception", self.INVALID_LVALUE.get_type())
+                                self.invalid_lvalue_error = True
                 except AllowedValuesNotAvailable:
-                    break_types.add("exception", self.INVALID_LVALUE.get_type())
+                    self.invalid_lvalue_error = True
+
+        if self.invalid_assignment_error:
+            break_types.add("exception", self.INVALID_ASSIGNMENT.get_type())
+        if self.invalid_rvalue_error:
+            break_types.add("exception", self.INVALID_RVALUE.get_type())
+        if self.invalid_lvalue_error:
+            break_types.add("exception", self.INVALID_LVALUE.get_type())
 
         return break_types.build()
 
@@ -486,7 +499,7 @@ class AssignmentOp(Opcode):
             try:
                 direct_micro_op_type = manager.get_micro_op_type(("set", reference))
                 if direct_micro_op_type:
-                    if not direct_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
+                    if self.invalid_rvalue_error and not direct_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
                         raise flow_manager.exception(self.INVALID_RVALUE(), self)
 
                     micro_op = direct_micro_op_type.create(of)
@@ -494,7 +507,7 @@ class AssignmentOp(Opcode):
 
                 wildcard_micro_op_type = manager.get_micro_op_type(("set-wildcard",))
                 if wildcard_micro_op_type:
-                    if not wildcard_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
+                    if self.invalid_rvalue_error and not wildcard_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
                         raise flow_manager.exception(self.INVALID_RVALUE(), self)
 
                     micro_op = wildcard_micro_op_type.create(of)
@@ -760,17 +773,17 @@ class CloseOp(Opcode):
         outer_context_type = flatten_out_types(outer_context_type)
         break_types.merge(outer_context_break_types)
 
-        outer_context_type_is_safe = False
+        self.outer_context_type_error = True
 
         if function_type is not MISSING and outer_context_type is not MISSING:
             if isinstance(function_type, OpenFunctionType):
                 break_types.add("value", ClosedFunctionType(function_type.argument_type, function_type.break_types))
                 if function_type.outer_type.is_copyable_from(outer_context_type):
-                    outer_context_type_is_safe = True
+                    self.outer_context_type_error = False
             else:
                 break_types.add("value", AnyType())
 
-        if not outer_context_type_is_safe:
+        if self.outer_context_type_error:
             break_types.add("exception", self.INVALID_OUTER_CONTEXT.get_type())
 
         if not isinstance(function_type, OpenFunctionType):
@@ -787,8 +800,7 @@ class CloseOp(Opcode):
         if not isinstance(open_function, OpenFunction):
             flow_manager.exception(self.INVALID_FUNCTION(), self)
 
-        if not open_function.outer_type.is_copyable_from(get_type_of_value(outer_context)):
-            open_function.outer_type.is_copyable_from(get_type_of_value(outer_context))
+        if (is_debug() or self.outer_context_type_error) and not open_function.outer_type.is_copyable_from(get_type_of_value(outer_context)):
             flow_manager.exception(self.INVALID_OUTER_CONTEXT(), self)
 
         return flow_manager.value(open_function.close(outer_context), self)
