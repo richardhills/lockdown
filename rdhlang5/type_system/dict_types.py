@@ -90,23 +90,22 @@ class DictWildcardGetterType(DictMicroOpType):
             return DictWildcardGetterType(new_type, key_error=self.key_error, type_error=self.type_error)
         return self
 
-    def bind(self, key, target):
+    def bind(self, key, target_manager):
         if key is not None:
             keys = [ key ]
         else:
-            keys = target.keys()
+            keys = target_manager.obj.keys()
         for k in keys:
-            value = target.wrapped[k]
-            get_manager(value)
-            bind_type_to_value(target, key, self.type, value)
+            value = target_manager.obj.wrapped[k]
+            bind_type_to_value(target_manager, key, self.type, get_manager(value))
 
-    def unbind(self, key, target):
+    def unbind(self, key, target_manager):
         if key is not None:
             keys = [ key ]
         else:
-            keys = target.wrapped.keys()
+            keys = target_manager.obj.wrapped.keys()
         for k in keys:
-            unbind_type_to_value(target, key, self.type, target.wrapped[k])
+            unbind_type_to_value(target_manager, key, self.type, get_manager(target_manager.obj.wrapped[k]))
 
     def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
         default_factory = micro_op_types.get(("default-factory",), None)
@@ -228,17 +227,16 @@ class DictGetterType(DictMicroOpType):
             return DictGetterType(new_type, key_error=self.key_error, type_error=self.type_error)
         return self
 
-    def bind(self, key, target):
+    def bind(self, key, target_manager):
         if key is not None and key != self.key:
             return
-        value = target.wrapped[self.key]
-        get_manager(value)
-        bind_type_to_value(target, self.key, self.type, value)
+        value = target_manager.obj.wrapped[self.key]
+        bind_type_to_value(target_manager, self.key, self.type, get_manager(value))
 
-    def unbind(self, key, target):
+    def unbind(self, key, target_manager):
         if key is not None and key != self.key:
             return
-        unbind_type_to_value(target, self.key, self.type, target.wrapped[key])
+        unbind_type_to_value(target_manager, self.key, self.type, get_manager(target_manager.obj.wrapped[key]))
 
     def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
         default_factory = micro_op_types.get(("default-factory",), None)
@@ -406,19 +404,20 @@ class DictWildcardSetter(MicroOp):
 
     def invoke(self, key, new_value):
         get_manager(new_value)
-        raise_micro_op_conflicts(self, [ key, new_value ], get_manager(self.target).get_flattened_micro_op_types())
+        target_manager = get_manager(self.target)
+        raise_micro_op_conflicts(self, [ key, new_value ], target_manager.get_flattened_micro_op_types())
 
         new_value_type = get_type_of_value(new_value)
         if not self.type.is_copyable_from(new_value_type):
             raise FatalError()
 
-        for other_micro_op_type in get_manager(self.target).get_flattened_micro_op_types():
-            other_micro_op_type.unbind(key, self.target)
+        for other_micro_op_type in target_manager.get_flattened_micro_op_types():
+            other_micro_op_type.unbind(key, target_manager)
 
         self.target.wrapped[key] = new_value
 
-        for other_micro_op_type in get_manager(self.target).get_flattened_micro_op_types():
-            other_micro_op_type.bind(key, self.target)
+        for other_micro_op_type in target_manager.get_flattened_micro_op_types():
+            other_micro_op_type.bind(key, target_manager)
 
 
 class DictSetterType(DictMicroOpType):
@@ -494,19 +493,20 @@ class DictSetter(MicroOp):
 
     def invoke(self, new_value):
         get_manager(new_value)
-        raise_micro_op_conflicts(self, [ new_value ], get_manager(self.target).get_flattened_micro_op_types())
+        target_manager = get_manager(self.target)
+        raise_micro_op_conflicts(self, [ new_value ], target_manager.get_flattened_micro_op_types())
 
         new_value_type = get_type_of_value(new_value)
         if not self.type.is_copyable_from(new_value_type):
             raise FatalError()
 
-        for other_micro_op_type in get_manager(self.target).get_flattened_micro_op_types():
-            other_micro_op_type.unbind(self.key, self.target)
+        for other_micro_op_type in target_manager.get_flattened_micro_op_types():
+            other_micro_op_type.unbind(self.key, target_manager)
 
         self.target.wrapped[self.key] = new_value
 
-        for other_micro_op_type in get_manager(self.target).get_flattened_micro_op_types():
-            other_micro_op_type.bind(self.key, self.target)
+        for other_micro_op_type in target_manager.get_flattened_micro_op_types():
+            other_micro_op_type.bind(self.key, target_manager)
 
 
 class InvalidDeletion(Exception):
@@ -563,10 +563,11 @@ class DictWildcardDeletter(MicroOp):
         self.key_error = key_error
 
     def invoke(self, key):
-        raise_micro_op_conflicts(self, [ key ], get_manager(self.target).get_flattened_micro_op_types())
+        target_manager = get_manager(self.target)
+        raise_micro_op_conflicts(self, [ key ], target_manager.get_flattened_micro_op_types())
 
-        for other_micro_op_type in get_manager(self.target).get_flattened_micro_op_types():
-            other_micro_op_type.unbind(key, self.target)
+        for other_micro_op_type in target_manager.get_flattened_micro_op_types():
+            other_micro_op_type.unbind(key, target_manager)
 
         del self.target.wrapped[key]
 
@@ -619,10 +620,11 @@ class DictDeletter(MicroOp):
         self.key_error = key_error
 
     def invoke(self):
-        raise_micro_op_conflicts(self, [ ], get_manager(self.target).get_flattened_micro_op_types())
+        target_manager = get_manager(self.target)
+        raise_micro_op_conflicts(self, [ ], target_manager.get_flattened_micro_op_types())
 
-        for other_micro_op_type in get_manager(self.target).get_flattened_micro_op_types():
-            other_micro_op_type.unbind(self.key, self.target)
+        for other_micro_op_type in target_manager.get_flattened_micro_op_types():
+            other_micro_op_type.unbind(self.key, target_manager)
 
         del self.target.wrapped[self.key]
 

@@ -192,18 +192,15 @@ def type_cleared(type_weakref):
 class Composite(object):
     pass
 
-def bind_type_to_value(source, key, type, value):
-    if not isinstance(value, Composite):
+def bind_type_to_value(source_manager, key, type, value_manager):
+    if not source_manager or not value_manager:
         return
-
-    manager = get_manager(value, "bind_type_to_value.value")
-    source_manager = get_manager(source, "bind_type_to_value.source")
 
     something_worked = False
     for sub_type in unwrap_types(type):
         if isinstance(sub_type, CompositeType):
             try:
-                manager.add_composite_type(sub_type)
+                value_manager.add_composite_type(sub_type)
                 source_manager.child_type_references[key].append(sub_type)
                 something_worked = True
             except MicroOpTypeConflict as e:
@@ -214,12 +211,12 @@ def bind_type_to_value(source, key, type, value):
     if not something_worked:
         raise MicroOpTypeConflict()
 
-def unbind_type_to_value(source, key, type, value):
-    if not isinstance(value, Composite):
+def unbind_type_to_value(source_manager, key, type, value_manager):
+    if not source_manager or not value_manager:
         return
-    source_manager = get_manager(source, "unbind_type_to_value.value")
+
     for sub_type in source_manager.child_type_references[key]:
-        get_manager(value, "unbind_type_to_value.sub_type").remove_composite_type(sub_type)
+        value_manager.remove_composite_type(sub_type)
     source_manager.child_type_references[key] = []
 
 
@@ -281,7 +278,7 @@ class CompositeObjectManager(object):
             self.attached_types[type_id] = type
 
             for tag, micro_op_type in type.micro_op_types.items():
-                micro_op_type.bind(None, self.obj)
+                micro_op_type.bind(None, self)
 
         self.attached_type_counts[type_id] += 1
 
@@ -298,7 +295,7 @@ class CompositeObjectManager(object):
             del self.attached_type_counts[type_id]
 
             for tag, micro_op_type in type.micro_op_types.items():
-                micro_op_type.unbind(None, self.obj)
+                micro_op_type.unbind(None, self)
 
     def get_micro_op_type(self, tag):
         effective_composite_type = self.get_effective_composite_type()

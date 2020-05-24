@@ -91,25 +91,25 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
             return ObjectWildcardGetterType(new_type, key_error=self.key_error, type_error=self.type_error)
         return self
 
-    def bind(self, key, target):
+    def bind(self, key, target_manager):
         if key is not None:
             keys = [ key ]
         else:
-            keys = target.__dict__.keys()
+            keys = target_manager.obj.__dict__.keys()
         for k in keys:
-            value = target.__dict__[k]
-            get_manager(value, "ObjectWildcardGetterType.bind")
-            bind_type_to_value(target, k, self.type, value)
+            value = target_manager.obj.__dict__[k]
+            bind_type_to_value(target_manager, k, self.type, get_manager(value, "ObjectWildcardGetterType.bind"))
 
-    def unbind(self, key, target):
+    def unbind(self, key, target_manager):
         if key is not None:
             keys = [ key ]
         else:
-            keys = target.__dict__.keys()
+            keys = target_manager.obj.__dict__.keys()
         for k in keys:
-            if not k in target.__dict__:
+            if not k in target_manager.obj.__dict__:
                 continue
-            unbind_type_to_value(target, k, self.type, target.__dict__[k])
+            value = target_manager.obj.__dict__[k]
+            unbind_type_to_value(target_manager, k, self.type, get_manager(value, "ObjectWildcardGetterType.unbind"))
 
 
     def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
@@ -235,19 +235,19 @@ class ObjectGetterType(ObjectMicroOpType):
             return ObjectGetterType(self.key, new_type, key_error=self.key_error, type_error=self.type_error)
         return self
 
-    def bind(self, key, target):
+    def bind(self, key, target_manager):
         if key is not None and key != self.key:
             return
-        value = target.__dict__[self.key]
-        get_manager(value, "ObjectGetterType.bind")
-        bind_type_to_value(target, key, self.type, value)
+        value = target_manager.obj.__dict__[self.key]
+        bind_type_to_value(target_manager, key, self.type, get_manager(value, "ObjectGetterType.bind"))
 
-    def unbind(self, key, target):
+    def unbind(self, key, target_manager):
         if key is not None and key != self.key:
             return
-        if key not in target.__dict__:
+        if key not in target_manager.obj.__dict__:
             return
-        unbind_type_to_value(target, key, self.type, target.__dict__[key])
+        value = target_manager.obj.__dict__[self.key]
+        unbind_type_to_value(target_manager, key, self.type, get_manager(value, "ObjectGetterType.unbind"))
 
     def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
         default_factory = micro_op_types.get(("default-factory",), None)
@@ -422,20 +422,21 @@ class ObjectWildcardSetter(MicroOp):
         self.type_error = type_error
 
     def invoke(self, key, new_value):
-        get_manager(new_value, "ObjectWildcardSetter.invoke.1")
-        raise_micro_op_conflicts(self, [ key, new_value ], get_manager(self.target, "ObjectWildcardSetter.invoke.2").get_flattened_micro_op_types())
+        get_manager(new_value, "ObjectWildcardSetter.invoke.new_value")
+        target_manager = get_manager(self.target, "ObjectWildcardSetter.invoke.target")
+        raise_micro_op_conflicts(self, [ key, new_value ], target_manager.get_flattened_micro_op_types())
 
         new_value_type = get_type_of_value(new_value)
         if not self.type.is_copyable_from(new_value_type):
             raise FatalError()
 
-        for other_micro_op_type in get_manager(self.target, "ObjectWildcardSetter.invoke.3").get_flattened_micro_op_types():
-            other_micro_op_type.unbind(key, self.target)
+        for other_micro_op_type in target_manager.get_flattened_micro_op_types():
+            other_micro_op_type.unbind(key, target_manager)
 
         self.target.__dict__[key] = new_value
 
-        for other_micro_op_type in get_manager(self.target, "ObjectWildcardSetter.invoke.4").get_flattened_micro_op_types():
-            other_micro_op_type.bind(key, self.target)
+        for other_micro_op_type in target_manager.get_flattened_micro_op_types():
+            other_micro_op_type.bind(key, target_manager)
 
 class ObjectSetterType(ObjectMicroOpType):
     def __init__(self, key, type, key_error, type_error):
@@ -519,20 +520,21 @@ class ObjectSetter(MicroOp):
         self.type_error = type_error
 
     def invoke(self, new_value):
-        get_manager(new_value, "ObjectSetter.invoke.1")
-        raise_micro_op_conflicts(self, [ new_value ], get_manager(self.target, "ObjectSetter.invoke.2").get_flattened_micro_op_types())
+        get_manager(new_value, "ObjectSetter.invoke.new_value")
+        target_manager = get_manager(self.target, "ObjectSetter.invoke.target")
+        raise_micro_op_conflicts(self, [ new_value ], target_manager.get_flattened_micro_op_types())
 
         new_value_type = get_type_of_value(new_value)
         if not self.type.is_copyable_from(new_value_type):
             raise FatalError()
 
-        for other_micro_op_type in get_manager(self.target, "ObjectSetter.invoke.3").get_flattened_micro_op_types():
-            other_micro_op_type.unbind(self.key, self.target)
+        for other_micro_op_type in target_manager.get_flattened_micro_op_types():
+            other_micro_op_type.unbind(self.key, target_manager)
 
         self.target.__dict__[self.key] = new_value
 
-        for other_micro_op_type in get_manager(self.target, "ObjectSetter.invoke.4").get_flattened_micro_op_types():
-            other_micro_op_type.bind(self.key, self.target)
+        for other_micro_op_type in target_manager.get_flattened_micro_op_types():
+            other_micro_op_type.bind(self.key, target_manager)
 
 
 class InvalidDeletion(Exception):
@@ -597,10 +599,11 @@ class ObjectWildcardDeletter(MicroOp):
         self.key_error = key_error
 
     def invoke(self, key):
-        raise_micro_op_conflicts(self, [ key ], get_manager(self.target).get_flattened_micro_op_types())
+        target_manager = get_manager(self.target)
+        raise_micro_op_conflicts(self, [ key ], target_manager.get_flattened_micro_op_types())
 
-        for other_micro_op_type in get_manager(self.target).get_flattened_micro_op_types():
-            other_micro_op_type.unbind(key, self.target)
+        for other_micro_op_type in target_manager.get_flattened_micro_op_types():
+            other_micro_op_type.unbind(key, target_manager)
 
         del self.target.__dict__[key]
 
@@ -661,10 +664,11 @@ class ObjectDeletter(MicroOp):
         self.key_error = key_error
 
     def invoke(self):
-        raise_micro_op_conflicts(self, [ ], get_manager(self.target).get_flattened_micro_op_types())
+        target_manager = get_manager(self.target)
+        raise_micro_op_conflicts(self, [ ], target_manager.get_flattened_micro_op_types())
 
-        for other_micro_op_type in get_manager(self.target).get_flattened_micro_op_types():
-            other_micro_op_type.unbind(self.key, self.target)
+        for other_micro_op_type in target_manager.get_flattened_micro_op_types():
+            other_micro_op_type.unbind(self.key, target_manager)
 
         del self.target.__dict__[self.key]
 
