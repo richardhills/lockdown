@@ -350,8 +350,8 @@ class DefaultFactoryType(MicroOpType):
             raise MicroOpTypeConflict()
 
 class DefaultFactory(MicroOp):
-    def __init__(self, target):
-        self.target = target
+    def __init__(self, target_manager):
+        self.target_manager = target_manager
 
     def invoke(self, key, **kwargs):
-        return get_manager(self.target, "defaultfactory.invoke").default_factory(self.target, key)
+        return self.target_manager.default_factory(self.target_manager.obj, key)

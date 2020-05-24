@@ -65,8 +65,8 @@ class ListWildcardGetterType(ListMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target):
-        return ListWildcardGetter(target, self.type, self.key_error, self.type_error)
+    def create(self, target_manager):
+        return ListWildcardGetter(target_manager, self.type, self.key_error, self.type_error)
 
     def can_be_derived_from(self, other_micro_op_type):
         return (
@@ -175,24 +175,24 @@ class ListWildcardGetterType(ListMicroOpType):
 
 
 class ListWildcardGetter(MicroOp):
-    def __init__(self, target, type, key_error, type_error):
-        self.target = target
+    def __init__(self, target_manager, type, key_error, type_error):
+        self.target_manager = target_manager
         self.type = type
         self.key_error = key_error
         self.type_error = type_error
 
     def invoke(self, key, **kwargs):
-        raise_micro_op_conflicts(self, [ key ], get_manager(self.target).get_flattened_micro_op_types())
+        raise_micro_op_conflicts(self, [ key ], self.target_manager.get_flattened_micro_op_types())
 
-        if key >= 0 and key < len(self.target):
-            value = self.target.__getitem__(key, raw=True)
+        if key >= 0 and key < len(self.target_manager.obj):
+            value = self.target_manager.obj.__getitem__(key, raw=True)
         else:
-            default_factory_op_type = get_manager(self.target).get_micro_op_type(("default-factory",))
+            default_factory_op_type = self.target_manager.get_micro_op_type(("default-factory",))
 
             if not default_factory_op_type:
                 raise_if_safe(InvalidDereferenceKey, self.key_error)
 
-            default_factory_op = default_factory_op_type.create(self.target)
+            default_factory_op = default_factory_op_type.create(self.target_manager)
             value = default_factory_op.invoke(key)
 
         if value is not SPARSE_ELEMENT:
@@ -210,8 +210,8 @@ class ListGetterType(ListMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target):
-        return ListGetter(target, self.key, self.type, self.key_error, self.type_error)
+    def create(self, target_manager):
+        return ListGetter(target_manager, self.key, self.type, self.key_error, self.type_error)
 
     def can_be_derived_from(self, other_micro_op_type):
         return (
@@ -308,7 +308,7 @@ class ListGetterType(ListMicroOpType):
                 if not self.type.is_copyable_from(get_type_of_value(new_value)):
                     raise raise_if_safe(InvalidAssignmentType, other_micro_op.type_error)
             elif self.key > other_key:
-                new_value = other_micro_op.target[self.key - 1]
+                new_value = other_micro_op.target_manager.obj[self.key - 1]
                 if not self.type.is_copyable_from(get_type_of_value(new_value)):
                     raise raise_if_safe(InvalidAssignmentType, other_micro_op.type_error)
         if isinstance(other_micro_op, (ListDeletter, ListWildcardDeletter)):
@@ -316,7 +316,7 @@ class ListGetterType(ListMicroOpType):
             if self.key < other_key:
                 return
             else:
-                new_value = other_micro_op.target[self.key + 1]
+                new_value = other_micro_op.target_manager.obj[self.key + 1]
                 if not self.key_error and not self.type.is_copyable_from(get_type_of_value(new_value)):
                     raise_if_safe(InvalidAssignmentType, other_micro_op.type_error)
 
@@ -340,20 +340,20 @@ class ListGetterType(ListMicroOpType):
 
 
 class ListGetter(MicroOp):
-    def __init__(self, target, key, type, key_error, type_error):
-        self.target = target
+    def __init__(self, target_manager, key, type, key_error, type_error):
+        self.target_manager = target_manager
         self.key = key
         self.type = type
         self.key_error = key_error
         self.type_error = type_error
 
     def invoke(self, **kwargs):
-        raise_micro_op_conflicts(self, [], get_manager(self.target).get_flattened_micro_op_types())
+        raise_micro_op_conflicts(self, [], self.target_manager.get_flattened_micro_op_types())
 
-        if self.key >= 0 and self.key < len(self.target):
-            value = self.target.__getitem__(self.key, raw=True)
+        if self.key >= 0 and self.key < len(self.target_manager.obj):
+            value = self.target_manager.obj.__getitem__(self.key, raw=True)
         else:
-            default_factory_op = get_manager(self.target).get_micro_op_type(("default-factory",))
+            default_factory_op = self.target_manager.get_micro_op_type(("default-factory",))
 
             if default_factory_op:
                 value = default_factory_op.invoke(self.key)
@@ -374,8 +374,8 @@ class ListWildcardSetterType(ListMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target):
-        return ListWildcardSetter(target, self.type, self.key_error, self.type_error)
+    def create(self, target_manager):
+        return ListWildcardSetter(target_manager, self.type, self.key_error, self.type_error)
 
     def can_be_derived_from(self, other_micro_op_type):
         return (
@@ -425,31 +425,30 @@ class ListWildcardSetterType(ListMicroOpType):
 
 
 class ListWildcardSetter(MicroOp):
-    def __init__(self, target, type, key_error, type_error):
-        self.target = target
+    def __init__(self, target_manager, type, key_error, type_error):
+        self.target_manager = target_manager
         self.type = type
         self.key_error = key_error
         self.type_error = type_error
 
     def invoke(self, key, new_value, **kwargs):
-        target_manager = get_manager(self.target)
-        raise_micro_op_conflicts(self, [ key, new_value ], target_manager.get_flattened_micro_op_types())
+        raise_micro_op_conflicts(self, [ key, new_value ], self.target_manager.get_flattened_micro_op_types())
 
         new_value_type = get_type_of_value(new_value)
         if not self.type.is_copyable_from(new_value_type):
             raise FatalError()
 
-        if key < 0 or key > len(self.target):
+        if key < 0 or key > len(self.target_manager.obj):
             if self.key_error:
                 raise InvalidAssignmentKey()
 
-        for other_micro_op_type in target_manager.get_flattened_micro_op_types():
-            other_micro_op_type.unbind(key, target_manager)
+        for other_micro_op_type in self.target_manager.get_flattened_micro_op_types():
+            other_micro_op_type.unbind(key, self.target_manager)
 
-        self.target.__setitem__(key, new_value, raw=True)
+        self.target_manager.obj.__setitem__(key, new_value, raw=True)
 
-        for other_micro_op_type in target_manager.get_flattened_micro_op_types():
-            other_micro_op_type.bind(key, target_manager)
+        for other_micro_op_type in self.target_manager.get_flattened_micro_op_types():
+            other_micro_op_type.bind(key, self.target_manager)
 
 class ListSetterType(ListMicroOpType):
     def __init__(self, key, type, key_error, type_error):
@@ -458,8 +457,8 @@ class ListSetterType(ListMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target):
-        return ListSetter(target, self.key, self.type, self.key_error, self.type_error)
+    def create(self, target_manager):
+        return ListSetter(target_manager, self.key, self.type, self.key_error, self.type_error)
 
     def can_be_derived_from(self, other_micro_op_type):
         return (
@@ -512,31 +511,30 @@ class ListSetterType(ListMicroOpType):
 
 
 class ListSetter(MicroOp):
-    def __init__(self, target, key, type, key_error, type_error):
-        self.target = target
+    def __init__(self, target_manager, key, type, key_error, type_error):
+        self.target_manager = target_manager
         self.key = key
         self.type = type
         self.key_error = key_error
         self.type_error = type_error
 
     def invoke(self, new_value, **kwargs):
-        target_manager = get_manager(self.target)
-        raise_micro_op_conflicts(self, [ new_value ], target_manager.get_flattened_micro_op_types())
+        raise_micro_op_conflicts(self, [ new_value ], self.target_manager.get_flattened_micro_op_types())
 
         new_value_type = get_type_of_value(new_value)
         if not self.type.is_copyable_from(new_value_type):
             raise FatalError()
 
-        if self.key < 0 or self.key > len(self.target):
+        if self.key < 0 or self.key > len(self.target_manager.obj):
             raise_if_safe(InvalidAssignmentKey, self.can_fail)
 
-        for other_micro_op_type in target_manager.get_flattened_micro_op_types():
-            other_micro_op_type.unbind(self.key, target_manager)
+        for other_micro_op_type in self.target_manager.get_flattened_micro_op_types():
+            other_micro_op_type.unbind(self.key, self.target_manager)
 
-        self.target.__setitem__(self.key, new_value, raw=True)
+        self.target_manager.obj.__setitem__(self.key, new_value, raw=True)
 
-        for other_micro_op_type in target_manager.get_flattened_micro_op_types():
-            other_micro_op_type.bind(self.key, target_manager)
+        for other_micro_op_type in self.target_manager.get_flattened_micro_op_types():
+            other_micro_op_type.bind(self.key, self.target_manager)
 
 
 class ListWildcardDeletterType(ListMicroOpType):
@@ -549,8 +547,8 @@ class ListWildcardDeletterType(ListMicroOpType):
     def unbind(self, key, target):
         pass
 
-    def create(self, target):
-        return ListWildcardDeletter(target, self.key_error)
+    def create(self, target_manager):
+        return ListWildcardDeletter(target_manager, self.key_error)
 
     def can_be_derived_from(self, other_micro_op_type):
         return not other_micro_op_type.key_error or self.key_error
@@ -583,18 +581,17 @@ class ListWildcardDeletterType(ListMicroOpType):
 
 
 class ListWildcardDeletter(MicroOp):
-    def __init__(self, target, key_error):
-        self.target = target
+    def __init__(self, target_manager, key_error):
+        self.target_manager = target_manager
         self.key_error = key_error
 
     def invoke(self, key, **kwargs):
-        target_manager = get_manager(self.target)
-        raise_micro_op_conflicts(self, [ key ], target_manager.get_flattened_micro_op_types())
+        raise_micro_op_conflicts(self, [ key ], self.target_manager.get_flattened_micro_op_types())
 
-        for other_micro_op_type in target_manager.get_flattened_micro_op_types():
-            other_micro_op_type.unbind(self.key, target_manager)
+        for other_micro_op_type in self.target_manager.get_flattened_micro_op_types():
+            other_micro_op_type.unbind(self.key, self.target_manager)
 
-        self.target.__delitem__(raw=True)
+        self.target_manager.obj.__delitem__(raw=True)
 
 
 class ListDeletterType(ListMicroOpType):
@@ -602,8 +599,8 @@ class ListDeletterType(ListMicroOpType):
         self.key = key
         self.key_error = key_error
 
-    def create(self, target):
-        return ListDeletter(target, self.key, self.key_error)
+    def create(self, target_manager):
+        return ListDeletter(target_manager, self.key, self.key_error)
 
     def can_be_derived_from(self, other_micro_op_type):
         return not other_micro_op_type.key_error or self.key_error
@@ -647,18 +644,17 @@ class ListDeletterType(ListMicroOpType):
 
 
 class ListDeletter(MicroOp):
-    def __init__(self, target, key):
-        self.target = target
+    def __init__(self, target_manager, key):
+        self.target_manager = target_manager
         self.key = key
 
     def invoke(self, **kwargs):
-        target_manager = get_manager(self.target)
-        raise_micro_op_conflicts(self, [ ], target_manager.get_flattened_micro_op_types())
+        raise_micro_op_conflicts(self, [ ], self.target_manager.get_flattened_micro_op_types())
 
-        for other_micro_op_type in target_manager.get_flattened_micro_op_types():
-            other_micro_op_type.unbind(self.key, target_manager)
+        for other_micro_op_type in self.target_manager.get_flattened_micro_op_types():
+            other_micro_op_type.unbind(self.key, self.target_manager)
 
-        self.target.__delitem__(self.key, raw=True)
+        self.target_manager.obj.__delitem__(self.key, raw=True)
 
 
 class ListWildcardInsertType(ListMicroOpType):
@@ -667,8 +663,8 @@ class ListWildcardInsertType(ListMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target):
-        return ListWildcardInsert(target, self.type, self.key_error, self.type_error)
+    def create(self, target_manager):
+        return ListWildcardInsert(target_manager, self.type, self.key_error, self.type_error)
 
     def can_be_derived_from(self, other_micro_op_type):
         return (
@@ -717,29 +713,28 @@ class ListWildcardInsertType(ListMicroOpType):
 
 
 class ListWildcardInsert(MicroOp):
-    def __init__(self, target, type, key_error, type_error):
-        self.target = target
+    def __init__(self, target_manager, type, key_error, type_error):
+        self.target_manager = target_manager
         self.type = type
         self.key_error = key_error
         self.type_error = type_error
 
     def invoke(self, key, new_value, **kwargs):
-        target_manager = get_manager(self.target)
-        raise_micro_op_conflicts(self, [ key, new_value ], target_manager.get_flattened_micro_op_types())
+        raise_micro_op_conflicts(self, [ key, new_value ], self.target_manager.get_flattened_micro_op_types())
 
         new_value_type = get_type_of_value(new_value)
         if not self.type.is_copyable_from(new_value_type):
             raise FatalError()
 
-        for other_micro_op_type in target_manager.get_flattened_micro_op_types():
-            for after_key in range(key, len(self.target)):
-                other_micro_op_type.unbind(after_key, target_manager)
+        for other_micro_op_type in self.target_manager.get_flattened_micro_op_types():
+            for after_key in range(key, len(self.target_manager.obj)):
+                other_micro_op_type.unbind(after_key, self.target_manager)
 
-        self.target.insert(key, new_value, raw=True)
+        self.target_manager.obj.insert(key, new_value, raw=True)
 
-        for other_micro_op_type in target_manager.get_flattened_micro_op_types():
-            for after_key in range(key, len(self.target)):
-                other_micro_op_type.bind(after_key, target_manager)
+        for other_micro_op_type in self.target_manager.get_flattened_micro_op_types():
+            for after_key in range(key, len(self.target_manager.obj)):
+                other_micro_op_type.bind(after_key, self.target_manager)
 
 
 class ListInsertType(ListMicroOpType):
@@ -749,8 +744,8 @@ class ListInsertType(ListMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target):
-        return ListInsert(target, self.key, self.type, self.key_error, self.type_error)
+    def create(self, target_manager):
+        return ListInsert(target_manager, self.key, self.type, self.key_error, self.type_error)
 
     def can_be_derived_from(self, other_micro_op_type):
         return (
@@ -810,30 +805,29 @@ class ListInsertType(ListMicroOpType):
         )
 
 class ListInsert(MicroOp):
-    def __init__(self, target, key, type, key_error, type_error):
-        self.target = target
+    def __init__(self, target_manager, key, type, key_error, type_error):
+        self.target_manager = target_manager
         self.key = key
         self.type = type
         self.key_error = key_error
         self.type_error = type_error
 
     def invoke(self, new_value, **kwargs):
-        target_manager = get_manager(self.target)
-        raise_micro_op_conflicts(self, [ new_value ], target_manager.get_flattened_micro_op_types())
+        raise_micro_op_conflicts(self, [ new_value ], self.target_manager.get_flattened_micro_op_types())
 
         new_value_type = get_type_of_value(new_value)
         if not self.type.is_copyable_from(new_value_type):
             raise FatalError()
 
-        for other_micro_op_type in target_manager.get_flattened_micro_op_types():
-            for after_key in range(self.key, len(self.target)):
-                other_micro_op_type.unbind(after_key, target_manager)
+        for other_micro_op_type in self.target_manager.get_flattened_micro_op_types():
+            for after_key in range(self.key, len(self.target_manager.obj)):
+                other_micro_op_type.unbind(after_key, self.target_manager)
 
-        self.target.insert(self.key, new_value, raw=True)
+        self.target_manager.obj.insert(self.key, new_value, raw=True)
 
-        for other_micro_op_type in target_manager.get_flattened_micro_op_types():
-            for after_key in range(self.key, len(self.target)):
-                other_micro_op_type.bind(after_key, target_manager)
+        for other_micro_op_type in self.target_manager.get_flattened_micro_op_types():
+            for after_key in range(self.key, len(self.target_manager.obj)):
+                other_micro_op_type.bind(after_key, self.target_manager)
 
 
 def RDHListType(element_types, wildcard_type, allow_push=True, allow_wildcard_insert=True, allow_delete=True, is_sparse=False):
@@ -895,7 +889,7 @@ class RDHList(Composite, MutableSequence, object):
         micro_op_type = manager.get_micro_op_type(("insert", index))
 
         if micro_op_type is not None:
-            micro_op = micro_op_type.create(self)
+            micro_op = micro_op_type.create(manager)
             return micro_op.invoke(element)
         else:
             micro_op_type = manager.get_micro_op_type(("insert-wildcard",))
@@ -903,7 +897,7 @@ class RDHList(Composite, MutableSequence, object):
             if micro_op_type is None:
                 raise MissingMicroOp()
 
-            micro_op = micro_op_type.create(self)
+            micro_op = micro_op_type.create(manager)
             micro_op.invoke(index, element)
 
     def __setitem__(self, key, value, raw=False):
@@ -917,7 +911,7 @@ class RDHList(Composite, MutableSequence, object):
 
             micro_op_type = manager.get_micro_op_type(("set", key))
             if micro_op_type is not None:
-                micro_op = micro_op_type.create(self)
+                micro_op = micro_op_type.create(manager)
                 micro_op.invoke(value)
             else:
                 micro_op_type = manager.get_micro_op_type(("set-wildcard",))
@@ -925,7 +919,7 @@ class RDHList(Composite, MutableSequence, object):
                 if micro_op_type is None:
                     raise MissingMicroOp()
     
-                micro_op = micro_op_type.create(self)
+                micro_op = micro_op_type.create(manager)
                 micro_op.invoke(key, value)
         except (InvalidAssignmentKey, MissingMicroOp):
             raise IndexError()
@@ -941,7 +935,7 @@ class RDHList(Composite, MutableSequence, object):
 
             micro_op_type = manager.get_micro_op_type(("get", key))
             if micro_op_type is not None:
-                micro_op = micro_op_type.create(self)
+                micro_op = micro_op_type.create(manager)
                 return micro_op.invoke()
             else:
                 micro_op_type = manager.get_micro_op_type(("get-wildcard",))
@@ -949,7 +943,7 @@ class RDHList(Composite, MutableSequence, object):
                 if micro_op_type is None:
                     raise MissingMicroOp(key)
 
-                micro_op = micro_op_type.create(self)
+                micro_op = micro_op_type.create(manager)
                 return micro_op.invoke(key)
         except InvalidDereferenceKey:
             if key >= 0 and key < self.length:
@@ -969,7 +963,7 @@ class RDHList(Composite, MutableSequence, object):
 
         micro_op_type = manager.get_micro_op_type(("delete", key))
         if micro_op_type is not None:
-            micro_op = micro_op_type.create(self)
+            micro_op = micro_op_type.create(manager)
             return micro_op.invoke()
         else:
             micro_op_type = manager.get_micro_op_type(("delete-wildcard",))
@@ -977,7 +971,7 @@ class RDHList(Composite, MutableSequence, object):
             if micro_op_type is None:
                 raise MissingMicroOp()
 
-            micro_op = micro_op_type.create(self)
+            micro_op = micro_op_type.create(manager)
             return micro_op.invoke(key)
 
     def __str__(self):

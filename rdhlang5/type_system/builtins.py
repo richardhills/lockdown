@@ -17,8 +17,8 @@ class BuiltInFunctionGetterType(MicroOpType):
     def replace_inferred_type(self, other_micro_op_type):
         return self
 
-    def create(self, target):
-        return BuiltInFunctionGetter(self.function_class, target)
+    def create(self, target_manager):
+        return BuiltInFunctionGetter(self.function_class, target_manager)
 
     def can_be_derived_from(self, other_micro_op_type):
         return True
@@ -42,13 +42,13 @@ class BuiltInFunctionGetterType(MicroOpType):
         return False
 
 class BuiltInFunctionGetter(MicroOp):
-    def __init__(self, function_class, target):
+    def __init__(self, function_class, target_manager):
         self.function_class = function_class
-        self.target = target
+        self.target_manager = target_manager
 
     def invoke(self, **kwargs):
-        raise_micro_op_conflicts(self, [ ], get_manager(self.target).get_flattened_micro_op_types())
-        return self.function_class(self.target)
+        raise_micro_op_conflicts(self, [ ], self.target_manager.get_flattened_micro_op_types())
+        return self.function_class(self.target_manager)
 
 def ListInsertFunctionType(wildcard_type):
     from rdhlang5.executor.function import RDHFunction
@@ -59,8 +59,8 @@ def ListInsertFunctionType(wildcard_type):
     function_type = ClosedFunctionType(argument_type, break_types.build())
 
     class ListInsertFunction(RDHFunction):
-        def __init__(self, target):
-            self.target = target
+        def __init__(self, target_manager):
+            self.target_manager = target_manager
 
         @classmethod
         def get_type(self):
@@ -72,13 +72,12 @@ def ListInsertFunctionType(wildcard_type):
             argument_manager = get_manager(argument)
             argument_manager.add_composite_type(our_type.argument_type)
 
-            target_manager = get_manager(self.target)
-            insert_micro_op_type = target_manager.get_micro_op_type(("insert-wildcard",))
+            insert_micro_op_type = self.target_manager.get_micro_op_type(("insert-wildcard",))
 
             if not insert_micro_op_type:
                 raise FatalError()
 
-            insert_micro_op = insert_micro_op_type.create(self.target)
+            insert_micro_op = insert_micro_op_type.create(self.target_manager)
 
             return flow_manager.value(insert_micro_op.invoke(*argument), self)
 

@@ -16,7 +16,7 @@ class MicroOpType(object):
         return self
 
     @abstractmethod
-    def create(self, target):
+    def create(self, target_manager):
         raise NotImplementedError(self)
 
     @abstractmethod
