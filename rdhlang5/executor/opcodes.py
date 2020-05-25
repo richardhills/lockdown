@@ -27,11 +27,12 @@ from rdhlang5.type_system.object_types import RDHObject, RDHObjectType, \
 from rdhlang5.utils import MISSING, NO_VALUE, is_debug
 
 
-def evaluate(opcode, context, flow_manager, immediate_context=None):
-    with flow_manager.capture("value", { "out": AnyType() }) as new_flow_manager:
-        mode, value, opcode = opcode.jump(context, new_flow_manager, immediate_context)
-        if not new_flow_manager.attempt_close(mode, value):
-            raise BreakException(mode, value, opcode, False)
+EVALUATE_CAPTURE_TYPES = { "out": AnyType() }
+
+def evaluate(expression, context, flow_manager, immediate_context=None):
+    with flow_manager.capture("value", EVALUATE_CAPTURE_TYPES) as new_flow_manager:
+        mode, value, opcode, can_restart = expression.jump(context, new_flow_manager, immediate_context=immediate_context)
+        new_flow_manager.attempt_close_or_raise(mode, value, opcode, can_restart)
     return new_flow_manager.result
 
 
@@ -620,9 +621,8 @@ class TransformOp(Opcode):
 
             if self.expression:
                 with flow_manager.capture(self.input, { "out": AnyType() }) as new_flow_manager:
-                    mode, value, opcode = self.expression.jump(context, new_flow_manager)
-                    if not new_flow_manager.attempt_close(mode, value):
-                        raise BreakException(mode, value, opcode, False)
+                    mode, value, opcode, can_restart = self.expression.jump(context, new_flow_manager)
+                    new_flow_manager.attempt_close_or_raise(mode, value, opcode, can_restart)
                 return flow_manager.unwind(self.output, new_flow_manager.result, self, can_restart)
             else:
                 return flow_manager.unwind(self.output, NO_VALUE, self, can_restart)

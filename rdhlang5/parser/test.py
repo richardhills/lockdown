@@ -416,9 +416,9 @@ class TestSpeed(TestCase):
         code = parse("""
             function() {
                 int i = 0, j = 0;
-                while(i < 50) {
+                while(i < 100) {
                     j = 0;
-                    while(j < 50) {
+                    while(j < 100) {
                         int foo = i * j;
                         int bar = i * j;
                         int baz = i * j;
@@ -430,7 +430,7 @@ class TestSpeed(TestCase):
             }
         """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True)
-        self.assertEquals(result.value, 50 * 50)
+        self.assertEquals(result.value, 100 * 100)
 
 class TestEuler(TestCase):
     """

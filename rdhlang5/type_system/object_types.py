@@ -65,6 +65,8 @@ class ObjectMicroOpType(MicroOpType):
 
 
 class ObjectWildcardGetterType(ObjectMicroOpType):
+    __slots__ = [ "type", "key_error", "type_error" ]
+
     def __init__(self, type, key_error, type_error):
         if type is None:
             raise FatalError()
@@ -180,6 +182,7 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
 
 
 class ObjectWildcardGetter(MicroOp):
+    __slots__ = [ "target_manager", "type", "key_error", "type_error" ]
 
     def __init__(self, target_manager, type, key_error, type_error):
         self.target_manager = target_manager
@@ -210,6 +213,8 @@ class ObjectWildcardGetter(MicroOp):
         return value
 
 class ObjectGetterType(ObjectMicroOpType):
+    __slots__ = [ "key", "type", "key_error", "type_error" ]
+
     def __init__(self, key, type, key_error, type_error):
         if type is None or not isinstance(type, Type):
             raise FatalError()
@@ -329,6 +334,8 @@ class ObjectGetterType(ObjectMicroOpType):
         return "get.{}.{}".format(self.key, self.type)
 
 class ObjectGetter(MicroOp):
+    __slots__ = [ "target_manager", "key", "type", "key_error", "type_error" ]
+
     def __init__(self, target_manager, key, type, key_error, type_error):
         self.target_manager = target_manager
         self.key = key
@@ -360,6 +367,8 @@ class ObjectGetter(MicroOp):
 
 
 class ObjectWildcardSetterType(ObjectMicroOpType):
+    __slots__ = [ "type", "key_error", "type_error" ]
+
     def __init__(self, type, key_error, type_error):
         if type is None:
             raise FatalError()
@@ -419,6 +428,8 @@ class ObjectWildcardSetterType(ObjectMicroOpType):
         return "set.*.{}".format(self.type)
 
 class ObjectWildcardSetter(MicroOp):
+    __slots__ = [ "target_manager", "type", "key_error", "type_error" ]
+
     def __init__(self, target_manager, type, key_error, type_error):
         self.target_manager = target_manager
         self.type = type
@@ -443,6 +454,8 @@ class ObjectWildcardSetter(MicroOp):
             other_micro_op_type.bind(key, self.target_manager)
 
 class ObjectSetterType(ObjectMicroOpType):
+    __slots__ = [ "key", "type", "key_error", "type_error" ]
+
     def __init__(self, key, type, key_error, type_error):
         if type is None:
             raise FatalError()
@@ -515,6 +528,7 @@ class ObjectSetterType(ObjectMicroOpType):
         return "set.{}.{}".format(self.key, self.type)
 
 class ObjectSetter(MicroOp):
+    __slots__ = [ "target_manager", "key", "type", "key_error", "type_error" ]
 
     def __init__(self, target_manager, key, type, key_error, type_error):
         self.target_manager = target_manager
@@ -546,6 +560,7 @@ class InvalidDeletion(Exception):
 
 
 class ObjectWildcardDeletterType(ObjectMicroOpType):
+    __slots__ = [ "key_error" ]
 
     def __init__(self, key_error):
         self.key_error = key_error
@@ -597,6 +612,7 @@ class ObjectWildcardDeletterType(ObjectMicroOpType):
 
 
 class ObjectWildcardDeletter(MicroOp):
+    __slots__ = [ "target_manager", "key_error" ]
 
     def __init__(self, target_manager, key_error):
         self.target_manager = target_manager
@@ -613,6 +629,8 @@ class ObjectWildcardDeletter(MicroOp):
 
 
 class ObjectDeletterType(ObjectMicroOpType):
+    __slots__ = [ "key", "key_error" ]
+
     def __init__(self, key, key_error):
         self.key = key
         self.key_error = key_error
@@ -662,6 +680,8 @@ class ObjectDeletterType(ObjectMicroOpType):
 
 
 class ObjectDeletter(MicroOp):
+    __slots__ = [ "target_manager", "key", "key_error" ]
+
     def __init__(self, target_manager, key, key_error):
         self.target_manager = target_manager
         self.key = key

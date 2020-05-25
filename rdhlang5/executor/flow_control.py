@@ -52,45 +52,54 @@ class BreakTypesFactory(object):
         return dict(self.result)
 
 class FlowManager(object):
+    __slots__ = [ "our_break_mode", "our_break_types", "frame_manager", "callback", "top_level", "_result", "_restart_continuation", "allowed_break_types" ]
+
     def __init__(self, our_break_mode, our_break_types, allowed_break_types, frame_manager, top_level=False, callback=None):
         self.our_break_mode = our_break_mode
         self.our_break_types = our_break_types
         self.frame_manager = frame_manager
         self.callback = callback
         self.top_level = top_level
-
-        if our_break_types and "out" not in our_break_types:
-            raise FatalError()
-
-        if our_break_types and "in" in our_break_types and not callback:
-            raise FatalError()
-
         self._result = MISSING
         self._restart_continuation = MISSING
 
-        if our_break_types and not isinstance(our_break_types, dict):
-            raise FatalError()
+        if is_debug():
+            if our_break_types and "out" not in our_break_types:
+                raise FatalError()
 
-        self.allowed_break_types = defaultdict(lambda: defaultdict(list), allowed_break_types)
-        if our_break_types:
-            self.permit(our_break_mode, our_break_types)
+            if our_break_types and "in" in our_break_types and not callback:
+                raise FatalError()
+
+            if our_break_types and not isinstance(our_break_types, dict):
+                raise FatalError()
+
+            if our_break_types:
+                self.allowed_break_types = dict(allowed_break_types)
+                can_restart = "in" in our_break_types
+                if our_break_mode not in self.allowed_break_types:
+                    self.allowed_break_types[our_break_mode] = ([], [])
+                self.allowed_break_types[our_break_mode][1 if can_restart else 0].append(our_break_types)
+            else:
+                self.allowed_break_types = allowed_break_types
+        else:
+            self.allowed_break_types = None
 
     def start(self):
-        if not self.callback:
-            raise FatalError()
-        if self._result is not MISSING:
-            raise FatalError()
+        if is_debug():
+            if not self.callback:
+                raise FatalError()
+            if self._result is not MISSING:
+                raise FatalError()
+
         try:
-            mode, value, opcode = self.callback(self)
-            if self.attempt_close(mode, value):
-                return
-            else:
-                raise BreakException(mode, value, opcode, False)
+            mode, value, opcode, can_restart = self.callback(self)
+            self.attempt_close_or_raise(mode, value, opcode, can_restart)
+            return
         except BreakException as e:
             if self.attempt_close(e.mode, e.value):
                 return
-            else:
-                raise
+            raise
+
         if not self.top_level:
             raise FatalError()
 
@@ -106,10 +115,6 @@ class FlowManager(object):
     @property
     def has_result(self):
         return self._result is not MISSING
-
-    def permit(self, break_mode, break_types):
-        can_restart = "in" in break_types
-        self.allowed_break_types[break_mode][can_restart].append(break_types)
 
     def capture(self, break_mode, break_types, callback=None, top_level=False):
         break_block = FlowManager(break_mode, break_types, self.allowed_break_types, self.frame_manager, callback=callback, top_level=top_level)
@@ -128,9 +133,9 @@ class FlowManager(object):
             type_of_value = None # lazily calculated if we need it
 
             if can_restart:
-                allowed_break_types = self.allowed_break_types[mode][True] + self.allowed_break_types[mode][False]
+                allowed_break_types = self.allowed_break_types[mode][0] + self.allowed_break_types[mode][1]
             else:
-                allowed_break_types = self.allowed_break_types[mode][False]
+                allowed_break_types = self.allowed_break_types[mode][0]
 
             for allowed_types in allowed_break_types:
                 allowed_out = allowed_types["out"]
@@ -148,7 +153,7 @@ class FlowManager(object):
         if is_debug() or can_restart:
             raise BreakException(mode, value, opcode, can_restart)
         else:
-            return (mode, value, opcode)
+            return (mode, value, opcode, False)
 
     def value(self, value, opcode):
         return self.unwind("value", value, opcode, False)
@@ -162,8 +167,12 @@ class FlowManager(object):
     def yield_(self, value, opcode):
         return self.unwind("yield", value, opcode, True)
 
+    def attempt_close_or_raise(self, mode, value, opcode, can_restart):
+        if not self.attempt_close(mode, value):
+            raise BreakException(mode, value, opcode, can_restart)
+
     def attempt_close(self, mode, value):
-        if self._result is not MISSING:
+        if is_debug() and self._result is not MISSING:
             raise FatalError()
         accepted_out_type = self.our_break_types["out"]
         if mode == self.our_break_mode and (
@@ -178,10 +187,11 @@ class FlowManager(object):
             return False
 
     def __enter__(self):
-        if self.callback:
-            raise FatalError()
-        if self._result is not MISSING:
-            raise FatalError()
+        if is_debug():
+            if self.callback:
+                raise FatalError()
+            if self._result is not MISSING:
+                raise FatalError()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -233,25 +243,22 @@ class FrameManager(object):
         self.frames[-1].restart_value = restart_value
 
 class Frame(object):
+    __slots__ = [ "manager", "opcode", "locals", "restart_value" ]
+
     def __init__(self, manager, opcode):
         self.manager = manager
         self.opcode = opcode
         self.locals = {}
         self.restart_value = MISSING
 
-    def step(self, name, func, *args):
-        if name not in self.locals:
-            self.locals[name] = func(*args)
-            return self.locals[name], True
+    def step(self, name, func):
+        locals = self.locals
+        value = locals.get("name", MISSING)
+        if value is MISSING:
+            locals[name] = value = func()
+            return value, True
         else:
-            return self.locals[name], False
-
-    def step3(self, name, func, a, b, c):
-        if name not in self.locals:
-            self.locals[name] = func(a, b, c)
-            return self.locals[name], True
-        else:
-            return self.locals[name], False
+            return value, False
 
     def has_restart_value(self):
         return self.restart_value is not MISSING
