@@ -413,10 +413,6 @@ class TestMisc(TestCase):
 
 class TestSpeed(TestCase):
     def test_loops(self):
-        import cProfile, pstats, StringIO
-        pr = cProfile.Profile()
-        pr.enable()
-
         code = parse("""
             function() {
                 int i = 0, j = 0;
@@ -435,13 +431,6 @@ class TestSpeed(TestCase):
         """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True)
         self.assertEquals(result.value, 50 * 50)
-
-        pr.disable()
-        s = StringIO.StringIO()
-        sortby = 'cumulative'
-        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-        ps.print_stats()
-        pr.dump_stats("loop_test")
 
 class TestEuler(TestCase):
     """
@@ -547,4 +536,5 @@ class TestEuler(TestCase):
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
     set_debug(False)
+    unittest.main(module="rdhlang5.parser.test", defaultTest="TestSpeed")
     unittest.main()

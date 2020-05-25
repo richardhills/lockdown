@@ -13,7 +13,7 @@ from rdhlang5.executor.type_factories import enrich_type
 from rdhlang5.type_system.composites import CompositeType
 from rdhlang5.type_system.core_types import Type, NoValueType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
-    DEFAULT_DICT_TYPE
+    DEFAULT_DICT_TYPE, READONLY_DEFAULT_OBJECT_TYPE
 from rdhlang5.type_system.exceptions import FatalError
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType
@@ -21,7 +21,7 @@ from rdhlang5.utils import MISSING, is_debug
 
 
 def prepare(data, outer_context, flow_manager, immediate_context=None):
-    get_manager(data).add_composite_type(DEFAULT_OBJECT_TYPE)
+    get_manager(data).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
 
     if not hasattr(data, "code"):
         raise PreparationException()
@@ -30,14 +30,14 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
 
     context = RDHObject({
         "prepare": outer_context
-    }, bind=DEFAULT_OBJECT_TYPE, debug_reason="static-prepare-context")
+    }, bind=READONLY_DEFAULT_OBJECT_TYPE, debug_reason="static-prepare-context")
 
     static = evaluate(
         enrich_opcode(data.static, UnboundDereferenceBinder(context)),
         context, flow_manager
     )
 
-    get_manager(static).add_composite_type(DEFAULT_OBJECT_TYPE)
+    get_manager(static).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
 
     argument_type = enrich_type(static.argument)
     outer_type = enrich_type(static.outer)
@@ -71,7 +71,7 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
             "argument": argument_type
         }, debug_reason="local-prepare-context")
     },
-        bind=DEFAULT_OBJECT_TYPE,
+        bind=READONLY_DEFAULT_OBJECT_TYPE,
         instantiator_has_verified_bind=True,
         debug_reason="local-prepare-context"
     )
@@ -85,7 +85,7 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
     local_initializer = enrich_opcode(data.local_initializer, UnboundDereferenceBinder(context))
     actual_local_type, local_other_break_types = get_expression_break_types(local_initializer, context, flow_manager)
 
-    get_manager(context).remove_composite_type(DEFAULT_OBJECT_TYPE)
+    get_manager(context).remove_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
 
     if actual_local_type is MISSING:
         raise PreparationException()
@@ -116,7 +116,7 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
             "local": local_type
         }, debug_reason="code-prepare-context")
     },
-        bind=DEFAULT_OBJECT_TYPE,
+        bind=READONLY_DEFAULT_OBJECT_TYPE,
         instantiator_has_verified_bind=True,
         debug_reason="code-prepare-context"
     )
@@ -131,7 +131,7 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
 
     code_break_types = code.get_break_types(context, flow_manager)
 
-    get_manager(context).remove_composite_type(DEFAULT_OBJECT_TYPE)
+    get_manager(context).remove_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
 
     actual_break_types_factory.merge(code_break_types)
 
@@ -289,19 +289,24 @@ class OpenFunction(object):
         self.local_initializer = local_initializer
         self.break_types = break_types
 
+        self.types_context = RDHObject({
+            "outer": self.outer_type,
+            "argument": self.argument_type
+        }, debug_reason="local-initialization-context")
+
         self.local_initialization_context_type = RDHObjectType({
             "outer": self.outer_type,
             "argument": self.argument_type,
-            "types": DEFAULT_OBJECT_TYPE
+            "types": READONLY_DEFAULT_OBJECT_TYPE
         }, name="local-initialization-context-type")
 
         self.execution_context_type = RDHObjectType({
-            "prepare": DEFAULT_OBJECT_TYPE,
+            "prepare": READONLY_DEFAULT_OBJECT_TYPE,
             "outer": self.outer_type,
             "argument": self.argument_type,
-            "static": DEFAULT_OBJECT_TYPE,
+            "static": READONLY_DEFAULT_OBJECT_TYPE,
             "local": self.local_type,
-            "types": DEFAULT_OBJECT_TYPE
+            "types": READONLY_DEFAULT_OBJECT_TYPE
         }, name="code-execution-context-type")
 
     def get_type(self):
@@ -322,12 +327,13 @@ class OpenFunction(object):
             outer_context,
             self.local_initializer,
             self.break_types,
+            self.types_context,
             self.local_initialization_context_type,
             self.execution_context_type
         )
 
 class ClosedFunction(RDHFunction):
-    def __init__(self, data, code, prepare_context, static, argument_type, outer_type, local_type, outer_context, local_initializer, break_types, local_initialization_context_type, execution_context_type):
+    def __init__(self, data, code, prepare_context, static, argument_type, outer_type, local_type, outer_context, local_initializer, break_types, types_context, local_initialization_context_type, execution_context_type):
         self.data = data
         self.code = code
         self.prepare_context = prepare_context
@@ -339,6 +345,7 @@ class ClosedFunction(RDHFunction):
         self.local_initializer = local_initializer
         self.break_types = break_types
 
+        self.types_context = types_context
         self.local_initialization_context_type = local_initialization_context_type
         self.execution_context_type = execution_context_type
 
@@ -359,10 +366,7 @@ class ClosedFunction(RDHFunction):
                     "outer": self.outer_context,
                     "argument": argument,
                     "static": self.static,
-                    "types": RDHObject({
-                        "outer": self.outer_type,
-                        "argument": self.argument_type
-                    }, debug_reason="local-initialization-context")
+                    "types": self.types_context
                 },
                     bind=self.local_initialization_context_type,
                     instantiator_has_verified_bind=True,
@@ -388,11 +392,7 @@ class ClosedFunction(RDHFunction):
                     "argument": argument,
                     "static": self.static,
                     "local": local,
-                    "types": RDHObject({
-                        "outer": self.outer_type,
-                        "argument": self.argument_type,
-                        "local": self.local_type
-                    }, debug_reason="code-execution-context")
+                    "types": self.types_context
                 },
                     bind=self.execution_context_type,
                     instantiator_has_verified_bind=True,

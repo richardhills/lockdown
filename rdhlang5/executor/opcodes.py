@@ -656,7 +656,7 @@ class CommaOp(Opcode):
                 value, _ = frame.step(index, lambda: evaluate(opcode, context, flow_manager))
 
         return flow_manager.value(value, self)
-
+        
 
 class LoopOp(Opcode):
     def __init__(self, data, visitor):

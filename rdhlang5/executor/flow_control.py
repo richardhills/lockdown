@@ -239,9 +239,16 @@ class Frame(object):
         self.locals = {}
         self.restart_value = MISSING
 
-    def step(self, name, func):
+    def step(self, name, func, *args):
         if name not in self.locals:
-            self.locals[name] = func()
+            self.locals[name] = func(*args)
+            return self.locals[name], True
+        else:
+            return self.locals[name], False
+
+    def step3(self, name, func, a, b, c):
+        if name not in self.locals:
+            self.locals[name] = func(a, b, c)
             return self.locals[name], True
         else:
             return self.locals[name], False

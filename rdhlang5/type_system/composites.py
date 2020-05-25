@@ -131,11 +131,11 @@ class CompositeType(Type):
             result = results_by_target_id[id(self)][id(other)]
 
             # Debugging check
-            if result is False:
-                check = self.internal_is_copyable_from(other)
-                if check is True:
-                    self.internal_is_copyable_from(other)
-                    raise FatalError()
+#            if result is False:
+#                check = self.internal_is_copyable_from(other)
+#                if check is True:
+#                    self.internal_is_copyable_from(other)
+#                    raise FatalError()
 
             if result is None:
                 result = cache[id(self)][id(other)]
