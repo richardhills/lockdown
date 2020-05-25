@@ -14,8 +14,8 @@ managers_by_id = {}
 def get_manager(obj, trigger=None):
     manager = managers_by_id.get(id(obj), None)
     if manager:
-        if is_debug():
-            logger.debug("{}:{}:{}:{}:{}".format(len(managers_by_id), trigger, id(obj), type(obj), getattr(manager, "debug_reason", None)))
+#        if is_debug():
+#            logger.debug("{}:{}:{}:{}:{}".format(len(managers_by_id), trigger, id(obj), type(obj), getattr(manager, "debug_reason", None)))
         return manager
 
     if isinstance(obj, InternalMarker):

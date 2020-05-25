@@ -180,6 +180,11 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#breakStatement.
+    def visitBreakStatement(self, ctx):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#eq.
     def visitEq(self, ctx):
         return self.visitChildren(ctx)

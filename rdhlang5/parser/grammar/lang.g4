@@ -120,6 +120,7 @@ expression
    | expression '.' SYMBOL '=' expression  # staticAssignment
    | expression '[' expression ']' '=' expression # dynamicAssignment
    | 'return' expression    # returnStatement
+   | 'break'			    # breakStatement
    | ifStatement			# toIfStatement
    | whileLoop				# toWhileLoop
    | objectType				# toObjectType

@@ -493,48 +493,37 @@ class TestEuler(TestCase):
         self.assertEquals(result.value, 6857)
 
     def test_4(self):
-        import cProfile, pstats, StringIO
-        pr = cProfile.Profile()
-        pr.enable()
-
         code = parse("""
             function() {
                 int bestResult = 0;
-                var getDigit = function(Tuple<int, int>) {
-                    return (argument[0] / argument[1]) % 10;
-                };
-                int i = 990;
-                while(i < 1000) {
-                    int j = 990;
-                    while(j < 1000) {
+                int i = 999;
+                while(i >= 100) {
+                    int j = 999;
+                    while(j >= i) {
                         int testResult = i * j;
+                        if(testResult <= bestResult) {
+                            break;
+                        };
                         if(testResult > 100000
                                 && testResult > bestResult
-                                && getDigit([testResult, 1]) == getDigit([testResult, 100000])
-                                && getDigit([testResult, 10]) == getDigit([testResult, 10000])
-                                && getDigit([testResult, 100]) == getDigit([testResult, 1000])) {
+                                && testResult / 1 % 10 == testResult / 100000 % 10
+                                && testResult / 10 % 10 == testResult / 10000 % 10
+                                && testResult / 100 % 10 == testResult / 1000 % 10
+                        ) {
                             bestResult = testResult;
                         };
-                        j = j + 1;
+                        j = j - 1;
                     };
-                    i = i + 1;
+                    i = i - 1;
                 };
                 return bestResult;
             }
         """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True)
-
-        pr.disable()
-        s = StringIO.StringIO()
-        sortby = 'cumulative'
-        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-        ps.print_stats()
-        pr.dump_stats("profile2")
-
-        self.assertEquals(result.value, 6857)
+        self.assertEquals(result.value, 906609)
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
     set_debug(False)
-    unittest.main(module="rdhlang5.parser.test", defaultTest="TestSpeed")
+    unittest.main(module="rdhlang5.parser.test", defaultTest="TestEuler.test_4")
     unittest.main()

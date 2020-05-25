@@ -319,6 +319,15 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#breakStatement.
+    def enterBreakStatement(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#breakStatement.
+    def exitBreakStatement(self, ctx):
+        pass
+
+
     # Enter a parse tree produced by langParser#eq.
     def enterEq(self, ctx):
         pass

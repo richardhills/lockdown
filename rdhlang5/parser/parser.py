@@ -282,6 +282,9 @@ class RDHLang5Visitor(langVisitor):
             "value", "return", expression
         )
 
+    def visitBreakStatement(self, ctx):
+        return transform_op("break")
+
     def visitIfStatement(self, ctx):
         condition = self.visit(ctx.expression())
         outcomes = ctx.codeBlock()
