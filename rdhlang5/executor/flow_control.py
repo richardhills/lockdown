@@ -253,7 +253,7 @@ class Frame(object):
 
     def step(self, name, func):
         locals = self.locals
-        value = locals.get("name", MISSING)
+        value = locals.get(name, MISSING)
         if value is MISSING:
             locals[name] = value = func()
             return value, True
