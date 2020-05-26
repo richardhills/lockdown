@@ -522,8 +522,81 @@ class TestEuler(TestCase):
         result = bootstrap_function(code, check_safe_exit=True)
         self.assertEquals(result.value, 906609)
 
+    def test_6(self):
+        code = parse("""
+            function() {
+                int sumSquares = 0, sum = 0;
+                int i = 1;
+                while(i <= 100) {
+                    sumSquares = sumSquares + i * i;
+                    sum = sum + i;
+                    i = i + 1;
+                };
+                return sum * sum - sumSquares;
+            }
+        """, debug=True)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.value, 25164150)
+
+    def test_9(self):
+        code = parse("""
+            function() {
+                int a = 1;
+                while(a < 998) {
+                    int b = 1;
+                    while(b < a) {
+                        int c = 1000 - a - b;
+                        if(c <= 0) {
+                            break;
+                        };
+                        if(a * a + b * b == c * c) {
+                            return a * b * c;
+                        };
+                        b = b + 1;
+                    };
+                    a = a + 1;
+                };
+            }
+        """, debug=True)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.value, 31875000)
+
+
+    def test_14(self):
+        return # This test is currently too slow - requires caching of results to speed up
+        code = parse("""
+            function() {
+                var testStartingNumber = function(int) {
+                    int current = argument;
+                    int count = 1;
+                    while(current != 1) {
+                        if(current % 2 == 0) {
+                            current = current / 2;
+                        } else {
+                            current = 3 * current + 1;
+                        };
+                        count = count + 1;
+                    };
+                    return count;
+                };
+                int longestChain = 0, startingNumberWithLongestChain = 0;
+                int test = 1;
+                while(test < 1000000) {
+                    int newChainLength = testStartingNumber(test);
+                    if(newChainLength > longestChain) {
+                        longestChain = newChainLength;
+                        startingNumberWithLongestChain = test;
+                    };
+                    test = test + 1;
+                };
+                return startingNumberWithLongestChain;
+            }
+        """, debug=True)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.value, 837799)
+
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
     set_debug(False)
-    unittest.main(module="rdhlang5.parser.test", defaultTest="TestEuler.test_4")
+    unittest.main(module="rdhlang5.parser.test", defaultTest="TestEuler.test_14")
     unittest.main()

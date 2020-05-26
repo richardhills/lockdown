@@ -6,16 +6,18 @@ from _collections import defaultdict
 from munch import munchify
 from pip._vendor.contextlib2 import ExitStack
 
-from rdhlang5.executor.flow_control import FrameManager, FlowManager,\
+from rdhlang5.executor.flow_control import FrameManager, FlowManager, \
     BreakException
 from rdhlang5.executor.function import prepare
+from rdhlang5.executor.opcodes import get_context_type
+from rdhlang5.executor.raw_code_factories import inferred_type, function_lit, \
+    int_type, infer_all, dereference, loop_op, comma_op, condition_op, \
+    equality_op, binary_integer_op, nop, return_op, yield_op
 from rdhlang5.type_system.core_types import AnyType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE
 from rdhlang5.type_system.managers import get_manager
 from rdhlang5.type_system.object_types import RDHObject
 from rdhlang5.utils import NO_VALUE
-from rdhlang5.executor.raw_code_factories import inferred_type
-from rdhlang5.executor.opcodes import get_context_type
 
 
 class ObjectDictWrapper(object):
@@ -44,7 +46,16 @@ def get_default_global_context():
             }, debug_reason="default-global-context"),
             "var": RDHObject({
                 "type": "Inferred"
-            }, debug_reason="default-global-context")
+            }, debug_reason="default-global-context"),
+            "range": prepare(
+                function_lit(int_type(), infer_all(), int_type(), dereference("argument.0"),
+                    loop_op(comma_op(
+                        condition_op(binary_integer_op("lt", dereference("local"), dereference("argument.1")), nop(), return_op(nop())),
+                        yield_op(dereference("local"), int_type())
+                    ))
+                ),
+                None, create_no_escape_flow_manager()
+            ).close(None)
         }, debug_reason="default-global-context")
     }, bind=DEFAULT_OBJECT_TYPE, debug_reason="default-global-context")
 

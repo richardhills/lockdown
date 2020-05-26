@@ -415,7 +415,7 @@ class DynamicDereferenceOp(Opcode):
         return break_types.build()
 
     def jump(self, context, flow_manager, immediate_context=None):
-        raise FatalError()
+        raise FatalError(self.reference)
 
 
 class AssignmentOp(Opcode):
@@ -490,7 +490,7 @@ class AssignmentOp(Opcode):
             reference, _ = frame.step("reference", lambda: evaluate(self.reference, context, flow_manager))
             rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, flow_manager))
 
-            if reference in ("result", "test", "i", "j", "testResult"):
+            if reference in ("result", "test", "i", "j", "testResult", "current"):
                 logger.debug("{} = {}".format(reference, rvalue))
 
             manager = get_manager(of)
