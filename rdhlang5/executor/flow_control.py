@@ -117,10 +117,10 @@ class FlowManager(object):
         return self._result is not MISSING
 
     def capture(self, break_mode, break_types, callback=None, top_level=False):
-        break_block = FlowManager(break_mode, break_types, self.allowed_break_types, self.frame_manager, callback=callback, top_level=top_level)
+        flow_manager = FlowManager(break_mode, break_types, self.allowed_break_types, self.frame_manager, callback=callback, top_level=top_level)
         if callback:
-            break_block.start()
-        return break_block
+            flow_manager.start()
+        return flow_manager
 
     @property
     def restart_continuation(self):
@@ -208,6 +208,7 @@ class Continuation(object):
         self.restart_type = restart_type
 
     def get_break_types(self):
+        raise ValueError()
         return {}
 
     def invoke(self, restart_value, break_manager):

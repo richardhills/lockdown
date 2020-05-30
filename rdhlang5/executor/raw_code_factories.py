@@ -213,11 +213,19 @@ def transform_op(*args):
     if len(args) == 1:
         output, = args
         input = code = restart = restart_type = None
+        capture_continuation = False
     elif len(args) == 3:
         input, output, code = args
         restart = restart_type = None
+        capture_continuation = False
+    elif len(args) == 4:
+        input, output, capture_continuation, code = args
+        restart = restart_type = None
     elif len(args) == 5:
         input, output, restart, restart_type, code = args
+        capture_continuation = False
+    elif len(args) == 6:
+        input, output, restart, restart_type, capture_continuation, code = args
     else:
         raise FatalError()
     if code:
@@ -227,6 +235,8 @@ def transform_op(*args):
     if not isinstance(output, basestring):
         raise FatalError()
     if restart is not None and not isinstance(restart, basestring):
+        raise FatalError()
+    if not isinstance(capture_continuation, bool):
         raise FatalError()
     op = {
         "opcode": "transform",
@@ -238,6 +248,8 @@ def transform_op(*args):
     if restart:
         op["restart"] = restart
         op["restart_type"] = restart_type
+    if capture_continuation:
+        op["capture_continuation"] = capture_continuation
     return RDHObject(op, debug_reason="code")
 
 
@@ -325,6 +337,16 @@ def assignment_op(of, reference, rvalue):
         "rvalue": rvalue
     }, debug_reason="code")
 
+def insert_op(of, reference, rvalue):
+    check_is_opcode(of)
+    check_is_opcode(reference)
+    check_is_opcode(rvalue)
+    return RDHObject({
+        "opcode": "insert",
+        "of": of,
+        "reference": reference,
+        "rvalue": rvalue
+    }, debug_reason="code")
 
 def condition_op(condition, when_true, when_false):
     check_is_opcode(condition)
@@ -463,6 +485,10 @@ def unbound_assignment(name, rvalue):
 def prepared_function(*args):
     return close_op(static_op(prepare_op(literal_op(function_lit(*args)))), context_op())
 
+def munge_ints(v):
+    if v.isdigit():
+        return int(v)
+    return v
 
 def dereference(*vars, **kwargs):
     result = context_op()
@@ -470,10 +496,10 @@ def dereference(*vars, **kwargs):
     for var in vars:
         if isinstance(var, basestring):
             for v in var.split("."):
-                result = dereference_op(result, literal_op(v), **kwargs)
+                result = dereference_op(result, literal_op(munge_ints(v)), **kwargs)
         elif isinstance(var, list):
             for v in var:
-                result = dereference_op(result, literal_op(v), **kwargs)
+                result = dereference_op(result, literal_op(munge_ints(v)), **kwargs)
         else:
             raise FatalError(var)
 

@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+from time import time
 from unittest.case import TestCase
 import unittest.main
 
-from rdhlang5.parser.parser import parse
-from rdhlang5.type_system.object_types import RDHObject
+import jsonpickle
+
 from rdhlang5.executor.bootstrap import bootstrap_function
 from rdhlang5.executor.exceptions import PreparationException
-import jsonpickle
+from rdhlang5.parser.parser import parse
+from rdhlang5.type_system.object_types import RDHObject
 from rdhlang5.utils import set_debug
 
 
@@ -299,6 +301,17 @@ class TestBasicFunction(TestCase):
         self.assertEquals(result.mode, "value")
         self.assertEquals(result.value, 6)
 
+class TestBuiltIns(TestCase):
+    def test_range(self):
+        code = parse("""
+            function() {
+                return list(range(1, 100));
+            }
+        """)
+        result = bootstrap_function(code)
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 42)
+
 class TestInferredTypes(TestCase):
     def test_inferred_locals(self):
         code = parse("""
@@ -413,6 +426,7 @@ class TestMisc(TestCase):
 
 class TestSpeed(TestCase):
     def test_loops(self):
+        start = time()
         code = parse("""
             function() {
                 int i = 0, j = 0;
@@ -431,6 +445,8 @@ class TestSpeed(TestCase):
         """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True)
         self.assertEquals(result.value, 100 * 100)
+        end = time()
+        self.assertLess(end - start, 30)
 
 class TestEuler(TestCase):
     """
@@ -539,6 +555,7 @@ class TestEuler(TestCase):
         self.assertEquals(result.value, 25164150)
 
     def test_9(self):
+        return # this test takes about 30 seconds in non-debug mode
         code = parse("""
             function() {
                 int a = 1;
@@ -549,7 +566,11 @@ class TestEuler(TestCase):
                         if(c <= 0) {
                             break;
                         };
-                        if(a * a + b * b == c * c) {
+                        int test = a * a + b * b - c * c;
+                        if(test < 0) {
+                            break;
+                        };
+                        if(test == 0) {
                             return a * b * c;
                         };
                         b = b + 1;
@@ -598,5 +619,5 @@ class TestEuler(TestCase):
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
     set_debug(False)
-    unittest.main(module="rdhlang5.parser.test", defaultTest="TestEuler.test_14")
+    unittest.main(module="rdhlang5.parser.test", defaultTest="TestEuler.test_9")
     unittest.main()

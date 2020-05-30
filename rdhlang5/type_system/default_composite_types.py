@@ -1,6 +1,6 @@
 from rdhlang5.type_system.core_types import OneOfType, AnyType, Const
 from rdhlang5.type_system.dict_types import RDHDictType, DictWildcardGetterType, \
-    DictWildcardSetterType
+    DictWildcardSetterType, DictWildcardDeletterType
 from rdhlang5.type_system.list_types import RDHListType, ListWildcardGetterType, \
     ListWildcardSetterType, ListInsertType, ListWildcardDeletterType, \
     ListWildcardInsertType
@@ -25,6 +25,7 @@ DEFAULT_LIST_TYPE.micro_op_types[("insert-wildcard", )] = ListWildcardInsertType
 
 DEFAULT_DICT_TYPE.micro_op_types[("get-wildcard", )] = DictWildcardGetterType(rich_composite_type, True, False)
 DEFAULT_DICT_TYPE.micro_op_types[("set-wildcard", )] = DictWildcardSetterType(rich_composite_type, True, True)
+DEFAULT_DICT_TYPE.micro_op_types[("delete-wildcard", )] = DictWildcardDeletterType(True)
 
 
 

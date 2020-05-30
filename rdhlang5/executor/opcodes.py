@@ -518,6 +518,102 @@ class AssignmentOp(Opcode):
             except InvalidAssignmentKey:
                 raise flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
 
+class InsertOp(Opcode):
+    INVALID_LVALUE = TypeErrorFactory("InsertOp: invalid_lvalue")
+    INVALID_RVALUE = TypeErrorFactory("InsertOp: invalid_rvalue")
+    INVALID_ASSIGNMENT = TypeErrorFactory("InsertOp: invalid_assignment")
+
+    def __init__(self, data, visitor):
+        self.of = enrich_opcode(data.of, visitor)
+        self.reference = enrich_opcode(data.reference, visitor)
+        self.rvalue = enrich_opcode(data.rvalue, visitor)
+
+    def get_break_types(self, context, flow_manager, immediate_context=None):
+        break_types = BreakTypesFactory()
+
+        reference_types, reference_break_types = get_expression_break_types(self.reference, context, flow_manager)
+        break_types.merge(reference_break_types)
+        if reference_types is not MISSING:
+            reference_types = flatten_out_types(reference_types)
+
+        of_types, of_break_types = get_expression_break_types(self.of, context, flow_manager)
+        break_types.merge(of_break_types)
+        if of_types is not MISSING:
+            of_types = flatten_out_types(of_types)
+
+        rvalue_type, rvalue_break_types = get_expression_break_types(self.rvalue, context, flow_manager)
+        break_types.merge(rvalue_break_types)
+        if rvalue_type is not MISSING:
+            rvalue_type = flatten_out_types(rvalue_type)
+
+        self.invalid_assignment_error = False
+        self.invalid_rvalue_error = False
+        self.invalid_lvalue_error = False
+
+        if reference_types is not MISSING and of_types is not MISSING and rvalue_type is not MISSING:
+            for reference_type in unwrap_types(reference_types):
+                try:
+                    for reference in reference_type.get_allowed_values():    
+                        for of_type in unwrap_types(of_types):
+                            micro_op = None
+                            if isinstance(of_type, CompositeType) and reference is not None:
+                                micro_op = of_type.get_micro_op_type(("insert", reference))
+
+                                if not micro_op:
+                                    micro_op = of_type.get_micro_op_type(("insert-wildcard",))
+
+                            if micro_op:
+                                if not micro_op.type.is_copyable_from(rvalue_type):
+                                    self.invalid_rvalue_error = True
+
+                                break_types.add("value", NoValueType())
+
+                                if micro_op.type_error or micro_op.key_error:
+                                    self.invalid_assignment_error = True
+                            else:
+                                self.invalid_lvalue_error = True
+                except AllowedValuesNotAvailable:
+                    self.invalid_lvalue_error = True
+
+        if self.invalid_assignment_error:
+            break_types.add("exception", self.INVALID_ASSIGNMENT.get_type())
+        if self.invalid_rvalue_error:
+            break_types.add("exception", self.INVALID_RVALUE.get_type())
+        if self.invalid_lvalue_error:
+            break_types.add("exception", self.INVALID_LVALUE.get_type())
+
+        return break_types.build()
+
+    def jump(self, context, flow_manager, immediate_context=None):
+        with flow_manager.get_next_frame(self) as frame:
+            of, _ = frame.step("of", lambda: evaluate(self.of, context, flow_manager))
+            reference, _ = frame.step("reference", lambda: evaluate(self.reference, context, flow_manager))
+            rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, flow_manager))
+
+            manager = get_manager(of)
+
+            try:
+                direct_micro_op_type = manager.get_micro_op_type(("insert", reference))
+                if direct_micro_op_type:
+                    if self.invalid_rvalue_error and not direct_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
+                        raise flow_manager.exception(self.INVALID_RVALUE(), self)
+
+                    micro_op = direct_micro_op_type.create(manager)
+                    return flow_manager.value(micro_op.invoke(rvalue, trust_caller=True), self)
+
+                wildcard_micro_op_type = manager.get_micro_op_type(("insert-wildcard",))
+                if wildcard_micro_op_type:
+                    if self.invalid_rvalue_error and not wildcard_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
+                        raise flow_manager.exception(self.INVALID_RVALUE(), self)
+
+                    micro_op = wildcard_micro_op_type.create(manager)
+                    return flow_manager.value(micro_op.invoke(reference, rvalue, trust_caller=True), self)
+
+                raise flow_manager.exception(self.INVALID_LVALUE(), self)
+            except InvalidAssignmentType:
+                raise flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
+            except InvalidAssignmentKey:
+                raise flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
 
 def BinaryOp(name, func, argument_type, result_type):
     class _BinaryOp(Opcode):
@@ -568,6 +664,8 @@ def BinaryOp(name, func, argument_type, result_type):
 
 
 class TransformOp(Opcode):
+    MISSING_IN_BREAK_TYPE = TypeErrorFactory("TransformOp: missing_in_break_type")
+
     def __init__(self, data, visitor):
         super(TransformOp, self).__init__(data, visitor)
         if hasattr(self.data, "code"):
@@ -575,6 +673,7 @@ class TransformOp(Opcode):
             if not hasattr(self.data, "input"):
                 raise PreparationException("input missing in transform opcode")
             self.input = self.data.input
+            self.capture_continuation = getattr(data, "capture_continuation", False)
         else:
             self.expression = None
             self.input = None
@@ -594,36 +693,69 @@ class TransformOp(Opcode):
         if self.restart:
             restart_type = enrich_type(evaluate(self.restart_type, context, flow_manager))
 
+        missing_in_break_type = False
+
         if self.expression:
             expression_break_types = self.expression.get_break_types(context, flow_manager)
             if self.input in expression_break_types:
-                expression_break_types[self.output] = expression_break_types.pop(self.input)
-                if self.restart:
-                    for output_break_type in expression_break_types[self.output]:
-                        output_break_type["in"] = restart_type
+                transformed_break_types = expression_break_types.pop(self.input)
+
+                for transformed_break_type in transformed_break_types:
+                    in_break_type = transformed_break_type.pop("in", None)
+                    if self.capture_continuation:
+                        if in_break_type is None:
+                            missing_in_break_type = True
+                        else:
+                            transformed_break_type = {
+                                "out": RDHObjectType({
+                                    "value": Const(transformed_break_type["out"]),
+                                    "continuation": Const(ClosedFunctionType(in_break_type, expression_break_types))
+                                })
+                            }
+                    if self.restart:
+                        transformed_break_type["in"] = restart_type
+
+                expression_break_types[self.output] = transformed_break_types
             break_types.merge(expression_break_types)
         else:
             break_types.add(self.output, NoValueType())
+
+        if missing_in_break_type:
+            break_types.add("exception", self.MISSING_IN_BREAK_TYPE.get_type())
+
         if self.restart:
             break_types.add(self.restart, restart_type)
         return break_types.build()
 
     def jump(self, context, flow_manager, immediate_context=None):
         with flow_manager.get_next_frame(self) as frame:
-            if frame.has_restart_value():
-                restart_value = frame.pop_restart_value()
-                restart_type = enrich_type(evaluate(self.restart_type, context, flow_manager))
-                if not restart_type.is_copyable_from(get_type_of_value(restart_value)):
-                    raise FatalError()
-                raise flow_manager.unwind(self.restart, restart_value, self, False)
-
             can_restart = self.restart is not None
 
+            if frame.has_restart_value():
+                if not can_restart:
+                    raise FatalError()
+
+                restart_value = frame.pop_restart_value()
+                if is_debug():
+                    restart_type = enrich_type(evaluate(self.restart_type, context, flow_manager))
+                    if not restart_type.is_copyable_from(get_type_of_value(restart_value)):
+                        raise FatalError()
+                raise flow_manager.unwind(self.restart, restart_value, self, False)
+
             if self.expression:
-                with flow_manager.capture(self.input, { "out": AnyType() }) as new_flow_manager:
-                    mode, value, opcode, can_restart = self.expression.jump(context, new_flow_manager)
-                    new_flow_manager.attempt_close_or_raise(mode, value, opcode, can_restart)
-                return flow_manager.unwind(self.output, new_flow_manager.result, self, can_restart)
+                def enter_expression(new_flow_manager):
+                    return self.expression.jump(context, new_flow_manager)
+
+                new_flow_manager = flow_manager.capture(self.input, { "out": AnyType() }, enter_expression)
+
+                result = new_flow_manager.result
+                if self.capture_continuation:
+                    result = RDHObject({
+                        "value": result,
+                        "continuation": new_flow_manager.restart_continuation
+                    })
+
+                return flow_manager.unwind(self.output, result, self, can_restart)
             else:
                 return flow_manager.unwind(self.output, NO_VALUE, self, can_restart)
         raise FatalError()
@@ -996,6 +1128,7 @@ OPCODES = {
     "dereference": DereferenceOp,
     "dynamic_dereference": DynamicDereferenceOp,
     "assignment": AssignmentOp,
+    "insert": InsertOp,
     "context": ContextOp,
     "comma": CommaOp,
     "loop": LoopOp,

@@ -9,11 +9,23 @@ from rdhlang5.type_system.core_types import UnitType, OneOfType, Const, AnyType,
     IntegerType, BooleanType, NoValueType, StringType
 from rdhlang5.type_system.default_composite_types import DEFAULT_DICT_TYPE
 from rdhlang5.type_system.dict_types import RDHDict
-from rdhlang5.type_system.list_types import RDHListType
+from rdhlang5.type_system.exceptions import FatalError
+from rdhlang5.type_system.list_types import RDHListType, RDHList
 from rdhlang5.type_system.object_types import RDHObjectType, RDHObject
 
 
 def build_closed_function_type(data):
+    if not isinstance(data.break_types, RDHDict):
+        raise FatalError()
+    for mode, break_types in data.break_types.items():
+        if not isinstance(mode, basestring):
+            raise FatalError()
+        if not isinstance(break_types, RDHList):
+            raise FatalError()
+        for break_type in break_types:
+            if not isinstance(break_type, RDHDict):
+                raise FatalError()
+
     return ClosedFunctionType(
         enrich_type(data.argument),
         RDHDict({

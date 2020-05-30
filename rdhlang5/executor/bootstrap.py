@@ -12,7 +12,10 @@ from rdhlang5.executor.function import prepare
 from rdhlang5.executor.opcodes import get_context_type
 from rdhlang5.executor.raw_code_factories import inferred_type, function_lit, \
     int_type, infer_all, dereference, loop_op, comma_op, condition_op, \
-    equality_op, binary_integer_op, nop, return_op, yield_op
+    equality_op, binary_integer_op, nop, return_op, yield_op, list_type, \
+    function_type, list_template_op, insert_op, transform_op, literal_op, \
+    invoke_op, object_template_op, prepared_function, no_value_type, \
+    assignment_op, dict_template_op
 from rdhlang5.type_system.core_types import AnyType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE
 from rdhlang5.type_system.managers import get_manager
@@ -48,14 +51,57 @@ def get_default_global_context():
                 "type": "Inferred"
             }, debug_reason="default-global-context"),
             "range": prepare(
-                function_lit(int_type(), infer_all(), int_type(), dereference("argument.0"),
+                function_lit(
+                    list_type([ int_type(), int_type() ], None),
+                    infer_all(), int_type(), dereference("argument.0"),
                     loop_op(comma_op(
                         condition_op(binary_integer_op("lt", dereference("local"), dereference("argument.1")), nop(), return_op(nop())),
                         yield_op(dereference("local"), int_type())
                     ))
                 ),
                 None, create_no_escape_flow_manager()
-            ).close(None)
+            ).close(None),
+            "list": prepare(
+                function_lit(
+                    function_type(no_value_type(), {
+                        "yield": list_template_op([ dict_template_op({
+                            "in": no_value_type(),
+                            "out": int_type()
+                        })])
+                    }),
+                    infer_all(),
+                    inferred_type(),
+                    object_template_op({
+                        "result": list_template_op([]),
+                        "callback": dereference("argument")
+                    }),
+                    loop_op(
+                        invoke_op(
+                            prepared_function(
+                                no_value_type(),
+                                infer_all(),
+                                inferred_type(),
+                                transform_op(
+                                    "yield", "value", invoke_op(dereference("outer.local.callback"))
+                                ),
+                                comma_op(
+                                    insert_op(
+                                        dereference("outer.local.result"),
+                                        literal_op(0),
+                                        dereference("local.value")
+                                    ),
+                                    assignment_op(
+                                        dereference("outer.local"),
+                                        literal_op("callback"),
+                                        dereference("local.continuation")
+                                    )
+                                )
+                            )
+                        )
+                    ) 
+                ),
+                None, create_no_escape_flow_manager()
+            )
         }, debug_reason="default-global-context")
     }, bind=DEFAULT_OBJECT_TYPE, debug_reason="default-global-context")
 

@@ -703,20 +703,23 @@ class RDHDict(Composite, DictMixin, object):
         if raw:
             return self.wrapped.__delitem__(key)
 
-        manager = get_manager(self)
+        try:
+            manager = get_manager(self)
 
-        micro_op_type = manager.get_micro_op_type(("delete", key))
-        if micro_op_type is not None:
-            micro_op = micro_op_type.create(manager)
-            return micro_op.invoke()
-        else:
-            micro_op_type = manager.get_micro_op_type(("delete-wildcard",))
-
-            if micro_op_type is None:
-                raise MissingMicroOp()
-
-            micro_op = micro_op_type.create(manager)
-            return micro_op.invoke(key)
+            micro_op_type = manager.get_micro_op_type(("delete", key))
+            if micro_op_type is not None:
+                micro_op = micro_op_type.create(manager)
+                return micro_op.invoke()
+            else:
+                micro_op_type = manager.get_micro_op_type(("delete-wildcard",))
+    
+                if micro_op_type is None:
+                    raise MissingMicroOp()
+    
+                micro_op = micro_op_type.create(manager)
+                return micro_op.invoke(key)
+        except MissingMicroOp:
+            raise KeyError()
 
     def keys(self):
         if self is self.wrapped:
