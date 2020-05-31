@@ -30,7 +30,7 @@ class CompositeType(Type):
                 raise FatalError()
         from rdhlang5.type_system.dict_types import RDHDict
 
-        if isinstance(initial_data, RDHDict):
+        if isinstance(initial_data, dict):
             pass
         self.micro_op_types = micro_op_types
         self.initial_data = initial_data
@@ -94,7 +94,7 @@ class CompositeType(Type):
                     only_safe_with_initial_data = True
 
                 if only_safe_with_initial_data:
-                    if not other.initial_data:
+                    if other.initial_data is None:
                         return False
                     if our_micro_op.check_for_runtime_data_conflict(other.initial_data):
                         return False
@@ -283,7 +283,8 @@ class CompositeObjectManager(object):
         if new:
             if is_debug() or not caller_has_verified_type:
                 if self.check_for_runtime_data_conflicts(type):
-                    raise MicroOpTypeConflict()
+                    self.check_for_runtime_data_conflicts(type)
+                    raise MicroOpTypeConflict(type)
 
                 self.check_for_runtime_micro_op_conflicts(type)
 

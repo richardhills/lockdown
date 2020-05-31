@@ -318,24 +318,24 @@ def dereference_op(of, reference, **kwargs):
         "reference": reference
     }, **kwargs), debug_reason="code")
 
-def dynamic_dereference_op(reference):
+def dynamic_dereference_op(reference, **kwargs):
     if not isinstance(reference, basestring):
         raise FatalError()
-    return RDHObject({
+    return RDHObject(spread_dict({
         "opcode": "dynamic_dereference",
         "reference": reference
-    }, debug_reason="code")
+    }, **kwargs), debug_reason="code")
 
-def assignment_op(of, reference, rvalue):
+def assignment_op(of, reference, rvalue, **kwargs):
     check_is_opcode(of)
     check_is_opcode(reference)
     check_is_opcode(rvalue)
-    return RDHObject({
+    return RDHObject(spread_dict({
         "opcode": "assignment",
         "of": of,
         "reference": reference,
         "rvalue": rvalue
-    }, debug_reason="code")
+    }, **kwargs), debug_reason="code")
 
 def insert_op(of, reference, rvalue):
     check_is_opcode(of)

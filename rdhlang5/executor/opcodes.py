@@ -68,21 +68,25 @@ class TypeErrorFactory(object):
     def __init__(self, message=None):
         self.message = message
 
-    def __call__(self):
+    def __call__(self, **kwargs):
         data = {
             "type": "TypeError",
         }
-        if self.message:
-            data["message"] = self.message
-        return RDHObject(data, bind=self.get_type(), debug_reason="type-error")
+        message = self.message
+        if message:
+            message = self.message.format(**kwargs)
+            data["message"] = message
+        return RDHObject(data, bind=self.get_type(**kwargs), debug_reason="type-error")
 
-    def get_type(self):
+    def get_type(self, **kwargs):
         properties = {
             "type": Const(UnitType("TypeError"))
         }
-        if self.message:
-            properties["message"] = Const(UnitType(self.message))
-        return RDHObjectType(properties, name=self.message)
+        message = self.message
+        if message:
+            message = self.message.format(**kwargs)
+            properties["message"] = Const(UnitType(message))
+        return RDHObjectType(properties, name=message)
 
 
 class Opcode(object):
@@ -272,7 +276,8 @@ class ListTemplateOp(Opcode):
 
         combined_value_types = merge_types(all_value_types, "exact")
 
-        micro_ops[("get-wildcard",)] = ListWildcardGetterType(combined_value_types, True, False)
+        if not isinstance(combined_value_types, NoValueType):
+            micro_ops[("get-wildcard",)] = ListWildcardGetterType(combined_value_types, True, False)
         micro_ops[("set-wildcard",)] = ListWildcardSetterType(AnyType(), True, True)
         micro_ops[("insert", 0)] = ListInsertType(AnyType(), 0, False, False)
         micro_ops[("delete-wildcard",)] = ListWildcardDeletterType(True)
@@ -327,7 +332,7 @@ class ContextOp(Opcode):
 
 
 class DereferenceOp(Opcode):
-    INVALID_DEREFERENCE = TypeErrorFactory("DereferenceOpcode: invalid_dereference")
+    INVALID_DEREFERENCE = TypeErrorFactory("DereferenceOp: invalid_dereference {reference}")
 
     def __init__(self, data, visitor):
         super(DereferenceOp, self).__init__(data, visitor)
@@ -347,7 +352,7 @@ class DereferenceOp(Opcode):
         if of_types is not MISSING:
             of_types = flatten_out_types(of_types)
 
-        self.invalid_dereference_error = False
+        invalid_dereferences = set()
 
         if reference_types is not MISSING and of_types is not MISSING:
             for reference_type in unwrap_types(reference_types):
@@ -364,14 +369,16 @@ class DereferenceOp(Opcode):
                             if micro_op:
                                 break_types.add("value", micro_op.type)
                                 if micro_op.type_error or micro_op.key_error:
-                                    self.invalid_dereference_error = True
+                                    invalid_dereferences.add(reference)
                             else:
-                                self.invalid_dereference_error = True
+                                invalid_dereferences.add(reference)
                 except AllowedValuesNotAvailable:
-                    self.invalid_dereference_error = True
+                    invalid_dereferences.add(reference)
 
-        if self.invalid_dereference_error:
-            break_types.add("exception", self.INVALID_DEREFERENCE.get_type(), opcode=self)
+        self.invalid_dereference_error = len(list(invalid_dereferences)) > 1
+
+        for invalid_dereference in invalid_dereferences:
+            break_types.add("exception", self.INVALID_DEREFERENCE.get_type(reference=invalid_dereference), opcode=self)
 
         return break_types.build()
 
@@ -381,6 +388,9 @@ class DereferenceOp(Opcode):
             reference, _ = frame.step("reference", lambda: evaluate(self.reference, context, flow_manager))
 
             manager = get_manager(of)
+
+            if manager is None:
+                return flow_manager.exception(self.INVALID_DEREFERENCE(), self)
 
             try:
                 direct_micro_op_type = manager.get_micro_op_type(("get", reference))
@@ -393,15 +403,15 @@ class DereferenceOp(Opcode):
                     micro_op = wildcard_micro_op_type.create(manager)
                     return flow_manager.value(micro_op.invoke(reference, trust_caller=True), self)
 
-                raise flow_manager.exception(self.INVALID_DEREFERENCE(), self)
+                return flow_manager.exception(self.INVALID_DEREFERENCE(reference=reference), self)
             except InvalidDereferenceType:
-                raise flow_manager.exception(self.INVALID_DEREFERENCE(), self)
+                return flow_manager.exception(self.INVALID_DEREFERENCE(reference=reference), self)
             except InvalidDereferenceKey:
-                raise flow_manager.exception(self.INVALID_DEREFERENCE(), self)
+                return flow_manager.exception(self.INVALID_DEREFERENCE(reference=reference), self)
 
 
 class DynamicDereferenceOp(Opcode):
-    INVALID_DEREFERENCE = TypeErrorFactory("DereferenceOpcode: invalid_dereference")
+    INVALID_DEREFERENCE = TypeErrorFactory("DynamicDereferenceOp: invalid_dereference")
 
     def __init__(self, data, visitor):
         super(DynamicDereferenceOp, self).__init__(data, visitor)
@@ -410,7 +420,7 @@ class DynamicDereferenceOp(Opcode):
     def get_break_types(self, context, flow_manager, immediate_context=None):
         break_types = BreakTypesFactory()
 
-        break_types.add("exception", self.INVALID_DEREFERENCE.get_type())
+        break_types.add("exception", self.INVALID_DEREFERENCE.get_type(reference=self.reference))
 
         return break_types.build()
 
@@ -499,7 +509,7 @@ class AssignmentOp(Opcode):
                 direct_micro_op_type = manager.get_micro_op_type(("set", reference))
                 if direct_micro_op_type:
                     if self.invalid_rvalue_error and not direct_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
-                        raise flow_manager.exception(self.INVALID_RVALUE(), self)
+                        return flow_manager.exception(self.INVALID_RVALUE(), self)
 
                     micro_op = direct_micro_op_type.create(manager)
                     return flow_manager.value(micro_op.invoke(rvalue, trust_caller=True), self)
@@ -507,16 +517,16 @@ class AssignmentOp(Opcode):
                 wildcard_micro_op_type = manager.get_micro_op_type(("set-wildcard",))
                 if wildcard_micro_op_type:
                     if self.invalid_rvalue_error and not wildcard_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
-                        raise flow_manager.exception(self.INVALID_RVALUE(), self)
+                        return flow_manager.exception(self.INVALID_RVALUE(), self)
 
                     micro_op = wildcard_micro_op_type.create(manager)
                     return flow_manager.value(micro_op.invoke(reference, rvalue, trust_caller=True), self)
 
-                raise flow_manager.exception(self.INVALID_LVALUE(), self)
+                return flow_manager.exception(self.INVALID_LVALUE(), self)
             except InvalidAssignmentType:
-                raise flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
+                return flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
             except InvalidAssignmentKey:
-                raise flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
+                return flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
 
 class InsertOp(Opcode):
     INVALID_LVALUE = TypeErrorFactory("InsertOp: invalid_lvalue")
@@ -596,7 +606,7 @@ class InsertOp(Opcode):
                 direct_micro_op_type = manager.get_micro_op_type(("insert", reference))
                 if direct_micro_op_type:
                     if self.invalid_rvalue_error and not direct_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
-                        raise flow_manager.exception(self.INVALID_RVALUE(), self)
+                        return flow_manager.exception(self.INVALID_RVALUE(), self)
 
                     micro_op = direct_micro_op_type.create(manager)
                     return flow_manager.value(micro_op.invoke(rvalue, trust_caller=True), self)
@@ -604,16 +614,16 @@ class InsertOp(Opcode):
                 wildcard_micro_op_type = manager.get_micro_op_type(("insert-wildcard",))
                 if wildcard_micro_op_type:
                     if self.invalid_rvalue_error and not wildcard_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
-                        raise flow_manager.exception(self.INVALID_RVALUE(), self)
+                        return flow_manager.exception(self.INVALID_RVALUE(), self)
 
                     micro_op = wildcard_micro_op_type.create(manager)
                     return flow_manager.value(micro_op.invoke(reference, rvalue, trust_caller=True), self)
 
-                raise flow_manager.exception(self.INVALID_LVALUE(), self)
+                return flow_manager.exception(self.INVALID_LVALUE(), self)
             except InvalidAssignmentType:
-                raise flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
+                return flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
             except InvalidAssignmentKey:
-                raise flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
+                return flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
 
 def BinaryOp(name, func, argument_type, result_type):
     class _BinaryOp(Opcode):
@@ -928,10 +938,10 @@ class CloseOp(Opcode):
         from rdhlang5.executor.function import OpenFunction
 
         if not isinstance(open_function, OpenFunction):
-            flow_manager.exception(self.INVALID_FUNCTION(), self)
+            return flow_manager.exception(self.INVALID_FUNCTION(), self)
 
         if (is_debug() or self.outer_context_type_error) and not open_function.outer_type.is_copyable_from(get_type_of_value(outer_context)):
-            flow_manager.exception(self.INVALID_OUTER_CONTEXT(), self)
+            return flow_manager.exception(self.INVALID_OUTER_CONTEXT(), self)
 
         return flow_manager.value(open_function.close(outer_context), self)
 
@@ -939,19 +949,30 @@ class CloseOp(Opcode):
 class StaticOp(Opcode):
     def __init__(self, data, visitor):
         self.code = enrich_opcode(data.code, visitor)
+        self.value = MISSING
+
+    def lazy_get_value(self, context, flow_manager, immediate_context):
+        if self.value is MISSING:
+            try:
+                self.value = evaluate(self.code, context, flow_manager, immediate_context)
+            except Exception as e:
+                raise PreparationException(e)
+        return self.value
 
     def get_break_types(self, context, flow_manager, immediate_context=None):
         break_types = BreakTypesFactory()
-        try:
-            self.value = evaluate(self.code, context, flow_manager, immediate_context)
-            break_types.add("value", get_type_of_value(self.value))
-            return break_types.build()
-        except Exception as e:
-            raise
-            raise PreparationException(e)
+        break_types.add(
+            "value",
+            get_type_of_value(
+                self.lazy_get_value(context, flow_manager, immediate_context)
+            )
+        )
+        return break_types.build()
 
     def jump(self, context, flow_manager, immediate_context=None):
-        return flow_manager.value(self.value, self)
+        return flow_manager.value(
+            self.lazy_get_value(context, flow_manager, immediate_context), self
+        )
 
 
 class InvokeOp(Opcode):
@@ -967,7 +988,8 @@ class InvokeOp(Opcode):
         break_types = BreakTypesFactory()
 
         argument_type, other_argument_break_types = get_expression_break_types(self.argument, context, flow_manager)
-        argument_type = flatten_out_types(argument_type)
+        if argument_type is not MISSING:
+            argument_type = flatten_out_types(argument_type)
         break_types.merge(other_argument_break_types)
 
         function_type, other_function_break_types = get_expression_break_types(
@@ -975,7 +997,7 @@ class InvokeOp(Opcode):
         )
         break_types.merge(other_function_break_types)
 
-        if function_type is not MISSING:
+        if function_type is not MISSING and argument_type is not MISSING:
             function_type = flatten_out_types(function_type)
 
             argument_type_is_safe = False
@@ -1001,11 +1023,11 @@ class InvokeOp(Opcode):
         logger.debug("Invoke:jump:argument")
 
         if not isinstance(function, RDHFunction):
-            flow_manager.exception(self.INVALID_FUNCTION_TYPE(), self)
+            return flow_manager.exception(self.INVALID_FUNCTION_TYPE(), self)
 
         logger.debug("Invoke:jump:argument_check")
         if not function.get_type().argument_type.is_copyable_from(get_type_of_value(argument)):
-            flow_manager.exception(self.INVALID_ARGUMENT_TYPE(), self) 
+            return flow_manager.exception(self.INVALID_ARGUMENT_TYPE(), self) 
         logger.debug("Invoke:jump:invoke")
         return function.invoke(argument, flow_manager)
 

@@ -5,13 +5,14 @@ from rdhlang5.type_system.builtins import BuiltInFunctionGetterType, \
     ListInsertFunctionType
 from rdhlang5.type_system.composites import InferredType, bind_type_to_value, \
     unbind_type_to_value, CompositeType, Composite
-from rdhlang5.type_system.core_types import merge_types, Const
+from rdhlang5.type_system.core_types import merge_types, Const, NoValueType
 from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict, \
     raise_if_safe, InvalidAssignmentType, InvalidDereferenceKey, \
     InvalidDereferenceType, InvalidAssignmentKey, MissingMicroOp
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.micro_ops import MicroOpType, MicroOp, \
     raise_micro_op_conflicts
+from rdhlang5.executor.exceptions import PreparationException
 
 
 WILDCARD = object()
@@ -61,6 +62,8 @@ class ListMicroOpType(MicroOpType):
 
 class ListWildcardGetterType(ListMicroOpType):
     def __init__(self, type, key_error, type_error):
+        if isinstance(type, NoValueType):
+            raise PreparationException()
         self.type = type
         self.key_error = key_error
         self.type_error = type_error

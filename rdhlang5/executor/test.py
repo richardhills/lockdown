@@ -833,7 +833,7 @@ class TestTryCatch(TestCase):
         )
         result = bootstrap_function(func, check_safe_exit=True)
         self.assertEquals(result.mode, "return")
-        self.assertEquals(result.value, "DereferenceOpcode: invalid_dereference")
+        self.assertEquals(result.value, "DereferenceOp: invalid_dereference foo")
 
 
 class TestUtilityMethods(TestCase):

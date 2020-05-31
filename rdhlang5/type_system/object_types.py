@@ -247,15 +247,16 @@ class ObjectGetterType(ObjectMicroOpType):
         if key is not None and key != self.key:
             return
         value = target_manager.obj.__dict__[self.key]
-        bind_type_to_value(target_manager, key, self.type, get_manager(value, "ObjectGetterType.bind"))
+        bind_type_to_value(target_manager, self.key, self.type, get_manager(value, "ObjectGetterType.bind"))
 
     def unbind(self, key, target_manager):
-        if key is not None and key != self.key:
-            return
-        if key not in target_manager.obj.__dict__:
-            return
+        if key is not None:
+            if key != self.key:
+                return
+            if key not in target_manager.obj.__dict__:
+                return
         value = target_manager.obj.__dict__[self.key]
-        unbind_type_to_value(target_manager, key, self.type, get_manager(value, "ObjectGetterType.unbind"))
+        unbind_type_to_value(target_manager, self.key, self.type, get_manager(value, "ObjectGetterType.unbind"))
 
     def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
         default_factory = micro_op_types.get(("default-factory",), None)

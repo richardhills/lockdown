@@ -8,12 +8,14 @@ from rdhlang5.executor.function_type import enrich_break_type, OpenFunctionType,
     ClosedFunctionType
 from rdhlang5.executor.opcodes import enrich_opcode, get_context_type, evaluate, \
     get_expression_break_types, flatten_out_types
-from rdhlang5.executor.raw_code_factories import dynamic_dereference_op
+from rdhlang5.executor.raw_code_factories import dynamic_dereference_op, \
+    static_op
 from rdhlang5.executor.type_factories import enrich_type
 from rdhlang5.type_system.composites import CompositeType
 from rdhlang5.type_system.core_types import Type, NoValueType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
-    DEFAULT_DICT_TYPE, READONLY_DEFAULT_OBJECT_TYPE
+    DEFAULT_DICT_TYPE, READONLY_DEFAULT_OBJECT_TYPE, \
+    readonly_rich_composite_type
 from rdhlang5.type_system.exceptions import FatalError
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType
@@ -167,6 +169,11 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
 
     return OpenFunction(data, code, outer_context, static, argument_type, outer_type, local_type, local_initializer, final_declared_break_types.build())
 
+def get_debug_info_from_opcode(opcode):
+    return {
+        "column": getattr(opcode, "column", None),
+        "line": getattr(opcode, "line", None),
+    }
 
 class UnboundDereferenceBinder(object):
     def __init__(self, context, search_types=True):
@@ -174,7 +181,7 @@ class UnboundDereferenceBinder(object):
         self.search_types = search_types
         self.context_type = get_context_type(self.context)
 
-    def search_context_type_area_for_reference(self, reference, area, context_type, prepend_context):
+    def search_context_type_area_for_reference(self, reference, area, context_type, prepend_context, debug_info):
         from rdhlang5.executor.raw_code_factories import dereference_op, assignment_op, \
             literal_op, dereference, context_op
 
@@ -186,40 +193,40 @@ class UnboundDereferenceBinder(object):
             return None
         getter = area_type.micro_op_types.get(("get", reference), None)
         if getter:
-            return dereference(prepend_context, area)
+            return dereference(prepend_context, area, **debug_info)
 
-    def search_context_type_for_reference(self, reference, context_type, prepend_context):
+    def search_context_type_for_reference(self, reference, context_type, prepend_context, debug_info):
         from rdhlang5.executor.raw_code_factories import dereference_op, assignment_op, \
             literal_op, dereference, context_op
 
-        argument_search = self.search_context_type_area_for_reference(reference, "argument", context_type, prepend_context)
+        argument_search = self.search_context_type_area_for_reference(reference, "argument", context_type, prepend_context, debug_info)
         if argument_search:
             return argument_search
-        local_search = self.search_context_type_area_for_reference(reference, "local", context_type, prepend_context)
+        local_search = self.search_context_type_area_for_reference(reference, "local", context_type, prepend_context, debug_info)
         if local_search:
             return local_search
 
         outer_getter = context_type.micro_op_types.get(("get", "outer"), None)
         if outer_getter:
-            outer_search = self.search_context_type_for_reference(reference, outer_getter.type, prepend_context + [ "outer" ])
+            outer_search = self.search_context_type_for_reference(reference, outer_getter.type, prepend_context + [ "outer" ], debug_info)
             if outer_search:
                 return outer_search
 
-    def search_statics_for_reference(self, reference, context, prepend_context):
+    def search_statics_for_reference(self, reference, context, prepend_context, debug_info):
         from rdhlang5.executor.raw_code_factories import dereference_op, assignment_op, \
             literal_op, dereference, context_op
 
         static = getattr(context, "static", None)
         if static and hasattr(static, reference):
-            return dereference(prepend_context, "static")
+            return dereference(prepend_context, "static", **debug_info)
 
         prepare = getattr(context, "prepare", None)
         if prepare:
-            prepare_search = self.search_statics_for_reference(reference, prepare, prepend_context + [ "prepare" ])
+            prepare_search = self.search_statics_for_reference(reference, prepare, prepend_context + [ "prepare" ], debug_info)
             if prepare_search:
                 return prepare_search
 
-    def search_for_reference(self, reference):
+    def search_for_reference(self, reference, debug_info):
         from rdhlang5.executor.raw_code_factories import dereference_op, assignment_op, \
             literal_op, dereference, context_op
 
@@ -229,10 +236,10 @@ class UnboundDereferenceBinder(object):
         if reference in ("prepare", "local", "argument", "outer", "static"):
             return context_op()
 
-        types_search = self.search_context_type_for_reference(reference, self.context_type, [])
+        types_search = self.search_context_type_for_reference(reference, self.context_type, [], debug_info)
         if types_search:
             return types_search
-        statics_search = self.search_statics_for_reference(reference, self.context, [])
+        statics_search = self.search_statics_for_reference(reference, self.context, [], debug_info)
         if statics_search:
             return statics_search
 
@@ -242,27 +249,27 @@ class UnboundDereferenceBinder(object):
         from rdhlang5.executor.raw_code_factories import dereference_op, assignment_op, \
             literal_op, dereference, context_op
 
+        debug_info = get_debug_info_from_opcode(expression)
+
         if getattr(expression, "opcode", None) == "unbound_dereference":
             reference = expression.reference
-            if reference == "foom":
-                pass
-            bound_countext_op = self.search_for_reference(reference)
+            bound_countext_op = self.search_for_reference(reference, debug_info)
 
             if bound_countext_op:
-                new_dereference = dereference_op(bound_countext_op, literal_op(reference))
+                new_dereference = dereference_op(bound_countext_op, literal_op(reference), **debug_info)
                 get_manager(new_dereference).add_composite_type(DEFAULT_OBJECT_TYPE)
                 return new_dereference
             else:
-                new_dereference = dynamic_dereference_op(reference)
+                new_dereference = dynamic_dereference_op(reference, **debug_info)
                 get_manager(new_dereference).add_composite_type(DEFAULT_OBJECT_TYPE)
                 return new_dereference
 
         if getattr(expression, "opcode", None) == "unbound_assignment":
             reference = expression.reference
-            bound_countext_op = self.search_for_reference(reference)
+            bound_countext_op = self.search_for_reference(reference, debug_info)
 
             if bound_countext_op:
-                new_assignment = assignment_op(bound_countext_op, literal_op(reference), expression.rvalue)
+                new_assignment = assignment_op(bound_countext_op, literal_op(reference), expression.rvalue, **debug_info)
                 get_manager(new_assignment).add_composite_type(DEFAULT_OBJECT_TYPE)
                 return new_assignment
             else:
@@ -297,16 +304,16 @@ class OpenFunction(object):
         self.local_initialization_context_type = RDHObjectType({
             "outer": self.outer_type,
             "argument": self.argument_type,
-            "types": READONLY_DEFAULT_OBJECT_TYPE
+            "types": readonly_rich_composite_type
         }, name="local-initialization-context-type")
 
         self.execution_context_type = RDHObjectType({
-            "prepare": READONLY_DEFAULT_OBJECT_TYPE,
+            "prepare": readonly_rich_composite_type,
             "outer": self.outer_type,
             "argument": self.argument_type,
-            "static": READONLY_DEFAULT_OBJECT_TYPE,
+            "static": readonly_rich_composite_type,
             "local": self.local_type,
-            "types": READONLY_DEFAULT_OBJECT_TYPE
+            "types": readonly_rich_composite_type
         }, name="code-execution-context-type")
 
     def get_type(self):
@@ -383,6 +390,7 @@ class ClosedFunction(RDHFunction):
 
             logger.debug( "ClosedFunction:local_check")
             if is_debug() and not self.local_type.is_copyable_from(get_type_of_value(local)):
+                self.local_type.is_copyable_from(get_type_of_value(local))
                 raise FatalError()
 
             logger.debug( "ClosedFunction:code_context")

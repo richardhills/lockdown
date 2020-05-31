@@ -71,6 +71,7 @@ def raise_micro_op_conflicts(micro_op, args, other_micro_op_types):
     for other_micro_op_type in other_micro_op_types:
         other_micro_op_type.raise_on_runtime_micro_op_conflict(micro_op, args)
 
+
 def merge_composite_types(types, initial_data, name=None):
     from rdhlang5.type_system.composites import CompositeType
 
@@ -89,5 +90,5 @@ def merge_composite_types(types, initial_data, name=None):
             else:
                 result[tag] = micro_op_type
 
-    return CompositeType(result, initial_data=initial_data, name=name)
+    return CompositeType(result, initial_data=initial_data, name=name, is_revconst=len(types) == 0)
 

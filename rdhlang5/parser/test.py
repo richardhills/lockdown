@@ -305,10 +305,10 @@ class TestBuiltIns(TestCase):
     def test_range(self):
         code = parse("""
             function() {
-                return list(range(1, 100));
+                return list(range([ 1, 100 ]));
             }
-        """)
-        result = bootstrap_function(code)
+        """, debug=True)
+        result = bootstrap_function(code, check_safe_exit=True)
         self.assertEquals(result.mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -430,9 +430,9 @@ class TestSpeed(TestCase):
         code = parse("""
             function() {
                 int i = 0, j = 0;
-                while(i < 100) {
+                while(i < 10) {
                     j = 0;
-                    while(j < 100) {
+                    while(j < 10) {
                         int foo = i * j;
                         int bar = i * j;
                         int baz = i * j;
@@ -444,9 +444,10 @@ class TestSpeed(TestCase):
             }
         """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True)
-        self.assertEquals(result.value, 100 * 100)
+        self.assertEquals(result.value, 10 * 10)
         end = time()
-        self.assertLess(end - start, 30)
+        self.assertLess(end - start, 25)
+        print end - start
 
 class TestEuler(TestCase):
     """
@@ -618,6 +619,5 @@ class TestEuler(TestCase):
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
-    set_debug(False)
-    unittest.main(module="rdhlang5.parser.test", defaultTest="TestEuler.test_9")
+    set_debug(True)
     unittest.main()
