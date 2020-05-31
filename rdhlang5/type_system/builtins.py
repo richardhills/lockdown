@@ -26,10 +26,10 @@ class BuiltInFunctionGetterType(MicroOpType):
     def merge(self, other_micro_op_type):
         pass
 
-    def unbind(self, key, target):
+    def unbind(self, source_type, key, target):
         pass
 
-    def bind(self, key, target):
+    def bind(self, source_type, key, target):
         pass
 
     def raise_on_runtime_micro_op_conflict(self, micro_op, args):

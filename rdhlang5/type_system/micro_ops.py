@@ -28,11 +28,11 @@ class MicroOpType(object):
         raise NotImplementedError(self)
 
     @abstractmethod
-    def unbind(self, key, target_manager):
+    def unbind(self, source_type, key, target_manager):
         raise NotImplementedError(self)
 
     @abstractmethod
-    def bind(self, key, target_manager):
+    def bind(self, source_type, key, target_manager):
         raise NotImplementedError(self)
 
     @abstractmethod

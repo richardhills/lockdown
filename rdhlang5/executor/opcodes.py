@@ -375,7 +375,7 @@ class DereferenceOp(Opcode):
                 except AllowedValuesNotAvailable:
                     invalid_dereferences.add(reference)
 
-        self.invalid_dereference_error = len(list(invalid_dereferences)) > 1
+        self.invalid_dereference_error = len(list(invalid_dereferences)) > 0
 
         for invalid_dereference in invalid_dereferences:
             break_types.add("exception", self.INVALID_DEREFERENCE.get_type(reference=invalid_dereference), opcode=self)
@@ -390,7 +390,7 @@ class DereferenceOp(Opcode):
             manager = get_manager(of)
 
             if manager is None:
-                return flow_manager.exception(self.INVALID_DEREFERENCE(), self)
+                return flow_manager.exception(self.INVALID_DEREFERENCE(reference=reference), self)
 
             try:
                 direct_micro_op_type = manager.get_micro_op_type(("get", reference))
@@ -502,6 +502,9 @@ class AssignmentOp(Opcode):
 
             if reference in ("result", "test", "i", "j", "testResult", "current"):
                 logger.debug("{} = {}".format(reference, rvalue))
+
+#            if reference == "j":
+#                print "hey"
 
             manager = get_manager(of)
 

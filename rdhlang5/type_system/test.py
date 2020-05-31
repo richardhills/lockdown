@@ -16,6 +16,7 @@ from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.object_types import ObjectGetterType, ObjectSetterType, \
     ObjectDeletterType, RDHObjectType, PythonObjectType, RDHObject, \
     DefaultDictType
+from rdhlang5.utils import set_debug
 
 
 class TestObject(object):
@@ -1054,7 +1055,7 @@ class TestOneOfTypes(TestCase):
             }))
         )
 
-    def test_runtime1(self):
+    def test_runtime(self):
         obj = RDHObject({
             "foo": 5
         })
@@ -1063,6 +1064,33 @@ class TestOneOfTypes(TestCase):
                 "foo": OneOfType([ IntegerType(), StringType() ])
             })
         )
+
+class TestRuntime(TestCase):
+    def test_adding_and_removing(self):
+        A = RDHObject({
+            "foo": 5
+        })
+        B = RDHObject({
+            "bar": A
+        })
+
+        At = RDHObjectType({
+            "foo": IntegerType()
+        })
+
+        Bt = RDHObjectType({
+            "bar": At
+        })
+
+        get_manager(A).add_composite_type(At)
+        self.assertEquals(len(get_manager(A).attached_types), 1)
+        self.assertEquals(get_manager(A).attached_type_counts[id(At)], 1)
+        get_manager(B).add_composite_type(Bt)
+        self.assertEquals(len(get_manager(A).attached_types), 1)
+        self.assertEquals(get_manager(A).attached_type_counts[id(At)], 2)
+        get_manager(B).remove_composite_type(Bt)
+        self.assertEquals(len(get_manager(A).attached_types), 1)
+        self.assertEquals(get_manager(A).attached_type_counts[id(At)], 1)
 
 class TestCoreTypes(TestCase):
     def test_ints_and_bools(self):
@@ -1077,4 +1105,5 @@ class TestCoreTypes(TestCase):
 
 
 if __name__ == '__main__':
+    set_debug(True)
     main()

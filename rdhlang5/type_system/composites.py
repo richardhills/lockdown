@@ -51,7 +51,8 @@ class CompositeType(Type):
         return CompositeType(
             micro_op_types=potential_replacement_opcodes,
             initial_data=self.initial_data,
-            is_revconst=other.is_revconst
+            is_revconst=other.is_revconst,
+            name="inferred<{} & {}>".format(self.name, other.name)
         )
 
     def reify_revconst_types(self):
@@ -66,7 +67,12 @@ class CompositeType(Type):
             need_to_replace = need_to_replace or bool(micro_op_type is not potential_replacement_opcodes[key])
 
         if need_to_replace:
-            return CompositeType(micro_op_types=potential_replacement_opcodes, initial_data=self.initial_data, is_revconst=self.is_revconst)
+            return CompositeType(
+                micro_op_types=potential_replacement_opcodes,
+                initial_data=self.initial_data,
+                is_revconst=self.is_revconst,
+                name="reified<{}>".format(self.name)
+            )
         else:
             return self
 
@@ -204,7 +210,7 @@ def type_cleared(type_weakref):
 class Composite(object):
     pass
 
-def bind_type_to_value(source_manager, key, type, value_manager):
+def bind_type_to_value(source_manager, source_type, key, type, value_manager):
     if not source_manager or not value_manager:
         return
 
@@ -213,7 +219,7 @@ def bind_type_to_value(source_manager, key, type, value_manager):
         if isinstance(sub_type, CompositeType):
             try:
                 value_manager.add_composite_type(sub_type)
-                source_manager.child_type_references[key].append(sub_type)
+                source_manager.child_type_references[key][id(source_type)].append(sub_type)
                 something_worked = True
             except MicroOpTypeConflict as e:
                 pass
@@ -223,13 +229,13 @@ def bind_type_to_value(source_manager, key, type, value_manager):
     if not something_worked:
         raise MicroOpTypeConflict()
 
-def unbind_type_to_value(source_manager, key, type, value_manager):
+def unbind_type_to_value(source_manager, source_type, key, type, value_manager):
     if not source_manager or not value_manager:
         return
 
-    for sub_type in source_manager.child_type_references[key]:
+    for sub_type in source_manager.child_type_references[key][id(source_type)]:
         value_manager.remove_composite_type(sub_type)
-    source_manager.child_type_references[key] = []
+    source_manager.child_type_references[key][id(source_type)] = []
 
 
 class CompositeObjectManager(object):
@@ -237,7 +243,7 @@ class CompositeObjectManager(object):
         self.obj = obj
         self.attached_types = {}
         self.attached_type_counts = defaultdict(int)
-        self.child_type_references = defaultdict(list)
+        self.child_type_references = defaultdict(lambda: defaultdict(list))
 
         self.cached_effective_composite_type = None
 
@@ -278,7 +284,7 @@ class CompositeObjectManager(object):
     def add_composite_type(self, type, caller_has_verified_type=False):
         type_id = id(type)
 
-        new = type_id not in self.attached_types
+        new = self.attached_type_counts.get(type_id, 0) == 0 
 
         if new:
             if is_debug() or not caller_has_verified_type:
@@ -292,16 +298,25 @@ class CompositeObjectManager(object):
             self.attached_types[type_id] = type
 
             for tag, micro_op_type in type.micro_op_types.items():
-                micro_op_type.bind(None, self)
+                micro_op_type.bind(type, None, self)
+
+#        from rdhlang5.type_system.object_types import RDHObject
+#        if isinstance(self.obj, RDHObject) and hasattr(self.obj, "j"):
+#            print "Adding {} {} {} {} {}".format(id(self.obj), self.obj.__dict__, id(type), type.name, self.attached_type_counts[type_id])
 
         self.attached_type_counts[type_id] += 1
 
     def remove_composite_type(self, type):
         type_id = id(type)
-        if self.attached_type_counts[type_id] > 0:
+
+#        from rdhlang5.type_system.object_types import RDHObject
+#        if isinstance(self.obj, RDHObject) and hasattr(self.obj, "j"):
+#            print "Removing {} {} {} {} {}".format(id(self.obj), self.obj.__dict__, id(type), type.name, self.attached_type_counts[type_id])
+
+        if self.attached_type_counts.get(type_id, 0) > 0:
             self.attached_type_counts[type_id] -= 1
 
-        dead = self.attached_type_counts[type_id] == 0
+        dead = self.attached_type_counts.get(type_id, 0) == 0
 
         if dead:
             self.cached_effective_composite_type = None
@@ -309,7 +324,7 @@ class CompositeObjectManager(object):
             del self.attached_type_counts[type_id]
 
             for tag, micro_op_type in type.micro_op_types.items():
-                micro_op_type.unbind(None, self)
+                micro_op_type.unbind(type, None, self)
 
     def get_micro_op_type(self, tag):
         effective_composite_type = self.get_effective_composite_type()
@@ -317,6 +332,16 @@ class CompositeObjectManager(object):
 
     def get_flattened_micro_op_types(self):
         return self.get_effective_composite_type().micro_op_types.values()
+
+    def unbind_key(self, key):
+        for attached_type in self.attached_types.values():
+            for other_micro_op_type in attached_type.micro_op_types.values():
+                other_micro_op_type.unbind(attached_type, key, self)
+
+    def bind_key(self, key):
+        for attached_type in self.attached_types.values():
+            for other_micro_op_type in attached_type.micro_op_types.values():
+                other_micro_op_type.bind(attached_type, key, self)
 
 class DefaultFactoryType(MicroOpType):
     def __init__(self, type):
@@ -331,10 +356,10 @@ class DefaultFactoryType(MicroOpType):
     def replace_inferred_type(self, other_micro_op_type):
         return self
 
-    def bind(self, key, target):
+    def bind(self, source_type, key, target):
         pass
 
-    def unbind(self, key, target):
+    def unbind(self, source_type, key, target):
         pass
 
     def merge(self, other_micro_op_type):
