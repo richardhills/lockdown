@@ -44,9 +44,19 @@ class AnyType(Type):
     def __repr__(self):
         return "AnyType"
 
-    
+
+class TopType(Type):
+    def is_copyable_from(self, other):
+        return isinstance(other, TopType)
+
+    def __repr__(self):
+        return "TopType"
+
+
 class NoValueType(Type):
     def is_copyable_from(self, other):
+        if isinstance(other, TopType):
+            return True
         if isinstance(other, OneOfType):
             return other.is_copyable_to(self)
         return isinstance(other, NoValueType)
@@ -59,6 +69,8 @@ class UnitType(Type):
         self.value = value
 
     def is_copyable_from(self, other):
+        if isinstance(other, TopType):
+            return True
         if isinstance(other, OneOfType):
             return other.is_copyable_to(self)
         if not isinstance(other, UnitType):
@@ -76,6 +88,8 @@ class UnitType(Type):
 
 class StringType(Type):
     def is_copyable_from(self, other):
+        if isinstance(other, TopType):
+            return True
         if isinstance(other, OneOfType):
             return other.is_copyable_to(self)
         return isinstance(other, StringType) or (isinstance(other, UnitType) and isinstance(other.value, basestring))
@@ -86,6 +100,8 @@ class StringType(Type):
 
 class IntegerType(Type):
     def is_copyable_from(self, other):
+        if isinstance(other, TopType):
+            return True
         if isinstance(other, OneOfType):
             return other.is_copyable_to(self)
         return isinstance(other, IntegerType) or (isinstance(other, UnitType) and isinstance(other.value, int) and not isinstance(other.value, bool))
@@ -95,6 +111,8 @@ class IntegerType(Type):
 
 class BooleanType(Type):
     def is_copyable_from(self, other):
+        if isinstance(other, TopType):
+            return True
         if isinstance(other, OneOfType):
             return other.is_copyable_to(self)
         return isinstance(other, BooleanType) or (isinstance(other, UnitType) and isinstance(other.value, bool))
@@ -143,6 +161,8 @@ class OneOfType(Type):
         self.types = types
 
     def is_copyable_from(self, other):
+        if isinstance(other, TopType):
+            return True
         for other_sub_type in unwrap_types(other):
             for t in self.types:
                 if t.is_copyable_from(other_sub_type):

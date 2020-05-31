@@ -12,7 +12,8 @@ from rdhlang5.executor.raw_code_factories import dynamic_dereference_op, \
     static_op
 from rdhlang5.executor.type_factories import enrich_type
 from rdhlang5.type_system.composites import CompositeType
-from rdhlang5.type_system.core_types import Type, NoValueType
+from rdhlang5.type_system.core_types import Type, NoValueType, IntegerType, \
+    TopType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     DEFAULT_DICT_TYPE, READONLY_DEFAULT_OBJECT_TYPE, \
     readonly_rich_composite_type
@@ -96,6 +97,9 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
 
     local_type = local_type.replace_inferred_types(actual_local_type)
     local_type = local_type.reify_revconst_types()
+
+    if isinstance(local_type, IntegerType):
+        pass
 
     if not local_type.is_copyable_from(actual_local_type):
         local_type.is_copyable_from(actual_local_type)
@@ -417,3 +421,25 @@ class ClosedFunction(RDHFunction):
             frame.step("remove_code_execution_context_type", lambda: get_manager(new_context).remove_composite_type(self.execution_context_type))
 
         return flow_manager.value(result, self)
+
+
+class Continuation(RDHFunction):
+    def __init__(self, frame_manager, frames, callback, restart_type, break_types):
+        if isinstance(restart_type, TopType):
+            pass
+        self.frame_manager = frame_manager
+        self.frames = frames
+        self.callback = callback
+        self.restart_type = restart_type
+        self.break_types = break_types
+
+    def get_type(self):
+        return ClosedFunctionType(self.restart_type, self.break_types)
+
+    def invoke(self, restart_value, flow_manager):
+        if not self.restart_type.is_copyable_from(get_type_of_value(restart_value)):
+            raise FatalError()
+        self.restarted = True
+        self.frame_manager.prepare_restart(self.frames, restart_value)
+        raise self.callback(flow_manager)
+

@@ -68,5 +68,6 @@ class ClosedFunctionType(Type):
         if not other.argument_type.is_copyable_from(self.argument_type):
             return False
         if not are_break_types_a_subset(self, other):
+            are_break_types_a_subset(self, other)
             return False
         return True

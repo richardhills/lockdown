@@ -11,7 +11,7 @@ from rdhlang5.executor.type_factories import enrich_type
 from rdhlang5.type_system.composites import CompositeType
 from rdhlang5.type_system.core_types import AnyType, Type, merge_types, Const, \
     UnitType, NoValueType, AllowedValuesNotAvailable, unwrap_types, IntegerType, \
-    BooleanType, remove_type
+    BooleanType, remove_type, TopType
 from rdhlang5.type_system.default_composite_types import rich_composite_type
 from rdhlang5.type_system.dict_types import RDHDict, DictGetterType, \
     DictSetterType, DictWildcardGetterType, DictWildcardSetterType
@@ -31,8 +31,8 @@ EVALUATE_CAPTURE_TYPES = { "out": AnyType() }
 
 def evaluate(expression, context, flow_manager, immediate_context=None):
     with flow_manager.capture("value", EVALUATE_CAPTURE_TYPES) as new_flow_manager:
-        mode, value, opcode, can_restart = expression.jump(context, new_flow_manager, immediate_context=immediate_context)
-        new_flow_manager.attempt_close_or_raise(mode, value, opcode, can_restart)
+        mode, value, opcode, restart_type = expression.jump(context, new_flow_manager, immediate_context=immediate_context)
+        new_flow_manager.attempt_close_or_raise(mode, value, opcode, restart_type)
     return new_flow_manager.result
 
 
@@ -700,33 +700,57 @@ class TransformOp(Opcode):
             self.restart = self.data.restart
             self.restart_type = enrich_opcode(self.data.restart_type, visitor)
 
+    def get_value_and_continuation_block_type(self, out_break_type, in_break_type, continuation_break_types):
+        return RDHObjectType({
+            "value": Const(out_break_type),
+            "continuation": Const(ClosedFunctionType(in_break_type, continuation_break_types))
+        })
+
     def get_break_types(self, context, flow_manager, immediate_context=None):
         break_types = BreakTypesFactory()
 
+        restart_type = None
         if self.restart:
             restart_type = enrich_type(evaluate(self.restart_type, context, flow_manager))
 
         missing_in_break_type = False
 
+        if getattr(self, "capture_continuation", None):
+            pass
+
         if self.expression:
             expression_break_types = self.expression.get_break_types(context, flow_manager)
-            if self.input in expression_break_types:
-                transformed_break_types = expression_break_types.pop(self.input)
 
-                for transformed_break_type in transformed_break_types:
-                    in_break_type = transformed_break_type.pop("in", None)
+            if self.input in expression_break_types:
+                original_break_types = expression_break_types.pop(self.input)
+
+                transformed_break_types = []
+
+                for original_break_type in original_break_types:
+                    out_break_type = original_break_type["out"]
+                    in_break_type = original_break_type.get("in", None)
+
                     if self.capture_continuation:
                         if in_break_type is None:
-                            missing_in_break_type = True
+                            transformed_break_type = False
                         else:
                             transformed_break_type = {
-                                "out": RDHObjectType({
-                                    "value": Const(transformed_break_type["out"]),
-                                    "continuation": Const(ClosedFunctionType(in_break_type, expression_break_types))
-                                })
+                                "out": self.get_value_and_continuation_block_type(
+                                    out_break_type, in_break_type, expression_break_types
+                                )
                             }
+                    else:
+                        transformed_break_type = {
+                            "out": out_break_type
+                        }
+                        
                     if self.restart:
                         transformed_break_type["in"] = restart_type
+
+                    if transformed_break_type:
+                        transformed_break_types.append(transformed_break_type)
+                    else:
+                        missing_in_break_type = True
 
                 expression_break_types[self.output] = transformed_break_types
             break_types.merge(expression_break_types)
@@ -738,7 +762,12 @@ class TransformOp(Opcode):
 
         if self.restart:
             break_types.add(self.restart, restart_type)
-        return break_types.build()
+
+        result = break_types.build()
+
+        self.continuation_break_types = result
+
+        return result
 
     def jump(self, context, flow_manager, immediate_context=None):
         with flow_manager.get_next_frame(self) as frame:
@@ -753,24 +782,40 @@ class TransformOp(Opcode):
                     restart_type = enrich_type(evaluate(self.restart_type, context, flow_manager))
                     if not restart_type.is_copyable_from(get_type_of_value(restart_value)):
                         raise FatalError()
-                raise flow_manager.unwind(self.restart, restart_value, self, False)
+                raise flow_manager.unwind(self.restart, restart_value, self, restart_type)
 
             if self.expression:
                 def enter_expression(new_flow_manager):
                     return self.expression.jump(context, new_flow_manager)
 
-                new_flow_manager = flow_manager.capture(self.input, { "out": AnyType() }, enter_expression)
+                capture_modes = { "out": AnyType() }
+                if self.capture_continuation:
+                    capture_modes["in"] = TopType()
+
+                new_flow_manager = flow_manager.capture(self.input, capture_modes, enter_expression, continuation_break_types=self.continuation_break_types)
 
                 result = new_flow_manager.result
                 if self.capture_continuation:
-                    result = RDHObject({
-                        "value": result,
-                        "continuation": new_flow_manager.restart_continuation
-                    })
+                    if new_flow_manager.has_restart_continuation:
+                        restart_continuation_type = new_flow_manager.restart_continuation.get_type()
+                        result = RDHObject({
+                            "value": result,
+                            "continuation": new_flow_manager.restart_continuation
+                        }, bind=self.get_value_and_continuation_block_type(
+                            get_type_of_value(result),
+                            restart_continuation_type.argument_type,
+                            restart_continuation_type.break_types
+                        ))
+                    else:
+                        return flow_manager.exception(self.MISSING_IN_BREAK_TYPE(), self)
 
-                return flow_manager.unwind(self.output, result, self, can_restart)
+                restart_type = None
+                if self.restart:
+                    restart_type = enrich_type(evaluate(self.restart_type, context, flow_manager))
+
+                return flow_manager.unwind(self.output, result, self, restart_type)
             else:
-                return flow_manager.unwind(self.output, NO_VALUE, self, can_restart)
+                return flow_manager.unwind(self.output, NO_VALUE, self, None)
         raise FatalError()
 
 
@@ -1020,19 +1065,17 @@ class InvokeOp(Opcode):
     def jump(self, context, flow_manager, immediate_context=None):
         logger.debug("Invoke:jump")
         from rdhlang5.executor.function import RDHFunction
-        function = evaluate(self.function, context, flow_manager)
-        logger.debug("Invoke:jump:function")
-        argument = evaluate(self.argument, context, flow_manager)
-        logger.debug("Invoke:jump:argument")
 
-        if not isinstance(function, RDHFunction):
-            return flow_manager.exception(self.INVALID_FUNCTION_TYPE(), self)
+        with flow_manager.get_next_frame(self) as frame:
+            function, _ = frame.step("function", lambda: evaluate(self.function, context, flow_manager))
+            argument, _ = frame.step("argument", lambda: evaluate(self.argument, context, flow_manager))
 
-        logger.debug("Invoke:jump:argument_check")
-        if not function.get_type().argument_type.is_copyable_from(get_type_of_value(argument)):
-            return flow_manager.exception(self.INVALID_ARGUMENT_TYPE(), self) 
-        logger.debug("Invoke:jump:invoke")
-        return function.invoke(argument, flow_manager)
+            if not isinstance(function, RDHFunction):
+                return flow_manager.exception(self.INVALID_FUNCTION_TYPE(), self)
+            if not function.get_type().argument_type.is_copyable_from(get_type_of_value(argument)):
+                return flow_manager.exception(self.INVALID_ARGUMENT_TYPE(), self) 
+
+            return function.invoke(argument, flow_manager)
 
         raise FatalError()
 

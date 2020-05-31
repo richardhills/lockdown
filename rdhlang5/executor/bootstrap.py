@@ -95,7 +95,7 @@ def get_default_global_context():
                                     infer_all(),
                                     inferred_type(),
                                     transform_op(
-                                        "yield", "value", invoke_op(dereference("outer.local.callback"))
+                                        "yield", "value", True, invoke_op(dereference("outer.local.callback")),
                                     ),
                                     comma_op(
                                         insert_op(
@@ -186,8 +186,8 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False)
             raise BootstrapException("\n\n".join(error_msgs))
 
         closed_function = open_function.close(context)
-        mode, value, opcode, can_restart = closed_function.invoke(argument, break_manager)
-        raise BreakException(mode, value, opcode, can_restart)
+        mode, value, opcode, restart_type = closed_function.invoke(argument, break_manager)
+        raise BreakException(mode, value, opcode, restart_type)
 
     for mode, break_managers in break_managers.items():
         for break_manager in break_managers:

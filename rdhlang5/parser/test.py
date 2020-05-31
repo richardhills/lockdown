@@ -308,7 +308,7 @@ class TestBuiltIns(TestCase):
                 return list(range([ 1, 100 ]));
             }
         """, debug=True)
-        result = bootstrap_function(code)
+        result = bootstrap_function(code, check_safe_exit=True)
         self.assertEquals(result.mode, "value")
         self.assertEquals(result.value, 42)
 

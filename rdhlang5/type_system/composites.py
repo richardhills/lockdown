@@ -4,7 +4,7 @@ import threading
 import weakref
 
 from rdhlang5.type_system.core_types import Type, unwrap_types, AnyType, \
-    OneOfType
+    OneOfType, TopType
 from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict
 from rdhlang5.type_system.managers import get_manager
 from rdhlang5.type_system.micro_ops import MicroOpType, \
@@ -118,6 +118,8 @@ class CompositeType(Type):
         if self is other:
             return True
 
+        if isinstance(other, TopType):
+            return True
         if isinstance(other, OneOfType):
             return other.is_copyable_to(self)
 
