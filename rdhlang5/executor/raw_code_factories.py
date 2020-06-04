@@ -212,20 +212,9 @@ def loop_op(opcode):
 def transform_op(*args):
     if len(args) == 1:
         output, = args
-        input = code = restart = restart_type = None
-        capture_continuation = False
+        input = code = None
     elif len(args) == 3:
         input, output, code = args
-        restart = restart_type = None
-        capture_continuation = False
-    elif len(args) == 4:
-        input, output, capture_continuation, code = args
-        restart = restart_type = None
-    elif len(args) == 5:
-        input, output, restart, restart_type, code = args
-        capture_continuation = False
-    elif len(args) == 6:
-        input, output, restart, restart_type, capture_continuation, code = args
     else:
         raise FatalError()
     if code:
@@ -234,10 +223,6 @@ def transform_op(*args):
         raise FatalError()
     if not isinstance(output, basestring):
         raise FatalError()
-    if restart is not None and not isinstance(restart, basestring):
-        raise FatalError()
-    if not isinstance(capture_continuation, bool):
-        raise FatalError()
     op = {
         "opcode": "transform",
         "output": output,
@@ -245,13 +230,23 @@ def transform_op(*args):
     if input:
         op["input"] = input
         op["code"] = code
-    if restart:
-        op["restart"] = restart
-        op["restart_type"] = restart_type
-    if capture_continuation:
-        op["capture_continuation"] = capture_continuation
     return RDHObject(op, debug_reason="code")
 
+def shift_op(code, restart_type):
+    check_is_opcode(code)
+    check_is_opcode(restart_type)
+    return RDHObject({
+        "opcode": "shift",
+        "code": code,
+        "restart_type": restart_type
+    }, debug_reason="code")
+
+def reset_op(code):
+    check_is_opcode(code)
+    return RDHObject({
+        "opcode": "reset",
+        "code": code
+    }, debug_reason="code")
 
 def return_op(code):
     return transform_op("value", "return", code)
@@ -296,7 +291,8 @@ def try_catch_op(try_opcode, catch_function, finally_opcode=None):
 
 
 def yield_op(code, restart_type):
-    return transform_op("value", "yield", "value", restart_type, code)
+    # TODO: drop
+    return shift_op(code, restart_type)
 
 
 def throw_op(code):

@@ -135,8 +135,6 @@ class FlowManager(object):
         return self._restart_continuation
 
     def unwind(self, mode, value, opcode, restart_type):
-        if mode == "yield":
-            pass
         if is_debug():
             type_of_value = None # lazily calculated if we need it
 
@@ -207,12 +205,9 @@ class FlowManager(object):
         if mode == self.our_break_mode and out_type_is_compatible and in_type_is_compatible:
             self._result = value
             if restart_type is not None:
-                if accepted_in_type is not None:
-                    self._restart_continuation = self.frame_manager.create_continuation(
-                        self.callback, restart_type, self.continuation_break_types
-                    )
-                else:
-                    self.frame_manager.abandon_continuation()
+                self._restart_continuation = self.frame_manager.create_continuation(
+                    self.callback, restart_type, self.continuation_break_types
+                )
             return True
         else:
             return False
@@ -254,11 +249,6 @@ class FrameManager(object):
         new_continuation = Continuation(self, self.frames[self.index:], callback, restart_type, break_types)
         self.frames = self.frames[:self.index]
         return new_continuation
-
-    def abandon_continuation(self):
-        if self.index == len(self.frames):
-            raise FatalError()
-        self.frames = self.frames[:self.index]
 
     def prepare_restart(self, frames, restart_value):
         self.frames = self.frames + frames

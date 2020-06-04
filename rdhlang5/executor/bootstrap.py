@@ -15,7 +15,7 @@ from rdhlang5.executor.raw_code_factories import inferred_type, function_lit, \
     equality_op, binary_integer_op, nop, return_op, yield_op, list_type, \
     function_type, list_template_op, insert_op, transform_op, literal_op, \
     invoke_op, object_template_op, prepared_function, no_value_type, \
-    assignment_op, dict_template_op, addition_op, context_op
+    assignment_op, dict_template_op, addition_op, context_op, reset_op, shift_op
 from rdhlang5.type_system.core_types import AnyType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE
 from rdhlang5.type_system.managers import get_manager
@@ -59,7 +59,7 @@ def get_default_global_context():
                             loop_op(
                                 condition_op(binary_integer_op("lt", dereference("outer.local"), dereference("outer.argument.1")),
                                     comma_op(
-                                        yield_op(dereference("outer.local"), no_value_type()),
+                                        shift_op(dereference("outer.local"), no_value_type()),
                                         assignment_op(dereference("outer"), literal_op("local"), addition_op(dereference("outer.local"), literal_op(1)))
                                     ),
                                     transform_op("return")
@@ -94,8 +94,8 @@ def get_default_global_context():
                                     no_value_type(),
                                     infer_all(),
                                     inferred_type(),
-                                    transform_op(
-                                        "yield", "value", True, invoke_op(dereference("outer.local.callback")),
+                                    reset_op(
+                                        invoke_op(dereference("outer.local.callback")),
                                     ),
                                     comma_op(
                                         insert_op(

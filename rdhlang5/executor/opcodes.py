@@ -25,6 +25,7 @@ from rdhlang5.type_system.object_types import RDHObject, RDHObjectType, \
     ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
     ObjectWildcardSetterType
 from rdhlang5.utils import MISSING, NO_VALUE, is_debug
+from distutils.log import fatal
 
 
 EVALUATE_CAPTURE_TYPES = { "out": AnyType() }
@@ -677,8 +678,6 @@ def BinaryOp(name, func, argument_type, result_type):
 
 
 class TransformOp(Opcode):
-    MISSING_IN_BREAK_TYPE = TypeErrorFactory("TransformOp: missing_in_break_type")
-
     def __init__(self, data, visitor):
         super(TransformOp, self).__init__(data, visitor)
         if hasattr(self.data, "code"):
@@ -686,7 +685,6 @@ class TransformOp(Opcode):
             if not hasattr(self.data, "input"):
                 raise PreparationException("input missing in transform opcode")
             self.input = self.data.input
-            self.capture_continuation = getattr(data, "capture_continuation", False)
         else:
             self.expression = None
             self.input = None
@@ -695,10 +693,73 @@ class TransformOp(Opcode):
             raise PreparationException("output missing in transform opcode")
         self.output = self.data.output
 
-        self.restart = None
-        if hasattr(self.data, "restart"):
-            self.restart = self.data.restart
-            self.restart_type = enrich_opcode(self.data.restart_type, visitor)
+    def get_break_types(self, context, flow_manager, immediate_context=None):
+        break_types = BreakTypesFactory()
+
+        if self.expression:
+            expression_break_types = self.expression.get_break_types(context, flow_manager)
+            if self.input in expression_break_types:
+                expression_break_types[self.output] = expression_break_types.pop(self.input)
+            break_types.merge(expression_break_types)
+        else:
+            break_types.add(self.output, NoValueType())
+
+        return break_types.build()
+
+    def jump(self, context, flow_manager, immediate_context=None):
+        with flow_manager.get_next_frame(self) as frame:
+            if self.expression:
+                capture_modes = { "out": AnyType() }
+
+                with flow_manager.capture(self.input, capture_modes) as new_flow_manager:
+                    mode, value, opcode, restart_type = self.expression.jump(context, new_flow_manager)
+                    new_flow_manager.attempt_close_or_raise(mode, value, opcode, restart_type)
+
+                return flow_manager.unwind(self.output, new_flow_manager.result, self, None)
+            else:
+                return flow_manager.unwind(self.output, NO_VALUE, self, None)
+        raise FatalError()
+
+
+class ShiftOp(Opcode):
+    def __init__(self, data, visitor):
+        super(ShiftOp, self).__init__(data, visitor)
+        self.opcode = enrich_opcode(data.code, visitor)
+        self.restart_type = enrich_opcode(data.restart_type, visitor)
+
+    def get_break_types(self, context, flow_manager, immediate_context=None):
+        break_types = BreakTypesFactory()
+
+        value_type, other_break_types = get_expression_break_types(self.opcode, context, flow_manager, immediate_context) 
+        restart_type_value = evaluate(self.restart_type, context, flow_manager)
+        self.restart_type = enrich_type(restart_type_value)
+
+        value_type = flatten_out_types(value_type)
+        break_types.merge(other_break_types)
+
+        break_types.add("yield", value_type, self.restart_type)
+        break_types.add("value", self.restart_type)
+
+        return break_types.build()
+
+    def jump(self, context, flow_manager, immediate_context=None):
+        with flow_manager.get_next_frame(self) as frame:
+            if frame.has_restart_value():
+                restart_value = frame.pop_restart_value()
+                if is_debug():
+                    if not self.restart_type.is_copyable_from(get_type_of_value(restart_value)):
+                        raise FatalError()
+                raise flow_manager.unwind("value", restart_value, self, self.restart_type)
+
+            value = evaluate(self.opcode, context, flow_manager)
+
+            raise flow_manager.unwind("yield", value, self, self.restart_type)
+
+class ResetOp(Opcode):
+    MISSING_IN_BREAK_TYPE = TypeErrorFactory("TransformOp: missing_in_break_type")
+
+    def __init__(self, data, visitor):
+        self.opcode = enrich_opcode(data.code, visitor)
 
     def get_value_and_continuation_block_type(self, out_break_type, in_break_type, continuation_break_types):
         return RDHObjectType({
@@ -709,115 +770,54 @@ class TransformOp(Opcode):
     def get_break_types(self, context, flow_manager, immediate_context=None):
         break_types = BreakTypesFactory()
 
-        restart_type = None
-        if self.restart:
-            restart_type = enrich_type(evaluate(self.restart_type, context, flow_manager))
+        self.opcode_break_types = self.opcode.get_break_types(context, flow_manager)
+        yield_break_types = self.opcode_break_types.pop("yield", [])
 
-        missing_in_break_type = False
+        break_types.merge(self.opcode_break_types)
 
-        if getattr(self, "capture_continuation", None):
-            pass
+        missing_in_error = False
 
-        if self.expression:
-            expression_break_types = self.expression.get_break_types(context, flow_manager)
+        for yield_break_type in yield_break_types:
+            if "in" not in yield_break_type:
+                missing_in_error = True
+            break_types.add(
+                "value",
+                self.get_value_and_continuation_block_type(
+                    yield_break_type["out"], yield_break_type["in"], self.opcode_break_types
+                )
+            )
 
-            if self.input in expression_break_types:
-                original_break_types = expression_break_types.pop(self.input)
-
-                transformed_break_types = []
-
-                for original_break_type in original_break_types:
-                    out_break_type = original_break_type["out"]
-                    in_break_type = original_break_type.get("in", None)
-
-                    if self.capture_continuation:
-                        if in_break_type is None:
-                            transformed_break_type = False
-                        else:
-                            transformed_break_type = {
-                                "out": self.get_value_and_continuation_block_type(
-                                    out_break_type, in_break_type, expression_break_types
-                                )
-                            }
-                    else:
-                        transformed_break_type = {
-                            "out": out_break_type
-                        }
-                        
-                    if self.restart:
-                        transformed_break_type["in"] = restart_type
-
-                    if transformed_break_type:
-                        transformed_break_types.append(transformed_break_type)
-                    else:
-                        missing_in_break_type = True
-
-                expression_break_types[self.output] = transformed_break_types
-            break_types.merge(expression_break_types)
-        else:
-            break_types.add(self.output, NoValueType())
-
-        if missing_in_break_type:
+        if not missing_in_error:
             break_types.add("exception", self.MISSING_IN_BREAK_TYPE.get_type())
 
-        if self.restart:
-            break_types.add(self.restart, restart_type)
-
-        result = break_types.build()
-
-        self.continuation_break_types = result
-
-        return result
+        return break_types.build()
 
     def jump(self, context, flow_manager, immediate_context=None):
-        with flow_manager.get_next_frame(self) as frame:
-            can_restart = self.restart is not None
+        def enter_opcode(new_flow_manager):
+            return self.opcode.jump(context, new_flow_manager)
 
-            if frame.has_restart_value():
-                if not can_restart:
-                    raise FatalError()
+        capture_modes = {
+            "out": AnyType(),
+            "in": TopType()
+        }
 
-                restart_value = frame.pop_restart_value()
-                if is_debug():
-                    restart_type = enrich_type(evaluate(self.restart_type, context, flow_manager))
-                    if not restart_type.is_copyable_from(get_type_of_value(restart_value)):
-                        raise FatalError()
-                raise flow_manager.unwind(self.restart, restart_value, self, restart_type)
+        new_flow_manager = flow_manager.capture(self.input, capture_modes, enter_opcode, continuation_break_types=self.opcode_break_types)
 
-            if self.expression:
-                def enter_expression(new_flow_manager):
-                    return self.expression.jump(context, new_flow_manager)
+        if not new_flow_manager.has_restart_continuation:
+            flow_manager.exception(self.MISSING_IN_BREAK_TYPE(self), self)
 
-                capture_modes = { "out": AnyType() }
-                if self.capture_continuation:
-                    capture_modes["in"] = TopType()
+        restart_continuation_type = new_flow_manager.restart_continuation.get_type()
 
-                new_flow_manager = flow_manager.capture(self.input, capture_modes, enter_expression, continuation_break_types=self.continuation_break_types)
+        result = RDHObject({
+            "value": new_flow_manager.result,
+            "continuation": new_flow_manager.restart_continuation
+        }, bind=self.get_value_and_continuation_block_type(
+            get_type_of_value(new_flow_manager.result),
+            restart_continuation_type.argument_type,
+            restart_continuation_type.break_types
+        ))
 
-                result = new_flow_manager.result
-                if self.capture_continuation:
-                    if new_flow_manager.has_restart_continuation:
-                        restart_continuation_type = new_flow_manager.restart_continuation.get_type()
-                        result = RDHObject({
-                            "value": result,
-                            "continuation": new_flow_manager.restart_continuation
-                        }, bind=self.get_value_and_continuation_block_type(
-                            get_type_of_value(result),
-                            restart_continuation_type.argument_type,
-                            restart_continuation_type.break_types
-                        ))
-                    else:
-                        return flow_manager.exception(self.MISSING_IN_BREAK_TYPE(), self)
-
-                restart_type = None
-                if self.restart:
-                    restart_type = enrich_type(evaluate(self.restart_type, context, flow_manager))
-
-                return flow_manager.unwind(self.output, result, self, restart_type)
-            else:
-                return flow_manager.unwind(self.output, NO_VALUE, self, None)
-        raise FatalError()
-
+        return flow_manager.value(result)
 
 class CommaOp(Opcode):
     def __init__(self, data, visitor):
@@ -1003,8 +1003,12 @@ class StaticOp(Opcode):
         if self.value is MISSING:
             try:
                 self.value = evaluate(self.code, context, flow_manager, immediate_context)
-            except Exception as e:
+            except FatalError:
+                raise
+            except BreakException as e:
                 raise PreparationException(e)
+            except Exception as e:
+                raise
         return self.value
 
     def get_break_types(self, context, flow_manager, immediate_context=None):
@@ -1176,6 +1180,8 @@ class MatchOp(Opcode):
 OPCODES = {
     "nop": Nop,
     "transform": TransformOp,
+    "shift": ShiftOp,
+    "reset": ResetOp,
     "literal": LiteralOp,
     "object_template": ObjectTemplateOp,
     "dict_template": DictTemplateOp,
