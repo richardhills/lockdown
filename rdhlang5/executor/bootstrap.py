@@ -12,11 +12,12 @@ from rdhlang5.executor.function import prepare
 from rdhlang5.executor.opcodes import get_context_type
 from rdhlang5.executor.raw_code_factories import inferred_type, function_lit, \
     int_type, infer_all, dereference, loop_op, comma_op, condition_op, \
-    equality_op, binary_integer_op, nop, return_op, yield_op, list_type, \
+    equality_op, binary_integer_op, nop, return_op, list_type, \
     function_type, list_template_op, insert_op, transform_op, literal_op, \
     invoke_op, object_template_op, prepared_function, no_value_type, \
-    assignment_op, dict_template_op, addition_op, context_op, reset_op, shift_op
-from rdhlang5.type_system.core_types import AnyType
+    assignment_op, dict_template_op, addition_op, context_op, reset_op, shift_op,\
+    match_op
+from rdhlang5.type_system.core_types import AnyType, NoValueType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE
 from rdhlang5.type_system.managers import get_manager
 from rdhlang5.type_system.object_types import RDHObject
@@ -85,32 +86,40 @@ def get_default_global_context():
                     inferred_type(),
                     object_template_op({
                         "result": list_template_op([]),
-                        "callback": dereference("argument")
+                        "callback": prepared_function(
+                            transform_op("value", "break", invoke_op(dereference("outer.argument")))
+                        )
                     }),
                     comma_op(
-                        loop_op(
-                            invoke_op(
-                                prepared_function(
-                                    no_value_type(),
-                                    infer_all(),
-                                    inferred_type(),
-                                    reset_op(
-                                        invoke_op(dereference("outer.local.callback")),
-                                    ),
-                                    comma_op(
-                                        insert_op(
-                                            dereference("outer.local.result"),
-                                            literal_op(0),
-                                            dereference("local.value")
+                        transform_op(
+                            "break", "value",
+                            loop_op(
+                                invoke_op(
+                                    prepared_function(
+                                        no_value_type(),
+                                        infer_all(),
+                                        inferred_type(),
+                                        reset_op(
+                                            transform_op(
+                                                "value", "break",
+                                                invoke_op(dereference("outer.local.callback"))
+                                            )
                                         ),
-                                        assignment_op(
-                                            dereference("outer.local"),
-                                            literal_op("callback"),
-                                            dereference("local.continuation")
+                                        comma_op(
+                                            insert_op(
+                                                dereference("outer.local.result"),
+                                                literal_op(0),
+                                                dereference("local.value")
+                                            ),
+                                            assignment_op(
+                                                dereference("outer.local"),
+                                                literal_op("callback"),
+                                                dereference("local.continuation")
+                                            )
                                         )
                                     )
                                 )
-                            )
+                            ),
                         ),
                         dereference("local.result")
                     )
@@ -122,18 +131,18 @@ def get_default_global_context():
 
 def format_unhandled_break_type(break_type, raw_code):
     if not raw_code:
-        return str(break_type)
+        return str(break_type) + " (no raw code)"
 
     out_break_type = break_type["out"]
 
     opcode = getattr(out_break_type, "from_opcode", None)
     if not opcode:
-        return str(break_type)
+        return str(break_type) + " (break_type has no from_opcode)"
 
     line, column = opcode.get_line_and_column()
 
     if line is None or column is None:
-        return str(break_type)
+        return str(break_type) + " (no line and column)"
 
     lines = raw_code.split("\n")
 

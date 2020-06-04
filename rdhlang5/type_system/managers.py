@@ -32,6 +32,10 @@ def get_manager(obj, trigger=None):
     if isinstance(obj, (RDHFunction, OpenFunction)):
         return None
 
+    from rdhlang5.executor.opcodes import Opcode
+    if isinstance(obj, Opcode):
+        return None
+
     from rdhlang5.type_system.composites import CompositeObjectManager
 
     old_obj = obj

@@ -305,12 +305,15 @@ class TestBuiltIns(TestCase):
     def test_range(self):
         code = parse("""
             function() {
-                return list(range([ 1, 100 ]));
+                return list(range([ 1, 5 ]));
             }
         """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True)
+        list(result.value)
         self.assertEquals(result.mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEquals(len(result.value), 4)
+        # The values come out in reverse due to the list function using insert(0, element) repeatedly. Need an append(element) operator
+        self.assertEquals(list(result.value), [ 4, 3, 2, 1 ])
 
 class TestInferredTypes(TestCase):
     def test_inferred_locals(self):

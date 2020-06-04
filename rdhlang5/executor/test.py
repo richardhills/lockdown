@@ -9,12 +9,12 @@ from rdhlang5.executor.bootstrap import bootstrap_function, prepare, \
 from rdhlang5.executor.exceptions import PreparationException
 from rdhlang5.executor.raw_code_factories import function_lit, no_value_type, \
     build_break_types, int_type, literal_op, return_op, addition_op, \
-    dereference_op, context_op, comma_op, any_type, yield_op, object_type, \
+    dereference_op, context_op, comma_op, any_type, object_type, \
     object_template_op, unit_type, assignment_op, condition_op, loop_op, \
     equality_op, nop, inferred_type, infer_all, invoke_op, static_op, prepare_op, \
     unbound_dereference, match_op, dereference, prepared_function, one_of_type, \
     string_type, bool_type, try_catch_op, throw_op, const_string_type, \
-    function_type, close_op
+    function_type, close_op, shift_op
 from rdhlang5.type_system.core_types import IntegerType, AnyType, StringType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     rich_composite_type
@@ -149,8 +149,8 @@ class TestComma(TestCase):
                 no_value_type(), build_break_types(int_type(), yield_types={ "out": any_type(), "in": int_type() }),
                 return_op(comma_op(
                     literal_op(5),
-                    yield_op(literal_op("first"), int_type()),
-                    yield_op(literal_op("second"), int_type())
+                    shift_op(literal_op("first"), int_type()),
+                    shift_op(literal_op("second"), int_type())
                 ))
             ),
             context, create_no_escape_flow_manager()
@@ -335,7 +335,7 @@ class TestLocals(TestCase):
         func = prepare(
             function_lit(
                 no_value_type(), build_break_types(any_type(), yield_types={ "out": any_type(), "in": int_type() }),
-                int_type(), yield_op(literal_op("hello"), int_type()),
+                int_type(), shift_op(literal_op("hello"), int_type()),
                 return_op(dereference_op(context_op(), literal_op("local")))
             ),
             context, create_no_escape_flow_manager()
@@ -356,8 +356,8 @@ class TestLocals(TestCase):
         func = prepare(
             function_lit(
                 no_value_type(), build_break_types(any_type(), yield_types={ "out": any_type(), "in": int_type() }),
-                int_type(), yield_op(literal_op("first"), int_type()),
-                return_op(addition_op(dereference_op(context_op(), literal_op("local")), yield_op(literal_op("second"), int_type())))
+                int_type(), shift_op(literal_op("first"), int_type()),
+                return_op(addition_op(dereference_op(context_op(), literal_op("local")), shift_op(literal_op("second"), int_type())))
             ),
             context, create_no_escape_flow_manager()
         ).close(None)
@@ -896,7 +896,7 @@ class TestContinuations(TestCase):
         func = prepare(
             function_lit(
                 no_value_type(), build_break_types(any_type(), yield_types={ "out": any_type(), "in": int_type() }),
-                return_op(addition_op(yield_op(literal_op("hello"), int_type()), literal_op(40)))
+                return_op(addition_op(shift_op(literal_op("hello"), int_type()), literal_op(40)))
             ),
             context, create_no_escape_flow_manager()
         ).close(None)
@@ -916,7 +916,7 @@ class TestContinuations(TestCase):
         func = prepare(
             function_lit(
                 no_value_type(), build_break_types(int_type(), yield_types={ "out": any_type(), "in": int_type() }),
-                return_op(addition_op(yield_op(literal_op("first"), int_type()), yield_op(literal_op("second"), int_type())))
+                return_op(addition_op(shift_op(literal_op("first"), int_type()), shift_op(literal_op("second"), int_type())))
             ),
             context, create_no_escape_flow_manager()
         ).close(None)
@@ -938,7 +938,7 @@ class TestContinuations(TestCase):
         func = prepare(
             function_lit(
                 no_value_type(), build_break_types(int_type(), yield_types={ "out": any_type(), "in": int_type() }),
-                return_op(addition_op(yield_op(literal_op("first"), int_type()), yield_op(literal_op("second"), int_type())))
+                return_op(addition_op(shift_op(literal_op("first"), int_type()), shift_op(literal_op("second"), int_type())))
             ),
             context, create_no_escape_flow_manager()
         ).close(None)
@@ -961,7 +961,7 @@ class TestContinuations(TestCase):
         func = prepare(
             function_lit(
                 no_value_type(), build_break_types(any_type(), yield_types={ "out": any_type(), "in": int_type() }),
-                return_op(addition_op(yield_op(literal_op(30), int_type()), yield_op(literal_op(10), int_type())))
+                return_op(addition_op(shift_op(literal_op(30), int_type()), shift_op(literal_op(10), int_type())))
             ),
             context, create_no_escape_flow_manager()
         ).close(None)

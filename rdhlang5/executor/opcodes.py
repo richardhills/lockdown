@@ -27,8 +27,8 @@ from rdhlang5.type_system.object_types import RDHObject, RDHObjectType, \
 from rdhlang5.utils import MISSING, NO_VALUE, is_debug
 from distutils.log import fatal
 
-
 EVALUATE_CAPTURE_TYPES = { "out": AnyType() }
+
 
 def evaluate(expression, context, flow_manager, immediate_context=None):
     with flow_manager.capture("value", EVALUATE_CAPTURE_TYPES) as new_flow_manager:
@@ -275,10 +275,12 @@ class ListTemplateOp(Opcode):
             if initial_value is not MISSING:
                 initial_data[index] = initial_value
 
+        if len(all_value_types) == 0:
+            all_value_types.append(AnyType())
+
         combined_value_types = merge_types(all_value_types, "exact")
 
-        if not isinstance(combined_value_types, NoValueType):
-            micro_ops[("get-wildcard",)] = ListWildcardGetterType(combined_value_types, True, False)
+        micro_ops[("get-wildcard",)] = ListWildcardGetterType(combined_value_types, True, False)
         micro_ops[("set-wildcard",)] = ListWildcardSetterType(AnyType(), True, True)
         micro_ops[("insert", 0)] = ListInsertType(AnyType(), 0, False, False)
         micro_ops[("delete-wildcard",)] = ListWildcardDeletterType(True)
@@ -475,6 +477,7 @@ class AssignmentOp(Opcode):
 
                             if micro_op:
                                 if not micro_op.type.is_copyable_from(rvalue_type):
+                                    micro_op.type.is_copyable_from(rvalue_type)
                                     self.invalid_rvalue_error = True
 
                                 break_types.add("value", NoValueType())
@@ -531,6 +534,7 @@ class AssignmentOp(Opcode):
                 return flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
             except InvalidAssignmentKey:
                 return flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
+
 
 class InsertOp(Opcode):
     INVALID_LVALUE = TypeErrorFactory("InsertOp: invalid_lvalue")
@@ -628,6 +632,7 @@ class InsertOp(Opcode):
                 return flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
             except InvalidAssignmentKey:
                 return flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
+
 
 def BinaryOp(name, func, argument_type, result_type):
     class _BinaryOp(Opcode):
@@ -755,10 +760,12 @@ class ShiftOp(Opcode):
 
             raise flow_manager.unwind("yield", value, self, self.restart_type)
 
+
 class ResetOp(Opcode):
-    MISSING_IN_BREAK_TYPE = TypeErrorFactory("TransformOp: missing_in_break_type")
+    MISSING_IN_BREAK_TYPE = TypeErrorFactory("ResetOp: missing_in_break_type")
 
     def __init__(self, data, visitor):
+        super(ResetOp, self).__init__(data, visitor)
         self.opcode = enrich_opcode(data.code, visitor)
 
     def get_value_and_continuation_block_type(self, out_break_type, in_break_type, continuation_break_types):
@@ -787,8 +794,8 @@ class ResetOp(Opcode):
                 )
             )
 
-        if not missing_in_error:
-            break_types.add("exception", self.MISSING_IN_BREAK_TYPE.get_type())
+        if missing_in_error:
+            break_types.add("exception", self.MISSING_IN_BREAK_TYPE.get_type(), opcode=self)
 
         return break_types.build()
 
@@ -801,7 +808,7 @@ class ResetOp(Opcode):
             "in": TopType()
         }
 
-        new_flow_manager = flow_manager.capture(self.input, capture_modes, enter_opcode, continuation_break_types=self.opcode_break_types)
+        new_flow_manager = flow_manager.capture("yield", capture_modes, enter_opcode, continuation_break_types=self.opcode_break_types)
 
         if not new_flow_manager.has_restart_continuation:
             flow_manager.exception(self.MISSING_IN_BREAK_TYPE(self), self)
@@ -817,7 +824,8 @@ class ResetOp(Opcode):
             restart_continuation_type.break_types
         ))
 
-        return flow_manager.value(result)
+        return flow_manager.value(result, self)
+
 
 class CommaOp(Opcode):
     def __init__(self, data, visitor):

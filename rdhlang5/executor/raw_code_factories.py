@@ -232,21 +232,21 @@ def transform_op(*args):
         op["code"] = code
     return RDHObject(op, debug_reason="code")
 
-def shift_op(code, restart_type):
+def shift_op(code, restart_type, **kwargs):
     check_is_opcode(code)
     check_is_opcode(restart_type)
-    return RDHObject({
+    return RDHObject(spread_dict({
         "opcode": "shift",
         "code": code,
         "restart_type": restart_type
-    }, debug_reason="code")
+    }, **kwargs), debug_reason="code")
 
-def reset_op(code):
+def reset_op(code, **kwargs):
     check_is_opcode(code)
-    return RDHObject({
+    return RDHObject(spread_dict({
         "opcode": "reset",
         "code": code
-    }, debug_reason="code")
+    }, **kwargs), debug_reason="code")
 
 def return_op(code):
     return transform_op("value", "return", code)
@@ -288,11 +288,6 @@ def try_catch_op(try_opcode, catch_function, finally_opcode=None):
         ),
         finally_opcode
     )
-
-
-def yield_op(code, restart_type):
-    # TODO: drop
-    return shift_op(code, restart_type)
 
 
 def throw_op(code):

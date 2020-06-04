@@ -242,10 +242,10 @@ class UnboundDereferenceBinder(object):
 
         types_search = self.search_context_type_for_reference(reference, self.context_type, [], debug_info)
         if types_search:
-            return types_search
+            return types_search, False
         statics_search = self.search_statics_for_reference(reference, self.context, [], debug_info)
         if statics_search:
-            return statics_search
+            return statics_search, True
 
         return None
 
@@ -257,10 +257,12 @@ class UnboundDereferenceBinder(object):
 
         if getattr(expression, "opcode", None) == "unbound_dereference":
             reference = expression.reference
-            bound_countext_op = self.search_for_reference(reference, debug_info)
+            bound_countext_op, is_static = self.search_for_reference(reference, debug_info)
 
             if bound_countext_op:
                 new_dereference = dereference_op(bound_countext_op, literal_op(reference), **debug_info)
+                if is_static:
+                    new_dereference = static_op(new_dereference)
                 get_manager(new_dereference).add_composite_type(DEFAULT_OBJECT_TYPE)
                 return new_dereference
             else:
@@ -270,7 +272,7 @@ class UnboundDereferenceBinder(object):
 
         if getattr(expression, "opcode", None) == "unbound_assignment":
             reference = expression.reference
-            bound_countext_op = self.search_for_reference(reference, debug_info)
+            bound_countext_op, _ = self.search_for_reference(reference, debug_info)
 
             if bound_countext_op:
                 new_assignment = assignment_op(bound_countext_op, literal_op(reference), expression.rvalue, **debug_info)
