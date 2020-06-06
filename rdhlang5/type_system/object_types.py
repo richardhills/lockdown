@@ -7,7 +7,7 @@ from rdhlang5.type_system.core_types import merge_types, Type, Const, OneOfType,
     AnyType
 from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict, \
     raise_if_safe, InvalidAssignmentType, InvalidDereferenceKey, \
-    InvalidDereferenceType, MissingMicroOp
+    InvalidDereferenceType, MissingMicroOp, InvalidInferredType
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.micro_ops import MicroOpType, MicroOp, \
     raise_micro_op_conflicts
@@ -87,7 +87,7 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, ObjectWildcardGetterType):
             if isinstance(self.type, InferredType):
-                raise FatalError()
+                raise InvalidInferredType()
             return self
         new_type = self.type.replace_inferred_types(other_micro_op_type.type)
         if new_type is not self.type:
@@ -220,6 +220,8 @@ class ObjectGetterType(ObjectMicroOpType):
     def __init__(self, key, type, key_error, type_error):
         if type is None or not isinstance(type, Type):
             raise FatalError()
+        if not isinstance(key, basestring):
+            raise FatalError()
         self.key = key
         self.type = type
         self.key_error = key_error
@@ -238,7 +240,7 @@ class ObjectGetterType(ObjectMicroOpType):
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, ObjectGetterType):
             if isinstance(self.type, InferredType):
-                raise FatalError()
+                raise InvalidInferredType()
             return self
         new_type = self.type.replace_inferred_types(other_micro_op_type.type)
         if new_type is not self.type:
@@ -392,7 +394,7 @@ class ObjectWildcardSetterType(ObjectMicroOpType):
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, ObjectWildcardSetterType):
             if isinstance(self.type, InferredType):
-                raise FatalError()
+                raise InvalidInferredType()
             return self
         new_type = self.type.replace_inferred_types(other_micro_op_type.type)
         if new_type is not self.type:
@@ -458,7 +460,9 @@ class ObjectSetterType(ObjectMicroOpType):
     __slots__ = [ "key", "type", "key_error", "type_error" ]
 
     def __init__(self, key, type, key_error, type_error):
-        if type is None:
+        if type is None or not isinstance(type, Type):
+            raise FatalError()
+        if not isinstance(key, basestring):
             raise FatalError()
         self.key = key
         self.type = type
@@ -478,7 +482,7 @@ class ObjectSetterType(ObjectMicroOpType):
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, ObjectSetterType):
             if isinstance(self.type, InferredType):
-                raise FatalError()
+                raise InvalidInferredType()
             return self
         new_type = self.type.replace_inferred_types(other_micro_op_type.type)
         if new_type is not self.type:
@@ -570,7 +574,7 @@ class ObjectWildcardDeletterType(ObjectMicroOpType):
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, ObjectWildcardDeletter):
             if isinstance(self.type, InferredType):
-                raise FatalError()
+                raise InvalidInferredType()
             return self
         new_type = self.type.replace_inferred_types(other_micro_op_type.type)
         if new_type is not self.type:
@@ -642,7 +646,7 @@ class ObjectDeletterType(ObjectMicroOpType):
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, ObjectDeletterType):
             if isinstance(self.type, InferredType):
-                raise FatalError()
+                raise InvalidInferredType()
             return self
         new_type = self.type.replace_inferred_types(other_micro_op_type.type)
         if new_type is not self.type:
@@ -703,15 +707,20 @@ def RDHObjectType(properties=None, wildcard_type=None, initial_data=None, **kwar
         if isinstance(type, Const):
             const = True
             type = type.wrapped
-    
+
+        if not isinstance(name, basestring):
+            raise FatalError()
+        if not isinstance(type, Type):
+            raise FatalError()
+
         micro_ops[("get", name)] = ObjectGetterType(name, type, False, False)
         if not const:
             micro_ops[("set", name)] = ObjectSetterType(name, type, False, False)
-    
+
     if wildcard_type:
         micro_ops[("get-wildcard",)] = ObjectWildcardGetterType(wildcard_type, True, False)
         micro_ops[("set-wildcard",)] = ObjectWildcardSetterType(wildcard_type, True, True)
-    
+
     return CompositeType(micro_ops, initial_data=initial_data, **kwargs)
 
 class PythonObjectType(CompositeType):

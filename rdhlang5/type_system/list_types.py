@@ -63,7 +63,7 @@ class ListMicroOpType(MicroOpType):
 class ListWildcardGetterType(ListMicroOpType):
     def __init__(self, type, key_error, type_error):
         if isinstance(type, NoValueType):
-            raise PreparationException()
+            raise FatalError()
         self.type = type
         self.key_error = key_error
         self.type_error = type_error

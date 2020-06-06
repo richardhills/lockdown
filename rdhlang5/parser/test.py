@@ -415,6 +415,21 @@ class TestLoops(TestCase):
         self.assertEquals(result.mode, "value")
         self.assertEquals(result.value, 10)
 
+    def test_for_range(self):
+        code = parse("""
+            function() {
+                int result = 0;
+                for(var i from range([ 1, 5 ])) {
+                    result = result + i;
+                };
+                return result;
+            }
+        """, debug=True)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.value, 1 + 2 + 3 + 4)
+        
+
 class TestMisc(TestCase):
     def test_invalid_list_assignment(self):
         code = parse("""

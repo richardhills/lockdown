@@ -15,16 +15,17 @@ from rdhlang5.executor.raw_code_factories import function_lit, nop, comma_op, \
     object_type, prepare_op, is_opcode, object_template_op, infer_all, \
     no_value_type, combine_opcodes, static_op, invoke_op, assignment_op, \
     unbound_assignment, list_template_op, list_type, close_op, context_op, \
-    loop_op, condition_op, binary_integer_op, equality_op
+    loop_op, condition_op, binary_integer_op, equality_op, dereference, \
+    local_function, reset_op, inferred_type, prepare_function_lit
 from rdhlang5.parser.grammar.langLexer import langLexer
 from rdhlang5.parser.grammar.langParser import langParser
 from rdhlang5.parser.grammar.langVisitor import langVisitor
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
-    rich_composite_type
+    rich_composite_type, READONLY_DEFAULT_OBJECT_TYPE
 from rdhlang5.type_system.exceptions import FatalError
 from rdhlang5.type_system.managers import get_manager
 from rdhlang5.type_system.object_types import RDHObject
-from rdhlang5.utils import MISSING, default, spread_dict
+from rdhlang5.utils import MISSING, default, spread_dict, is_debug
 
 
 class RDHLang5Visitor(langVisitor):
@@ -70,9 +71,9 @@ class RDHLang5Visitor(langVisitor):
 
         function_builder = CodeBlockBuilder(
             argument_type_expression=argument_type
-        ).chain(self.visit(ctx.codeBlock()))
+        ).chain(self.visit(ctx.codeBlock()), get_debug_info(ctx))
 
-        return function_builder.create("function")
+        return function_builder.create("function", get_debug_info(ctx))
 
     def visitSymbolInitialization(self, ctx):
         return (
@@ -95,7 +96,7 @@ class RDHLang5Visitor(langVisitor):
                 local_initializer=object_template_op({ name: initial_value })
             )
             if remaining_code:
-                new_code_block = new_code_block.chain(remaining_code)
+                new_code_block = new_code_block.chain(remaining_code, get_debug_info(ctx))
             remaining_code = new_code_block
 
         return new_code_block
@@ -107,7 +108,7 @@ class RDHLang5Visitor(langVisitor):
 
         return CodeBlockBuilder(
             extra_statics={ name: value }
-        ).chain(remaining_code)
+        ).chain(remaining_code, get_debug_info(ctx))
 
     def visitTypedef(self, ctx):
         remaining_code = self.visit(ctx.codeBlock())
@@ -117,7 +118,7 @@ class RDHLang5Visitor(langVisitor):
 
         return CodeBlockBuilder(
             extra_statics={ name: value },
-        ).chain(remaining_code)
+        ).chain(remaining_code, get_debug_info(ctx))
 
     def visitToExpression(self, ctx):
         code_expressions = [self.visit(e) for e in ctx.expression()]
@@ -129,7 +130,7 @@ class RDHLang5Visitor(langVisitor):
         remaining_code = ctx.codeBlock()
         if remaining_code:
             remaining_code = self.visit(remaining_code)
-            new_function = new_function.chain(remaining_code)
+            new_function = new_function.chain(remaining_code, get_debug_info(ctx))
 
         return new_function
 
@@ -294,9 +295,9 @@ class RDHLang5Visitor(langVisitor):
             when_false = nop()
         else:
             when_true, when_false = outcomes
-            when_false = self.visit(when_false).create("expression")
+            when_false = self.visit(when_false).create("expression", get_debug_info(ctx))
 
-        when_true = self.visit(when_true).create("expression")
+        when_true = self.visit(when_true).create("expression", get_debug_info(ctx))
 
         return condition_op(condition, when_true, when_false)
 
@@ -308,7 +309,62 @@ class RDHLang5Visitor(langVisitor):
             "break", "value",
             loop_op(comma_op(
                 condition_op(continue_expression, nop(), transform_op("break")),
-                loop_code.create("expression")
+                loop_code.create("expression", get_debug_info(ctx))
+            ))
+        )
+
+    def visitForLoop(self, ctx):
+        iterator_name = ctx.SYMBOL().getText()
+        generator_expression = self.visit(ctx.expression())
+        loop_code = self.visit(ctx.codeBlock())
+
+        loop_code = CodeBlockBuilder(
+            argument_type_expression=object_type({
+                iterator_name: inferred_type()
+            })
+        ).chain(loop_code, get_debug_info(ctx))
+
+        loop_code = loop_code.create("function", get_debug_info(ctx))
+#        get_manager(loop_code).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
+
+        return transform_op(
+            "break", "value",
+            invoke_op(local_function(
+                reset_op(
+                    transform_op(
+                        "value", "break",
+                        invoke_op(generator_expression, **get_debug_info(ctx)),
+                        **get_debug_info(ctx)
+                    )
+                ),
+                loop_op(
+                    comma_op(
+                        invoke_op(
+                            prepare_function_lit(
+                                loop_code,
+                                **get_debug_info(ctx)
+                            ),
+                            object_template_op({
+                                iterator_name: dereference("local.value")
+                            }, **get_debug_info(ctx))
+                        ),
+                        assignment_op(
+                            context_op(), literal_op("local"),
+                            reset_op(
+                                transform_op(
+                                    "value", "break",
+                                    invoke_op(
+                                        dereference("local.continuation", **get_debug_info(ctx)),
+                                        **get_debug_info(ctx)
+                                    ),
+                                    **get_debug_info(ctx)
+                                )
+                            ),
+                            **get_debug_info(ctx)
+                        )
+                    )
+                ),
+                **get_debug_info(ctx)
             ))
         )
 
@@ -346,10 +402,7 @@ class RDHLang5Visitor(langVisitor):
         return list_type([], type)
 
     def visitToFunctionExpression(self, ctx):
-        return close_op(
-            static_op(prepare_op(literal_op(self.visit(ctx.function())))),
-            context_op()
-        )
+        return prepare_function_lit(self.visit(ctx.function()))
 
 class CodeBlockBuilder(object):
     def __init__(
@@ -368,15 +421,15 @@ class CodeBlockBuilder(object):
         self.argument_type_expression = argument_type_expression
         self.breaks_types = breaks_types
 
-    def chain(self, other):
+    def chain(self, other, debug_info):
         can_merge_code_blocks = True
 
         if other.argument_type_expression is not MISSING:
             # If the inner function needs an argument, we have no mechanism to provide it
-            raise PreparationException()
+            raise FatalError()
         if other.breaks_types is not MISSING:
             # The newly created function ignores other.breaks_types, so let's fail early if they're provided
-            raise PreparationException()
+            raise FatalError()
 
         if self.local_variable_types is not MISSING and other.local_variable_types is not MISSING:
             # We can only take local variables from one of the two functions
@@ -401,7 +454,7 @@ class CodeBlockBuilder(object):
             local_initializer = default(self.local_initializer, MISSING, other.local_initializer)
             extra_statics = default(self.extra_statics, MISSING, other.extra_statics)
         else:
-            new_code_expressions = our_code_expressions + [ other.create("expression") ]
+            new_code_expressions = our_code_expressions + [ other.create("expression", debug_info) ]
             local_variable_types = self.local_variable_types
             local_initializer = self.local_initializer
             extra_statics = self.extra_statics
@@ -423,7 +476,7 @@ class CodeBlockBuilder(object):
             or self.breaks_types is not MISSING
         )
 
-    def create(self, output_mode):
+    def create(self, output_mode, debug_info):
         if output_mode not in ("function", "expression"):
             raise FatalError()
 
@@ -431,7 +484,7 @@ class CodeBlockBuilder(object):
 
         for c in code_expressions:
             if not is_opcode(c):
-                raise PreparationException()
+                raise FatalError()
 
         if not self.requires_function() and output_mode == "expression":
             return combine_opcodes(code_expressions)
@@ -464,15 +517,15 @@ class CodeBlockBuilder(object):
 
         if output_mode == "function":
             code = transform_op(
-                "return", "value", combine_opcodes(code_expressions)
+                "return", "value", combine_opcodes(code_expressions), **debug_info
             )
             return function_lit(
-                argument_type, break_types, local_type, local_initializer, code
+                argument_type, break_types, local_type, local_initializer, code, **debug_info
             )
         elif output_mode == "expression":
-            return invoke_op(close_op(static_op(prepare_op(literal_op(function_lit(
-                argument_type, break_types, local_type, local_initializer, combine_opcodes(code_expressions)
-            )))), context_op()))
+            return invoke_op(prepare_function_lit(function_lit(
+                argument_type, break_types, local_type, local_initializer, combine_opcodes(code_expressions), **debug_info
+            ), **debug_info),  **debug_info)
 
 def get_debug_info(ctx):
     return {

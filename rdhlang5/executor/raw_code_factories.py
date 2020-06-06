@@ -86,7 +86,7 @@ def infer_all():
     }
 
 
-def function_lit(*args):
+def function_lit(*args, **kwargs):
     if len(args) == 1:
         code, = args
         argument_type = local_type = no_value_type()
@@ -119,11 +119,11 @@ def function_lit(*args):
         "break_types": object_template_op(break_types)
     }
 
-    func = {
+    func = spread_dict({
         "code": code,
         "static": object_template_op(static),
         "local_initializer": local_initializer
-    }
+    }, **kwargs)
 
     return RDHObject(func)
 
@@ -135,13 +135,15 @@ def literal_op(value):
     }, debug_reason="code")
 
 
-def object_template_op(values, debug_reason="code"):
-    for v in values.values():
+def object_template_op(values, debug_reason="code", **kwargs):
+    for k, v in values.items():
+        if not isinstance(k, basestring):
+            raise FatalError()
         check_is_opcode(v)
-    return RDHObject({
+    return RDHObject(spread_dict({
         "opcode": "object_template",
         "opcodes": RDHDict(values, debug_reason=debug_reason)
-    }, debug_reason=debug_reason)
+    }, **kwargs), debug_reason=debug_reason)
 
 
 def dict_template_op(values):
@@ -209,7 +211,7 @@ def loop_op(opcode):
     }, debug_reason="code")
 
 
-def transform_op(*args):
+def transform_op(*args, **kwargs):
     if len(args) == 1:
         output, = args
         input = code = None
@@ -230,7 +232,7 @@ def transform_op(*args):
     if input:
         op["input"] = input
         op["code"] = code
-    return RDHObject(op, debug_reason="code")
+    return RDHObject(spread_dict(op, **kwargs), debug_reason="code")
 
 def shift_op(code, restart_type, **kwargs):
     check_is_opcode(code)
@@ -294,10 +296,10 @@ def throw_op(code):
     return transform_op("value", "exception", code)
 
 
-def context_op():
-    return RDHObject({
+def context_op(**kwargs):
+    return RDHObject(spread_dict({
         "opcode": "context",
-    }, debug_reason="code")
+    }, **kwargs), debug_reason="code")
 
 
 def dereference_op(of, reference, **kwargs):
@@ -351,30 +353,32 @@ def condition_op(condition, when_true, when_false):
     }, debug_reason="code")
 
 
-def prepare_op(function_expression):
+def prepare_op(function_expression, **kwargs):
     check_is_opcode(function_expression)
-    return RDHObject({
+    return RDHObject(spread_dict({
         "opcode": "prepare",
         "code": function_expression
-    }, debug_reason="code")
+    }, **kwargs), debug_reason="code")
 
 
-def close_op(function, context):
+def close_op(function, context, **kwargs):
+    if not "line" in kwargs:
+        pass
     check_is_opcode(function)
     check_is_opcode(context)
-    return RDHObject({
+    return RDHObject(spread_dict({
         "opcode": "close",
         "function": function,
         "outer_context": context
-    }, debug_reason="code")
+    }, **kwargs), debug_reason="code")
 
 
-def static_op(expression):
+def static_op(expression, **kwargs):
     check_is_opcode(expression)
-    return RDHObject({
+    return RDHObject(spread_dict({
         "opcode": "static",
         "code": expression
-    }, debug_reason="code")
+    }, **kwargs), debug_reason="code")
 
 
 def invoke_op(function_expression, argument_expression=None, **kwargs):
@@ -472,9 +476,21 @@ def unbound_assignment(name, rvalue):
         "rvalue": rvalue
     }, debug_reason="code")
 
+def prepare_function_lit(function_lit, **kwargs):
+    return close_op(static_op(prepare_op(literal_op(function_lit), **kwargs), **kwargs), context_op(**kwargs), **kwargs)
 
-def prepared_function(*args):
-    return close_op(static_op(prepare_op(literal_op(function_lit(*args)))), context_op())
+def prepared_function(*args, **kwargs):
+    return prepare_function_lit(function_lit(*args, **kwargs), **kwargs)
+
+def local_function(local_initializer, code, **kwargs):
+    return prepared_function(
+        no_value_type(),
+        infer_all(),
+        inferred_type(),
+        local_initializer,
+        code,
+        **kwargs
+    )
 
 def munge_ints(v):
     if v.isdigit():

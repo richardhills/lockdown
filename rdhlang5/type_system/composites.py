@@ -26,6 +26,8 @@ class CompositeType(Type):
         if not isinstance(micro_op_types, dict):
             raise FatalError()
         for tag in micro_op_types.keys():
+            if tag == ("get", "result"):
+                pass
             if not isinstance(tag, tuple):
                 raise FatalError()
         from rdhlang5.type_system.dict_types import RDHDict
@@ -194,6 +196,24 @@ class CompositeType(Type):
 
     def short_str(self):
         return "Composite<{}>".format(self.name)
+
+    def to_code(self):
+        keys = set()
+        getters = set()
+        setters = set()
+        type = {}
+        for micro_op_type in self.micro_op_types.values():
+            if not hasattr(micro_op_type, "key"):
+                continue
+            keys.add(micro_op_type.key)
+            if "Get" in str(micro_op_type.__class__):
+                getters.add(micro_op_type.key)
+                type[micro_op_type.key] = micro_op_type.type
+            if "Set" in str(micro_op_type.__class__):
+                setters.add(micro_op_type.key)
+        return "Composite {{\n{}\n}}".format(
+            ";\n".join(["{}: {}{} {}".format(k, "g" if k in getters else "", "s" if k in setters else "", type[k].to_code()) for k in keys])
+        )
 
 weakrefs_for_type = {}
 type_ids_for_weakref_id = {}

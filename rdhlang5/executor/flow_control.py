@@ -119,6 +119,10 @@ class FlowManager(object):
         return self._result is not MISSING
 
     def capture(self, break_mode, break_types, callback=None, top_level=False, continuation_break_types=None):
+        if not isinstance(break_mode, basestring):
+            raise FatalError()
+        if not isinstance(break_types, dict):
+            raise FatalError()
         flow_manager = FlowManager(break_mode, break_types, self.allowed_break_types, self.frame_manager, callback=callback, top_level=top_level, continuation_break_types=continuation_break_types)
         if callback:
             flow_manager.start()
@@ -189,6 +193,10 @@ class FlowManager(object):
     def attempt_close(self, mode, value, restart_type):
         if is_debug() and self._result is not MISSING:
             raise FatalError()
+
+        if not self.our_break_types:
+            return False
+
         accepted_out_type = self.our_break_types["out"]
         accepted_in_type = self.our_break_types.get("in", None)
 

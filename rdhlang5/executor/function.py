@@ -13,11 +13,11 @@ from rdhlang5.executor.raw_code_factories import dynamic_dereference_op, \
 from rdhlang5.executor.type_factories import enrich_type
 from rdhlang5.type_system.composites import CompositeType
 from rdhlang5.type_system.core_types import Type, NoValueType, IntegerType, \
-    TopType
+    TopType, AnyType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     DEFAULT_DICT_TYPE, READONLY_DEFAULT_OBJECT_TYPE, \
     readonly_rich_composite_type
-from rdhlang5.type_system.exceptions import FatalError
+from rdhlang5.type_system.exceptions import FatalError, InvalidInferredType
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType
 from rdhlang5.utils import MISSING, is_debug
@@ -27,7 +27,7 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
     get_manager(data).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
 
     if not hasattr(data, "code"):
-        raise PreparationException()
+        raise PreparationException("Code missing from function")
 
     actual_break_types_factory = BreakTypesFactory()
 
@@ -57,13 +57,17 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
         suggested_outer_type = NoValueType()
 
     if not isinstance(suggested_argument_type, Type):
-        raise PreparationException()
+        raise FatalError()
     if not isinstance(suggested_outer_type, Type):
-        raise PreparationException()
+        raise FatalError()
 
-    argument_type = argument_type.replace_inferred_types(suggested_argument_type)
+    try:
+        argument_type = argument_type.replace_inferred_types(suggested_argument_type)
+        outer_type = outer_type.replace_inferred_types(suggested_outer_type)
+    except InvalidInferredType:
+        raise PreparationException("Invalid argument or outer inferred types")
+
     argument_type = argument_type.reify_revconst_types()
-    outer_type = outer_type.replace_inferred_types(suggested_outer_type)
     outer_type = outer_type.reify_revconst_types()
 
     context = RDHObject({
@@ -82,7 +86,7 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
     get_manager(context)._context_type = RDHObjectType({
         "outer": outer_type,
         "argument": argument_type
-    }, name="local-prepare-context-type")
+    }, wildcard_type=AnyType(), name="local-prepare-context-type")
 
     local_type = enrich_type(static.local)
     local_initializer = enrich_opcode(data.local_initializer, UnboundDereferenceBinder(context))
@@ -91,11 +95,15 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
     get_manager(context).remove_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
 
     if actual_local_type is MISSING:
-        raise PreparationException()
+        raise PreparationException("Actual local type missing")
 
     actual_local_type = flatten_out_types(actual_local_type)
 
-    local_type = local_type.replace_inferred_types(actual_local_type)
+    try:
+        local_type = local_type.replace_inferred_types(actual_local_type)
+    except InvalidInferredType():
+        raise PreparationException("Invalid local inferred type")
+
     local_type = local_type.reify_revconst_types()
 
     if isinstance(local_type, IntegerType):
@@ -103,7 +111,7 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
 
     if not local_type.is_copyable_from(actual_local_type):
         local_type.is_copyable_from(actual_local_type)
-        raise PreparationException()
+        raise PreparationException("Invalid local type")
 
     actual_break_types_factory.merge(local_other_break_types)
 
@@ -131,7 +139,7 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
         "outer": outer_type,
         "argument": argument_type,
         "local": local_type
-    }, name="code-prepare-context-type")
+    }, wildcard_type=AnyType(), name="code-prepare-context-type")
 
     code = enrich_opcode(data.code, UnboundDereferenceBinder(context))
 
@@ -238,7 +246,7 @@ class UnboundDereferenceBinder(object):
             raise FatalError()
 
         if reference in ("prepare", "local", "argument", "outer", "static"):
-            return context_op()
+            return context_op(), False
 
         types_search = self.search_context_type_for_reference(reference, self.context_type, [], debug_info)
         if types_search:
@@ -247,7 +255,7 @@ class UnboundDereferenceBinder(object):
         if statics_search:
             return statics_search, True
 
-        return None
+        return None, False
 
     def __call__(self, expression):
         from rdhlang5.executor.raw_code_factories import dereference_op, assignment_op, \
@@ -311,7 +319,7 @@ class OpenFunction(object):
             "outer": self.outer_type,
             "argument": self.argument_type,
             "types": readonly_rich_composite_type
-        }, name="local-initialization-context-type")
+        }, wildcard_type=AnyType(), name="local-initialization-context-type")
 
         self.execution_context_type = RDHObjectType({
             "prepare": readonly_rich_composite_type,
@@ -320,7 +328,7 @@ class OpenFunction(object):
             "static": readonly_rich_composite_type,
             "local": self.local_type,
             "types": readonly_rich_composite_type
-        }, name="code-execution-context-type")
+        }, wildcard_type=AnyType(), name="code-execution-context-type")
 
     def get_type(self):
         return OpenFunctionType(self.argument_type, self.outer_type, self.break_types)
@@ -343,6 +351,12 @@ class OpenFunction(object):
             self.types_context,
             self.local_initialization_context_type,
             self.execution_context_type
+        )
+
+    def to_code(self):
+        break_types_code = ";".join(["{}: [{}]".format(mode, ",".join([format_break_type(b) for b in break_types])) for mode, break_types in self.break_types.items()])
+        return "OpenFunction({} => {}\nOuter:{}\nLocal:{}\n{{\n{}\n}}\n)".format(
+            self.argument_type.to_code(), break_types_code, self.outer_type.to_code(), self.local_type.to_code(), self.code.to_code()
         )
 
 class ClosedFunction(RDHFunction):
@@ -424,6 +438,11 @@ class ClosedFunction(RDHFunction):
 
         return flow_manager.value(result, self)
 
+    def to_code(self):
+        break_types_code = ";".join(["{}: [{}]".format(mode, ",".join([format_break_type(b) for b in break_types])) for mode, break_types in self.break_types.items()])
+        return "ClosedFunction({} => {}\n{{\n{}\n}}\n)".format(
+            self.argument_type.to_code(), break_types_code, self.code.to_code()
+        )
 
 class Continuation(RDHFunction):
     def __init__(self, frame_manager, frames, callback, restart_type, break_types):
@@ -444,4 +463,12 @@ class Continuation(RDHFunction):
         self.restarted = True
         self.frame_manager.prepare_restart(self.frames, restart_value)
         raise self.callback(flow_manager)
+
+
+def format_break_type(break_type):
+    if "in" in break_type:
+        return "{ out: {}, in: {} }".format(break_type["out"].to_code(), break_type["in"].to_code())
+    else:
+        return break_type["out"].to_code()
+
 

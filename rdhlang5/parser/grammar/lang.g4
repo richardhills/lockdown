@@ -123,6 +123,7 @@ expression
    | 'break'			    # breakStatement
    | ifStatement			# toIfStatement
    | whileLoop				# toWhileLoop
+   | forLoop				# toForLoop
    | objectType				# toObjectType
    | listType				# toListType
    | tupleType				# toTupleType
@@ -163,4 +164,8 @@ ifStatement
 
 whileLoop
    : 'while' '(' expression ')' '{' codeBlock '}'
+   ;
+
+forLoop
+   : 'for' '(' 'var' SYMBOL 'from' expression ')' '{' codeBlock '}'
    ;

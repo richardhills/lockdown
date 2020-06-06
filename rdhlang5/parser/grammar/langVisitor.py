@@ -230,6 +230,11 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#toForLoop.
+    def visitToForLoop(self, ctx):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#objectTemplate.
     def visitObjectTemplate(self, ctx):
         return self.visitChildren(ctx)
@@ -272,6 +277,11 @@ class langVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by langParser#whileLoop.
     def visitWhileLoop(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#forLoop.
+    def visitForLoop(self, ctx):
         return self.visitChildren(ctx)
 
 

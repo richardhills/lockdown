@@ -2,6 +2,7 @@
 from __future__ import unicode_literals
 
 from _collections import defaultdict
+import json
 
 from munch import munchify
 from pip._vendor.contextlib2 import ExitStack
@@ -15,7 +16,7 @@ from rdhlang5.executor.raw_code_factories import inferred_type, function_lit, \
     equality_op, binary_integer_op, nop, return_op, list_type, \
     function_type, list_template_op, insert_op, transform_op, literal_op, \
     invoke_op, object_template_op, prepared_function, no_value_type, \
-    assignment_op, dict_template_op, addition_op, context_op, reset_op, shift_op,\
+    assignment_op, dict_template_op, addition_op, context_op, reset_op, shift_op, \
     match_op
 from rdhlang5.type_system.core_types import AnyType, NoValueType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE
@@ -195,6 +196,7 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False)
             raise BootstrapException("\n\n".join(error_msgs))
 
         closed_function = open_function.close(context)
+#        print closed_function.to_code()
         mode, value, opcode, restart_type = closed_function.invoke(argument, break_manager)
         raise BreakException(mode, value, opcode, restart_type)
 

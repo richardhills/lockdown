@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+from functools import wraps
+
 from rdhlang5.type_system.exceptions import FatalError
 
 
@@ -25,6 +27,17 @@ def default(value, marker, default_if_marker):
     if value is marker:
         return default_if_marker
     return value
+
+def one_shot_memoize(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if getattr(self, "_result", MISSING) is not MISSING:
+            raise FatalError()
+        self._args = args
+        self._kwargs = kwargs
+        self._result = func(self, *args, **kwargs)
+        return self._result
+    return wrapper
 
 DEBUG_MODE = None
 

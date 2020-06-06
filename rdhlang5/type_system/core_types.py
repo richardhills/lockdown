@@ -35,6 +35,9 @@ class Type(object):
     def short_str(self):
         return str(self)
 
+    def to_code(self):
+        return self.short_str()
+
 class AnyType(Type):
     def is_copyable_from(self, other):
         return True

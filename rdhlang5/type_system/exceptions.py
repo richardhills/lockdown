@@ -39,3 +39,5 @@ class InvalidAssignmentKey(Exception):
 class InvalidAssignmentType(Exception):
     pass
 
+class InvalidInferredType(Exception):
+    pass

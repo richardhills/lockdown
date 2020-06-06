@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+from _collections import defaultdict
 from abc import abstractmethod, ABCMeta
+from distutils.log import fatal
+
+from contextlib2 import ExitStack
 
 from log import logger
 from rdhlang5.executor.exceptions import PreparationException
@@ -24,8 +28,8 @@ from rdhlang5.type_system.managers import get_type_of_value, get_manager
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType, \
     ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
     ObjectWildcardSetterType
-from rdhlang5.utils import MISSING, NO_VALUE, is_debug
-from distutils.log import fatal
+from rdhlang5.utils import MISSING, NO_VALUE, is_debug, one_shot_memoize
+
 
 EVALUATE_CAPTURE_TYPES = { "out": AnyType() }
 
@@ -62,6 +66,15 @@ def get_expression_break_types(expression, context, flow_manager, immediate_cont
 
 
 def flatten_out_types(break_types):
+    if is_debug():
+        if not isinstance(break_types, list):
+            raise FatalError()
+        for b in break_types:
+            if not isinstance(b, dict):
+                raise FatalError()
+            if "out" not in b:
+                raise FatalError()
+
     return merge_types([b["out"] for b in break_types], "super")
 
 
@@ -107,6 +120,8 @@ class Opcode(object):
     def get_line_and_column(self):
         return getattr(self.data, "line", None), getattr(self.data, "column", None)
 
+    def to_code(self):
+        return str(type(self))
 
 class Nop(Opcode):
     def get_break_types(self, context, flow_manager, immediate_context=None):
@@ -117,6 +132,8 @@ class Nop(Opcode):
     def jump(self, context, manager, immediate_context=None):
         return manager.value(NO_VALUE, self)
 
+    def to_code(self):
+        return "nop"
 
 class LiteralOp(Opcode):
     def __init__(self, data, visitor):
@@ -132,6 +149,11 @@ class LiteralOp(Opcode):
     def jump(self, context, break_manager, immediate_context=None):
         return break_manager.value(self.value, self)
 
+    def __str__(self):
+        return "LiteralOp<{}>".format(self.value)
+
+    def to_code(self):
+        return self.value
 
 class ObjectTemplateOp(Opcode):
     def __init__(self, data, visitor):
@@ -149,6 +171,10 @@ class ObjectTemplateOp(Opcode):
         for key, opcode in self.opcodes.items():
             value_type, other_break_types = get_expression_break_types(opcode, context, flow_manager)
             break_types.merge(other_break_types)
+
+            if value_type is MISSING:
+                continue
+
             value_type = flatten_out_types(value_type)
             all_value_types.append(value_type)
 
@@ -186,7 +212,6 @@ class ObjectTemplateOp(Opcode):
                 result[key], _ = frame.step(key, lambda: evaluate(opcode, context, flow_manager))
 
         return flow_manager.value(RDHObject(result, debug_reason="object-template"), self)
-
 
 class DictTemplateOp(Opcode):
     def __init__(self, data, visitor):
@@ -333,6 +358,11 @@ class ContextOp(Opcode):
     def jump(self, context, flow_manager, immediate_context=None):
         return flow_manager.value(context, self)
 
+    def __str__(self):
+        return "Context"
+
+    def to_code(self):
+        return "Context"
 
 class DereferenceOp(Opcode):
     INVALID_DEREFERENCE = TypeErrorFactory("DereferenceOp: invalid_dereference {reference}")
@@ -342,6 +372,7 @@ class DereferenceOp(Opcode):
         self.of = enrich_opcode(data.of, visitor)
         self.reference = enrich_opcode(data.reference, visitor)
 
+    @one_shot_memoize
     def get_break_types(self, context, flow_manager, immediate_context=None):
         break_types = BreakTypesFactory()
 
@@ -362,19 +393,19 @@ class DereferenceOp(Opcode):
                 try:
                     for reference in reference_type.get_allowed_values():
                         for of_type in unwrap_types(of_types):
-                            micro_op = None
-
                             if isinstance(of_type, CompositeType):
                                 micro_op = of_type.get_micro_op_type(("get", reference))
                                 if micro_op is None:
                                     micro_op = of_type.get_micro_op_type(("get-wildcard",))
 
-                            if micro_op:
-                                break_types.add("value", micro_op.type)
-                                if micro_op.type_error or micro_op.key_error:
+                                if micro_op:
+                                    break_types.add("value", micro_op.type)
+                                    if micro_op.type_error or micro_op.key_error:
+                                        invalid_dereferences.add(reference)
+                                else:
                                     invalid_dereferences.add(reference)
-                            else:
-                                invalid_dereferences.add(reference)
+                            elif of_type is not MISSING:
+                                break_types.add("value", AnyType())
                 except AllowedValuesNotAvailable:
                     invalid_dereferences.add(reference)
 
@@ -412,6 +443,11 @@ class DereferenceOp(Opcode):
             except InvalidDereferenceKey:
                 return flow_manager.exception(self.INVALID_DEREFERENCE(reference=reference), self)
 
+    def __str__(self):
+        return "{}.{}".format(self.of, self.reference)
+
+    def to_code(self):
+        return "{}.{}".format(self.of.to_code(), self.reference.to_code())
 
 class DynamicDereferenceOp(Opcode):
     INVALID_DEREFERENCE = TypeErrorFactory("DynamicDereferenceOp: invalid_dereference")
@@ -441,6 +477,7 @@ class AssignmentOp(Opcode):
         self.reference = enrich_opcode(data.reference, visitor)
         self.rvalue = enrich_opcode(data.rvalue, visitor)
 
+    @one_shot_memoize
     def get_break_types(self, context, flow_manager, immediate_context=None):
         break_types = BreakTypesFactory()
 
@@ -459,9 +496,7 @@ class AssignmentOp(Opcode):
         if rvalue_type is not MISSING:
             rvalue_type = flatten_out_types(rvalue_type)
 
-        self.invalid_assignment_error = False
-        self.invalid_rvalue_error = False
-        self.invalid_lvalue_error = False
+        self.invalid_assignment_error = self.invalid_rvalue_error = self.invalid_lvalue_error = False
 
         if reference_types is not MISSING and of_types is not MISSING and rvalue_type is not MISSING:
             for reference_type in unwrap_types(reference_types):
@@ -488,6 +523,8 @@ class AssignmentOp(Opcode):
                                 self.invalid_lvalue_error = True
                 except AllowedValuesNotAvailable:
                     self.invalid_lvalue_error = True
+        else:
+            self.invalid_assignment_error = self.invalid_rvalue_error = self.invalid_lvalue_error = True
 
         if self.invalid_assignment_error:
             break_types.add("exception", self.INVALID_ASSIGNMENT.get_type())
@@ -535,6 +572,8 @@ class AssignmentOp(Opcode):
             except InvalidAssignmentKey:
                 return flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
 
+    def to_code(self):
+        return "{}.{} = {}".format(self.of.to_code(), self.reference.to_code(), self.rvalue.to_code())
 
 class InsertOp(Opcode):
     INVALID_LVALUE = TypeErrorFactory("InsertOp: invalid_lvalue")
@@ -634,7 +673,7 @@ class InsertOp(Opcode):
                 return flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
 
 
-def BinaryOp(name, func, argument_type, result_type):
+def BinaryOp(name, symbol, func, argument_type, result_type):
     class _BinaryOp(Opcode):
         MISSING_OPERANDS = TypeErrorFactory("{}: missing_integers".format(name))
 
@@ -678,6 +717,9 @@ def BinaryOp(name, func, argument_type, result_type):
                     return rvalue
 
                 return break_manager.value(func(get_lvalue, get_rvalue), self)
+
+        def to_code(self):
+            return "{} {} {}".format(self.lvalue.to_code(), symbol, self.rvalue.to_code())
 
     return _BinaryOp
 
@@ -725,6 +767,8 @@ class TransformOp(Opcode):
                 return flow_manager.unwind(self.output, NO_VALUE, self, None)
         raise FatalError()
 
+    def to_code(self):
+        return "transform({} -> {}\n {}\n)".format(self.input, self.output, self.expression.to_code())
 
 class ShiftOp(Opcode):
     def __init__(self, data, visitor):
@@ -777,10 +821,10 @@ class ResetOp(Opcode):
     def get_break_types(self, context, flow_manager, immediate_context=None):
         break_types = BreakTypesFactory()
 
-        self.opcode_break_types = self.opcode.get_break_types(context, flow_manager)
-        yield_break_types = self.opcode_break_types.pop("yield", [])
-
-        break_types.merge(self.opcode_break_types)
+        opcode_break_types = self.opcode.get_break_types(context, flow_manager)
+        self.continuation_break_types = dict(opcode_break_types)
+        yield_break_types = opcode_break_types.pop("yield", [])
+        break_types.merge(opcode_break_types)
 
         missing_in_error = False
 
@@ -790,7 +834,7 @@ class ResetOp(Opcode):
             break_types.add(
                 "value",
                 self.get_value_and_continuation_block_type(
-                    yield_break_type["out"], yield_break_type["in"], self.opcode_break_types
+                    yield_break_type["out"], yield_break_type["in"], self.continuation_break_types
                 )
             )
 
@@ -808,7 +852,7 @@ class ResetOp(Opcode):
             "in": TopType()
         }
 
-        new_flow_manager = flow_manager.capture("yield", capture_modes, enter_opcode, continuation_break_types=self.opcode_break_types)
+        new_flow_manager = flow_manager.capture("yield", capture_modes, enter_opcode, continuation_break_types=self.continuation_break_types)
 
         if not new_flow_manager.has_restart_continuation:
             flow_manager.exception(self.MISSING_IN_BREAK_TYPE(self), self)
@@ -854,7 +898,9 @@ class CommaOp(Opcode):
                 value, _ = frame.step(index, lambda: evaluate(opcode, context, flow_manager))
 
         return flow_manager.value(value, self)
-        
+
+    def to_code(self):
+        return ";\n".join([ o.to_code() for o in self.opcodes ])
 
 class LoopOp(Opcode):
     def __init__(self, data, visitor):
@@ -868,6 +914,8 @@ class LoopOp(Opcode):
         while True:
             evaluate(self.code, context, flow_manager)
 
+    def to_code(self):
+        return "Loop {{ {} }}".format(self.code.to_code())
 
 class ConditionalOp(Opcode):
     def __init__(self, data, visitor):
@@ -918,24 +966,25 @@ class ConditionalOp(Opcode):
 
 
 class PrepareOp(Opcode):
+    PREPARATION_ERROR = TypeErrorFactory("PrepareOp: preparation_error")
+
     def __init__(self, data, visitor):
         self.code = enrich_opcode(data.code, visitor)
 
     def get_break_types(self, context, flow_manager, immediate_context=None):
-        raise PreparationException()
+        break_types = BreakTypesFactory()
+        function_value_type, other_break_types = get_expression_break_types(self.code, context, flow_manager, immediate_context)
 
-        # I've left this code for reference, not sure how to use in future...
-#         break_types = BreakTypesFactory()
-# 
-#         function_data = evaluate(self.code, context, flow_manager)
-# 
-#         from rdhlang5.executor.function import prepare
-# 
-#         self.function = prepare(function_data, context, flow_manager, immediate_context)
-# 
-#         break_types.add("value", self.function.get_type())
-# 
-#         return break_types.build()
+        break_types.merge(other_break_types)
+
+        if function_value_type is not MISSING:
+            break_types.add(
+                "value", AnyType()
+            )
+
+        break_types.add("exception", self.PREPARATION_ERROR.get_type(), opcode=self)
+
+        return break_types.build()
 
     def jump(self, context, flow_manager, immediate_context=None):
         function_data = evaluate(self.code, context, flow_manager)
@@ -945,7 +994,10 @@ class PrepareOp(Opcode):
         immediate_context = immediate_context or {}
         immediate_context["suggested_outer_type"] = get_context_type(context)
 
-        function = prepare(function_data, context, flow_manager, immediate_context)
+        try:
+            function = prepare(function_data, context, flow_manager, immediate_context)
+        except PreparationException as e:
+            raise flow_manager.exception(self.PREPARATION_ERROR(), self)
 
         return flow_manager.value(function, self)
 
@@ -955,6 +1007,7 @@ class CloseOp(Opcode):
     INVALID_OUTER_CONTEXT = TypeErrorFactory("Close: invalid_outer_context")
 
     def __init__(self, data, visitor):
+        super(CloseOp, self).__init__(data, visitor)
         self.function = enrich_opcode(data.function, visitor)
         self.outer_context = enrich_opcode(data.outer_context, visitor)
 
@@ -962,7 +1015,8 @@ class CloseOp(Opcode):
         break_types = BreakTypesFactory()
 
         function_type, function_break_types = get_expression_break_types(self.function, context, flow_manager, immediate_context=immediate_context)
-        function_type = flatten_out_types(function_type)
+        if function_type is not MISSING:
+            function_type = flatten_out_types(function_type)
         break_types.merge(function_break_types)
 
         outer_context_type, outer_context_break_types = get_expression_break_types(self.outer_context, context, flow_manager)
@@ -980,10 +1034,10 @@ class CloseOp(Opcode):
                 break_types.add("value", AnyType())
 
         if self.outer_context_type_error:
-            break_types.add("exception", self.INVALID_OUTER_CONTEXT.get_type())
+            break_types.add("exception", self.INVALID_OUTER_CONTEXT.get_type(), opcode=self)
 
         if not isinstance(function_type, OpenFunctionType):
-            break_types.add("exception", self.INVALID_FUNCTION.get_type())
+            break_types.add("exception", self.INVALID_FUNCTION.get_type(), opcode=self)
 
         return break_types.build()
 
@@ -1001,39 +1055,55 @@ class CloseOp(Opcode):
 
         return flow_manager.value(open_function.close(outer_context), self)
 
+    def to_code(self):
+        return "Closed_{}".format(self.function.to_code())
 
 class StaticOp(Opcode):
     def __init__(self, data, visitor):
         self.code = enrich_opcode(data.code, visitor)
         self.value = MISSING
+        self.mode = MISSING
 
-    def lazy_get_value(self, context, flow_manager, immediate_context):
-        if self.value is MISSING:
-            try:
-                self.value = evaluate(self.code, context, flow_manager, immediate_context)
-            except FatalError:
-                raise
-            except BreakException as e:
-                raise PreparationException(e)
-            except Exception as e:
-                raise
-        return self.value
+    def lazy_initialize(self, context, original_flow_manager, immediate_context):
+        from rdhlang5.executor.bootstrap import create_no_escape_flow_manager
+
+        if self.value is MISSING and self.mode is MISSING:
+            flow_manager = create_no_escape_flow_manager()
+
+            expression_break_types = self.code.get_break_types(context, flow_manager, immediate_context)
+
+            break_managers = defaultdict(list)
+
+            with ExitStack() as stack:
+                for mode, break_types in expression_break_types.items():
+                    for break_type in break_types:
+                        flow_manager = stack.enter_context(flow_manager.capture(mode, break_type, top_level=True))
+                        break_managers[mode].append(flow_manager)
+
+                mode, value, opcode, restart_type = self.code.jump(context, flow_manager, immediate_context)
+                raise BreakException(mode, value, opcode, restart_type)
+
+            for mode, break_managers in break_managers.items():
+                for break_manager in break_managers:
+                    if break_manager.has_result:
+                        self.mode = mode
+                        self.value = break_manager.result
 
     def get_break_types(self, context, flow_manager, immediate_context=None):
         break_types = BreakTypesFactory()
-        break_types.add(
-            "value",
-            get_type_of_value(
-                self.lazy_get_value(context, flow_manager, immediate_context)
-            )
-        )
+        self.lazy_initialize(context, flow_manager, immediate_context)
+        if self.value is not MISSING:
+            break_types.add(self.mode, get_type_of_value(self.value))
         return break_types.build()
 
     def jump(self, context, flow_manager, immediate_context=None):
-        return flow_manager.value(
-            self.lazy_get_value(context, flow_manager, immediate_context), self
-        )
+        self.lazy_initialize(context, flow_manager, immediate_context)
+        return flow_manager.unwind(self.mode, self.value, self, None)
 
+    def to_code(self):
+        if not self.value:
+            raise FatalError()
+        return self.value.to_code()
 
 class InvokeOp(Opcode):
     INVALID_FUNCTION_TYPE = TypeErrorFactory("Invoke: invalid_function_type")
@@ -1091,6 +1161,8 @@ class InvokeOp(Opcode):
 
         raise FatalError()
 
+    def to_code(self):
+        return "invoke({},\n{}\n)".format(self.argument.to_code(), self.function.to_code())
 
 class MatchOp(Opcode):
     NO_MATCH = TypeErrorFactory("Match: no_match")
@@ -1194,19 +1266,19 @@ OPCODES = {
     "object_template": ObjectTemplateOp,
     "dict_template": DictTemplateOp,
     "list_template": ListTemplateOp,
-    "multiplication": BinaryOp("Multiplication", lambda lvalue, rvalue: lvalue() * rvalue(), IntegerType(), IntegerType()),
-    "division": BinaryOp("Division", lambda lvalue, rvalue: lvalue() / rvalue(), IntegerType(), IntegerType()),
-    "addition": BinaryOp("Addition", lambda lvalue, rvalue: lvalue() + rvalue(), IntegerType(), IntegerType()),
-    "subtraction": BinaryOp("Subtraction", lambda lvalue, rvalue: lvalue() - rvalue(), IntegerType(), IntegerType()),
-    "mod": BinaryOp("Modulus", lambda lvalue, rvalue: lvalue() % rvalue(), IntegerType(), IntegerType()),
-    "lt": BinaryOp("LessThan", lambda lvalue, rvalue: lvalue() < rvalue(), IntegerType(), BooleanType()),
-    "lte": BinaryOp("LessThanOrEqual", lambda lvalue, rvalue: lvalue() <= rvalue(), IntegerType(), BooleanType()),
-    "gt": BinaryOp("GreaterThan", lambda lvalue, rvalue: lvalue() > rvalue(), IntegerType(), BooleanType()),
-    "gte": BinaryOp("GreaterThanOrEqual", lambda lvalue, rvalue: lvalue() >= rvalue(), IntegerType(), BooleanType()),
-    "eq": BinaryOp("Equality", lambda lvalue, rvalue: lvalue() == rvalue(), IntegerType(), BooleanType()),
-    "neq": BinaryOp("Inequality", lambda lvalue, rvalue: lvalue() != rvalue(), IntegerType(), BooleanType()),
-    "or": BinaryOp("Or", lambda lvalue, rvalue: lvalue() or rvalue(), BooleanType(), BooleanType()),
-    "and": BinaryOp("And", lambda lvalue, rvalue: lvalue() and rvalue(), BooleanType(), BooleanType()),
+    "multiplication": BinaryOp("Multiplication", "*", lambda lvalue, rvalue: lvalue() * rvalue(), IntegerType(), IntegerType()),
+    "division": BinaryOp("Division", "/", lambda lvalue, rvalue: lvalue() / rvalue(), IntegerType(), IntegerType()),
+    "addition": BinaryOp("Addition", "+", lambda lvalue, rvalue: lvalue() + rvalue(), IntegerType(), IntegerType()),
+    "subtraction": BinaryOp("Subtraction", "-", lambda lvalue, rvalue: lvalue() - rvalue(), IntegerType(), IntegerType()),
+    "mod": BinaryOp("Modulus", "%", lambda lvalue, rvalue: lvalue() % rvalue(), IntegerType(), IntegerType()),
+    "lt": BinaryOp("LessThan", "<", lambda lvalue, rvalue: lvalue() < rvalue(), IntegerType(), BooleanType()),
+    "lte": BinaryOp("LessThanOrEqual", "<=", lambda lvalue, rvalue: lvalue() <= rvalue(), IntegerType(), BooleanType()),
+    "gt": BinaryOp("GreaterThan", ">", lambda lvalue, rvalue: lvalue() > rvalue(), IntegerType(), BooleanType()),
+    "gte": BinaryOp("GreaterThanOrEqual", ">=", lambda lvalue, rvalue: lvalue() >= rvalue(), IntegerType(), BooleanType()),
+    "eq": BinaryOp("Equality", "==", lambda lvalue, rvalue: lvalue() == rvalue(), IntegerType(), BooleanType()),
+    "neq": BinaryOp("Inequality", "!=", lambda lvalue, rvalue: lvalue() != rvalue(), IntegerType(), BooleanType()),
+    "or": BinaryOp("Or", "||", lambda lvalue, rvalue: lvalue() or rvalue(), BooleanType(), BooleanType()),
+    "and": BinaryOp("And", "&&", lambda lvalue, rvalue: lvalue() and rvalue(), BooleanType(), BooleanType()),
     "dereference": DereferenceOp,
     "dynamic_dereference": DynamicDereferenceOp,
     "assignment": AssignmentOp,

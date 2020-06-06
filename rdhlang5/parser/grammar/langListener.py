@@ -409,6 +409,15 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#toForLoop.
+    def enterToForLoop(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#toForLoop.
+    def exitToForLoop(self, ctx):
+        pass
+
+
     # Enter a parse tree produced by langParser#objectTemplate.
     def enterObjectTemplate(self, ctx):
         pass
@@ -487,6 +496,15 @@ class langListener(ParseTreeListener):
 
     # Exit a parse tree produced by langParser#whileLoop.
     def exitWhileLoop(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#forLoop.
+    def enterForLoop(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#forLoop.
+    def exitForLoop(self, ctx):
         pass
 
 
