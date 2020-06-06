@@ -167,5 +167,5 @@ whileLoop
    ;
 
 forLoop
-   : 'for' '(' 'var' SYMBOL 'from' expression ')' '{' codeBlock '}'
+   : 'for' '(var' SYMBOL 'from' expression ')' '{' codeBlock '}'
    ;

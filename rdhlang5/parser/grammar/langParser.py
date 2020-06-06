@@ -8,7 +8,7 @@ import sys
 def serializedATN():
     with StringIO() as buf:
         buf.write(u"\3\u608b\ua72a\u8133\ub9ed\u417c\u3be7\u7786\u5964\3")
-        buf.write(u"/\u014e\4\2\t\2\4\3\t\3\4\4\t\4\4\5\t\5\4\6\t\6\4\7\t")
+        buf.write(u"/\u014d\4\2\t\2\4\3\t\3\4\4\t\4\4\5\t\5\4\6\t\6\4\7\t")
         buf.write(u"\7\4\b\t\b\4\t\t\t\4\n\t\n\4\13\t\13\4\f\t\f\4\r\t\r")
         buf.write(u"\4\16\t\16\4\17\t\17\4\20\t\20\4\21\t\21\4\22\t\22\4")
         buf.write(u"\23\t\23\4\24\t\24\3\2\3\2\3\3\3\3\3\3\3\3\7\3/\n\3\f")
@@ -38,24 +38,24 @@ def serializedATN():
         buf.write(u"\22\3\22\3\22\3\22\3\22\3\22\3\22\3\22\3\22\3\22\5\22")
         buf.write(u"\u0139\n\22\3\23\3\23\3\23\3\23\3\23\3\23\3\23\3\23\3")
         buf.write(u"\24\3\24\3\24\3\24\3\24\3\24\3\24\3\24\3\24\3\24\3\24")
-        buf.write(u"\3\24\2\3\22\25\2\4\6\b\n\f\16\20\22\24\26\30\32\34\36")
-        buf.write(u" \"$&\2\2\2\u0179\2(\3\2\2\2\4\67\3\2\2\2\69\3\2\2\2")
-        buf.write(u"\bJ\3\2\2\2\nT\3\2\2\2\fV\3\2\2\2\16`\3\2\2\2\20\u0088")
-        buf.write(u"\3\2\2\2\22\u00a1\3\2\2\2\24\u00eb\3\2\2\2\26\u00f8\3")
-        buf.write(u"\2\2\2\30\u00fc\3\2\2\2\32\u010a\3\2\2\2\34\u010e\3\2")
-        buf.write(u"\2\2\36\u011b\3\2\2\2 \u0127\3\2\2\2\"\u012c\3\2\2\2")
-        buf.write(u"$\u013a\3\2\2\2&\u0142\3\2\2\2()\5\n\6\2)\3\3\2\2\2*")
-        buf.write(u"+\7\3\2\2+\60\5\6\4\2,-\7\4\2\2-/\5\6\4\2.,\3\2\2\2/")
-        buf.write(u"\62\3\2\2\2\60.\3\2\2\2\60\61\3\2\2\2\61\63\3\2\2\2\62")
-        buf.write(u"\60\3\2\2\2\63\64\7\5\2\2\648\3\2\2\2\65\66\7\3\2\2\66")
-        buf.write(u"8\7\5\2\2\67*\3\2\2\2\67\65\3\2\2\28\5\3\2\2\29:\7,\2")
-        buf.write(u"\2:;\7\6\2\2;<\5\n\6\2<\7\3\2\2\2=>\7\7\2\2>C\5\n\6\2")
-        buf.write(u"?@\7\4\2\2@B\5\n\6\2A?\3\2\2\2BE\3\2\2\2CA\3\2\2\2CD")
-        buf.write(u"\3\2\2\2DF\3\2\2\2EC\3\2\2\2FG\7\b\2\2GK\3\2\2\2HI\7")
-        buf.write(u"\7\2\2IK\7\b\2\2J=\3\2\2\2JH\3\2\2\2K\t\3\2\2\2LU\7,")
-        buf.write(u"\2\2MU\7.\2\2NU\5\4\3\2OU\5\b\5\2PU\7\t\2\2QU\7\n\2\2")
-        buf.write(u"RU\7\13\2\2SU\5\f\7\2TL\3\2\2\2TM\3\2\2\2TN\3\2\2\2T")
-        buf.write(u"O\3\2\2\2TP\3\2\2\2TQ\3\2\2\2TR\3\2\2\2TS\3\2\2\2U\13")
+        buf.write(u"\2\3\22\25\2\4\6\b\n\f\16\20\22\24\26\30\32\34\36 \"")
+        buf.write(u"$&\2\2\2\u0178\2(\3\2\2\2\4\67\3\2\2\2\69\3\2\2\2\bJ")
+        buf.write(u"\3\2\2\2\nT\3\2\2\2\fV\3\2\2\2\16`\3\2\2\2\20\u0088\3")
+        buf.write(u"\2\2\2\22\u00a1\3\2\2\2\24\u00eb\3\2\2\2\26\u00f8\3\2")
+        buf.write(u"\2\2\30\u00fc\3\2\2\2\32\u010a\3\2\2\2\34\u010e\3\2\2")
+        buf.write(u"\2\36\u011b\3\2\2\2 \u0127\3\2\2\2\"\u012c\3\2\2\2$\u013a")
+        buf.write(u"\3\2\2\2&\u0142\3\2\2\2()\5\n\6\2)\3\3\2\2\2*+\7\3\2")
+        buf.write(u"\2+\60\5\6\4\2,-\7\4\2\2-/\5\6\4\2.,\3\2\2\2/\62\3\2")
+        buf.write(u"\2\2\60.\3\2\2\2\60\61\3\2\2\2\61\63\3\2\2\2\62\60\3")
+        buf.write(u"\2\2\2\63\64\7\5\2\2\648\3\2\2\2\65\66\7\3\2\2\668\7")
+        buf.write(u"\5\2\2\67*\3\2\2\2\67\65\3\2\2\28\5\3\2\2\29:\7,\2\2")
+        buf.write(u":;\7\6\2\2;<\5\n\6\2<\7\3\2\2\2=>\7\7\2\2>C\5\n\6\2?")
+        buf.write(u"@\7\4\2\2@B\5\n\6\2A?\3\2\2\2BE\3\2\2\2CA\3\2\2\2CD\3")
+        buf.write(u"\2\2\2DF\3\2\2\2EC\3\2\2\2FG\7\b\2\2GK\3\2\2\2HI\7\7")
+        buf.write(u"\2\2IK\7\b\2\2J=\3\2\2\2JH\3\2\2\2K\t\3\2\2\2LU\7,\2")
+        buf.write(u"\2MU\7.\2\2NU\5\4\3\2OU\5\b\5\2PU\7\t\2\2QU\7\n\2\2R")
+        buf.write(u"U\7\13\2\2SU\5\f\7\2TL\3\2\2\2TM\3\2\2\2TN\3\2\2\2TO")
+        buf.write(u"\3\2\2\2TP\3\2\2\2TQ\3\2\2\2TR\3\2\2\2TS\3\2\2\2U\13")
         buf.write(u"\3\2\2\2VW\7\f\2\2WY\7\r\2\2XZ\5\22\n\2YX\3\2\2\2YZ\3")
         buf.write(u"\2\2\2Z[\3\2\2\2[\\\7\16\2\2\\]\7\3\2\2]^\5\20\t\2^_")
         buf.write(u"\7\5\2\2_\r\3\2\2\2`a\7-\2\2ab\7\17\2\2bc\5\22\n\2c\17")
@@ -156,12 +156,12 @@ def serializedATN():
         buf.write(u"\u013b\7(\2\2\u013b\u013c\7\r\2\2\u013c\u013d\5\22\n")
         buf.write(u"\2\u013d\u013e\7\16\2\2\u013e\u013f\7\3\2\2\u013f\u0140")
         buf.write(u"\5\20\t\2\u0140\u0141\7\5\2\2\u0141%\3\2\2\2\u0142\u0143")
-        buf.write(u"\7)\2\2\u0143\u0144\7\r\2\2\u0144\u0145\7*\2\2\u0145")
-        buf.write(u"\u0146\7-\2\2\u0146\u0147\7+\2\2\u0147\u0148\5\22\n\2")
-        buf.write(u"\u0148\u0149\7\16\2\2\u0149\u014a\7\3\2\2\u014a\u014b")
-        buf.write(u"\5\20\t\2\u014b\u014c\7\5\2\2\u014c\'\3\2\2\2\32\60\67")
-        buf.write(u"CJTYjou|\u0083\u0086\u0088\u00a1\u00e6\u00e8\u00ed\u00f3")
-        buf.write(u"\u00ff\u0105\u0110\u0116\u0122\u0138")
+        buf.write(u"\7)\2\2\u0143\u0144\7*\2\2\u0144\u0145\7-\2\2\u0145\u0146")
+        buf.write(u"\7+\2\2\u0146\u0147\5\22\n\2\u0147\u0148\7\16\2\2\u0148")
+        buf.write(u"\u0149\7\3\2\2\u0149\u014a\5\20\t\2\u014a\u014b\7\5\2")
+        buf.write(u"\2\u014b\'\3\2\2\2\32\60\67CJTYjou|\u0083\u0086\u0088")
+        buf.write(u"\u00a1\u00e6\u00e8\u00ed\u00f3\u00ff\u0105\u0110\u0116")
+        buf.write(u"\u0122\u0138")
         return buf.getvalue()
 
 
@@ -182,7 +182,7 @@ class langParser ( Parser ):
                      u"'!='", u"'<'", u"'<='", u"'>'", u"'>='", u"'||'", 
                      u"'&&'", u"'return'", u"'break'", u"'Object'", u"'Tuple'", 
                      u"'List'", u"'if'", u"'else'", u"'while'", u"'for'", 
-                     u"'var'", u"'from'" ]
+                     u"'(var'", u"'from'" ]
 
     symbolicNames = [ u"<INVALID>", u"<INVALID>", u"<INVALID>", u"<INVALID>", 
                       u"<INVALID>", u"<INVALID>", u"<INVALID>", u"<INVALID>", 
@@ -3033,22 +3033,20 @@ class langParser ( Parser ):
             self.state = 320
             self.match(langParser.T__38)
             self.state = 321
-            self.match(langParser.T__10)
-            self.state = 322
             self.match(langParser.T__39)
-            self.state = 323
+            self.state = 322
             self.match(langParser.SYMBOL)
-            self.state = 324
+            self.state = 323
             self.match(langParser.T__40)
-            self.state = 325
+            self.state = 324
             self.expression(0)
-            self.state = 326
+            self.state = 325
             self.match(langParser.T__11)
-            self.state = 327
+            self.state = 326
             self.match(langParser.T__0)
-            self.state = 328
+            self.state = 327
             self.codeBlock()
-            self.state = 329
+            self.state = 328
             self.match(langParser.T__2)
         except RecognitionException as re:
             localctx.exception = re

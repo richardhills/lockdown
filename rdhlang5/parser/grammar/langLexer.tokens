@@ -82,5 +82,5 @@ WS=45
 'else'=37
 'while'=38
 'for'=39
-'var'=40
+'(var'=40
 'from'=41
