@@ -3,7 +3,7 @@ from __future__ import unicode_literals
 
 from log import logger
 from rdhlang5.executor.exceptions import PreparationException
-from rdhlang5.executor.flow_control import BreakTypesFactory
+from rdhlang5.executor.flow_control import BreakTypesFactory, FrameManager
 from rdhlang5.executor.function_type import enrich_break_type, OpenFunctionType, \
     ClosedFunctionType
 from rdhlang5.executor.opcodes import enrich_opcode, get_context_type, evaluate, \
@@ -29,7 +29,7 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
     if not hasattr(data, "code"):
         raise PreparationException("Code missing from function")
 
-    actual_break_types_factory = BreakTypesFactory()
+    actual_break_types_factory = BreakTypesFactory(None)
 
     context = RDHObject({
         "prepare": outer_context
@@ -149,7 +149,7 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
 
     actual_break_types_factory.merge(code_break_types)
 
-    final_declared_break_types = BreakTypesFactory()
+    final_declared_break_types = BreakTypesFactory(None)
 
     for mode, actual_break_types in actual_break_types_factory.build().items():
         for actual_break_type in actual_break_types:
@@ -381,13 +381,17 @@ class ClosedFunction(RDHFunction):
             self.argument_type, self.break_types
         )
 
-    def invoke(self, argument, flow_manager):
+    @property
+    def allowed_break_types(self):
+        return self.break_types
+
+    def invoke(self, argument, frame_manager):
         logger.debug("ClosedFunction")
         if is_debug() and not self.argument_type.is_copyable_from(get_type_of_value(argument)):
             raise FatalError()
         logger.debug("ClosedFunction:argument_check")
 
-        with flow_manager.get_next_frame(self) as frame:
+        with frame_manager.get_next_frame(self) as frame:
             new_context, _ = frame.step("local_initialization_context", lambda: RDHObject({
                     "prepare": self.prepare_context,
                     "outer": self.outer_context,
@@ -404,7 +408,7 @@ class ClosedFunction(RDHFunction):
             get_manager(new_context)._context_type = self.local_initialization_context_type
 
             logger.debug( "ClosedFunction:local_initializer")
-            local, _ = frame.step("local", lambda: evaluate(self.local_initializer, new_context, flow_manager))
+            local, _ = frame.step("local", lambda: evaluate(self.local_initializer, new_context, frame_manager))
 
             frame.step("remove_local_initialization_context_type", lambda: get_manager(new_context).remove_composite_type(self.local_initialization_context_type))
 
@@ -432,11 +436,11 @@ class ClosedFunction(RDHFunction):
             get_manager(new_context)._context_type = self.execution_context_type
 
             logger.debug("ClosedFunction:code_execute")
-            result, _ = frame.step("code", lambda: evaluate(self.code, new_context, flow_manager))
+            result, _ = frame.step("code", lambda: evaluate(self.code, new_context, frame_manager))
 
             frame.step("remove_code_execution_context_type", lambda: get_manager(new_context).remove_composite_type(self.execution_context_type))
 
-        return flow_manager.value(result, self)
+            return frame.value(result)
 
     def to_code(self):
         break_types_code = ";".join(["{}: [{}]".format(mode, ",".join([format_break_type(b) for b in break_types])) for mode, break_types in self.break_types.items()])
@@ -448,21 +452,35 @@ class Continuation(RDHFunction):
     def __init__(self, frame_manager, frames, callback, restart_type, break_types):
         if isinstance(restart_type, TopType):
             pass
+        if not isinstance(frame_manager, FrameManager):
+            raise FatalError()
         self.frame_manager = frame_manager
         self.frames = frames
         self.callback = callback
         self.restart_type = restart_type
         self.break_types = break_types
 
+        for frame in frames:
+            if frame.has_restart_value():
+                raise FatalError()
+
+        if break_types is None:
+            raise FatalError()
+
     def get_type(self):
         return ClosedFunctionType(self.restart_type, self.break_types)
 
-    def invoke(self, restart_value, flow_manager):
+    @property
+    def allowed_break_types(self):
+        return self.break_types
+
+    def invoke(self, restart_value, frame_manager):
         if not self.restart_type.is_copyable_from(get_type_of_value(restart_value)):
             raise FatalError()
         self.restarted = True
-        self.frame_manager.prepare_restart(self.frames, restart_value)
-        raise self.callback(flow_manager)
+        if self.frame_manager.fully_wound():
+            self.frame_manager.prepare_restart(self.frames, restart_value)
+        raise self.callback()
 
 
 def format_break_type(break_type):

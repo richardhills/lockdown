@@ -53,7 +53,7 @@ class BuiltInFunctionGetter(MicroOp):
 def ListInsertFunctionType(wildcard_type):
     from rdhlang5.executor.function import RDHFunction
     from rdhlang5.type_system.list_types import RDHListType
-    break_types = BreakTypesFactory()
+    break_types = BreakTypesFactory(None)
     argument_type = RDHListType([ Const(IntegerType()), Const(wildcard_type) ], None, allow_push=False, allow_wildcard_insert=False, allow_delete=False, is_sparse=False)
     break_types.add("value", NoValueType())
     function_type = ClosedFunctionType(argument_type, break_types.build())
@@ -66,19 +66,24 @@ def ListInsertFunctionType(wildcard_type):
         def get_type(self):
             return function_type
 
-        def invoke(self, argument, flow_manager):
-            our_type = self.get_type()
+        @property
+        def allowed_break_types(self):
+            return function_type.break_types
 
-            argument_manager = get_manager(argument)
-            argument_manager.add_composite_type(our_type.argument_type)
+        def invoke(self, argument, frame_manager):
+            with frame_manager.get_next_frame(self) as frame:
+                our_type = self.get_type()
 
-            insert_micro_op_type = self.target_manager.get_micro_op_type(("insert-wildcard",))
+                argument_manager = get_manager(argument)
+                argument_manager.add_composite_type(our_type.argument_type)
 
-            if not insert_micro_op_type:
-                raise FatalError()
+                insert_micro_op_type = self.target_manager.get_micro_op_type(("insert-wildcard",))
 
-            insert_micro_op = insert_micro_op_type.create(self.target_manager)
+                if not insert_micro_op_type:
+                    raise FatalError()
 
-            return flow_manager.value(insert_micro_op.invoke(*argument), self)
+                insert_micro_op = insert_micro_op_type.create(self.target_manager)
+
+                return frame.value(insert_micro_op.invoke(*argument))
 
     return ListInsertFunction

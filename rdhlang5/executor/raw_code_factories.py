@@ -210,6 +210,12 @@ def loop_op(opcode):
         "code": opcode
     }, debug_reason="code")
 
+def transform(*args, **kwargs):
+    transforms = args[:-1]
+    code = args[-1]
+    for input, output in reversed(transforms):
+        code = transform_op(input, output, code, **kwargs)
+    return code
 
 def transform_op(*args, **kwargs):
     if len(args) == 1:
@@ -243,12 +249,28 @@ def shift_op(code, restart_type, **kwargs):
         "restart_type": restart_type
     }, **kwargs), debug_reason="code")
 
-def reset_op(code, **kwargs):
-    check_is_opcode(code)
-    return RDHObject(spread_dict({
-        "opcode": "reset",
-        "code": code
-    }, **kwargs), debug_reason="code")
+def reset_op(*args, **kwargs):
+    if len(args) == 1:
+        code, = args
+        function = argument = None
+        check_is_opcode(code)
+    if len(args) == 2:
+        code = None
+        function, argument = args
+        check_is_opcode(function)
+        check_is_opcode(argument)
+
+    result = {
+        "opcode": "reset"
+    }
+
+    if code:
+        result["code"] = code
+    if function and argument:
+        result["function"] = function
+        result["argument"] = argument
+
+    return RDHObject(spread_dict(result, **kwargs), debug_reason="code")
 
 def return_op(code):
     return transform_op("value", "return", code)

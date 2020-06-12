@@ -24,7 +24,8 @@ class BreakException(Exception):
         return result
 
 class BreakTypesFactory(object):
-    def __init__(self):
+    def __init__(self, opcode):
+        self.opcode = opcode
         self.result = defaultdict(list)
 
     def add(self, mode, out_type, in_type=None, opcode=None):
@@ -49,227 +50,127 @@ class BreakTypesFactory(object):
                 self.result[mode].extend(break_types)
 
     def build(self):
-        return dict(self.result)
+        result = dict(self.result)
+        if is_debug() and self.opcode:
+            self.opcode.allowed_break_types = result
+        return result
 
-class FlowManager(object):
-    __slots__ = [ "our_break_mode", "our_break_types", "frame_manager", "callback", "top_level", "_result", "_restart_continuation", "allowed_break_types", "continuation_break_types" ]
-
-    def __init__(self, our_break_mode, our_break_types, allowed_break_types, frame_manager, top_level=False, callback=None, continuation_break_types=None):
-        self.our_break_mode = our_break_mode
-        self.our_break_types = our_break_types
+class Capturer(object):
+    def __init__(self, frame_manager, break_mode=None, top_level=False):
         self.frame_manager = frame_manager
-        self.callback = callback
-        self.continuation_break_types = continuation_break_types
+        self.break_mode = break_mode
         self.top_level = top_level
-        self._result = MISSING
-        self._restart_continuation = MISSING
 
-        if is_debug():
-            if our_break_types and "out" not in our_break_types:
-                raise FatalError()
+        self.value = MISSING
+        self.caught_break_mode = MISSING
+        self.caught_restart_type = MISSING
+        self.caught_frames = MISSING 
 
-            if our_break_types and "in" in our_break_types and not callback:
-                raise FatalError()
+    def attempt_capture(self, mode, value, restart_type):
+        if self.break_mode is None or self.break_mode == mode:
+            self.value = value
+            self.caught_break_mode = mode
 
-            if our_break_types and not isinstance(our_break_types, dict):
-                raise FatalError()
+            if restart_type:
+                self.caught_restart_type = restart_type
+                self.caught_frames = self.frame_manager.slice_frames()
 
-            if our_break_types:
-                self.allowed_break_types = dict(allowed_break_types)
-
-                if our_break_mode not in self.allowed_break_types:
-                    self.allowed_break_types[our_break_mode] = []
-
-                self.allowed_break_types[our_break_mode].append(our_break_types)
-            else:
-                self.allowed_break_types = allowed_break_types
-        else:
-            self.allowed_break_types = None
-
-    def start(self):
-        if is_debug():
-            if not self.callback:
-                raise FatalError()
-            if self._result is not MISSING:
-                raise FatalError()
-
-        try:
-            mode, value, opcode, restart_type = self.callback(self)
-            self.attempt_close_or_raise(mode, value, opcode, restart_type)
-            return
-        except BreakException as e:
-            if self.attempt_close(e.mode, e.value, e.restart_type):
-                return
-            raise
-
-        if not self.top_level:
-            raise FatalError()
-
-    def get_next_frame(self, opcode):
-        return self.frame_manager.get_next_frame(opcode)
-
-    @property
-    def result(self):
-        if self._result is MISSING:
-            raise FatalError()
-        return self._result
-
-    @property
-    def has_result(self):
-        return self._result is not MISSING
-
-    def capture(self, break_mode, break_types, callback=None, top_level=False, continuation_break_types=None):
-        if not isinstance(break_mode, basestring):
-            raise FatalError()
-        if not isinstance(break_types, dict):
-            raise FatalError()
-        flow_manager = FlowManager(break_mode, break_types, self.allowed_break_types, self.frame_manager, callback=callback, top_level=top_level, continuation_break_types=continuation_break_types)
-        if callback:
-            flow_manager.start()
-        return flow_manager
-
-    @property
-    def has_restart_continuation(self):
-        return self._restart_continuation is not MISSING
-
-    @property
-    def restart_continuation(self):
-        if self._restart_continuation is MISSING:
-            raise FatalError()
-        return self._restart_continuation
-
-    def unwind(self, mode, value, opcode, restart_type):
-        if is_debug():
-            type_of_value = None # lazily calculated if we need it
-
-            if restart_type is not None and not isinstance(restart_type, Type):
-                raise FatalError()
-
-            if mode not in self.allowed_break_types:
-                type_of_value = get_type_of_value(value)
-                raise FatalError("Can not unwind {} with type {}, allowed {}".format(mode, type_of_value, self.allowed_break_types))
-
-            allowed_break_types = self.allowed_break_types[mode]
-
-            for allowed_types in allowed_break_types:
-                allowed_out = allowed_types["out"]
-                allowed_in = allowed_types.get("in", None)
-
-                out_is_compatible = False
-                in_is_compatible = False
-
-                if allowed_out.always_is_copyable_from:
-                    out_is_compatible = True
-                else:
-                    if type_of_value is None:
-                        type_of_value = get_type_of_value(value)
-                    if allowed_out.is_copyable_from(type_of_value):
-                        out_is_compatible = True
-
-                if allowed_in is None or restart_type.is_copyable_from(allowed_in):
-                    in_is_compatible = True
-
-                if out_is_compatible and in_is_compatible:
-                    break
-            else:
-                type_of_value = get_type_of_value(value)
-                raise FatalError("Can not unwind {} with type {}, allowed {}".format(mode, type_of_value, self.allowed_break_types))
-
-        if is_debug() or restart_type is not None:
-            raise BreakException(mode, value, opcode, restart_type)
-        else:
-            return (mode, value, opcode, None)
-
-    def value(self, value, opcode):
-        return self.unwind("value", value, opcode, None)
-
-    def exception(self, value, opcode):
-        return self.unwind("exception", value, opcode, None)
-
-    def attempt_close_or_raise(self, mode, value, opcode, restart_type):
-        if not self.attempt_close(mode, value):
-            raise BreakException(mode, value, opcode, restart_type)
-
-    def attempt_close(self, mode, value, restart_type):
-        if is_debug() and self._result is not MISSING:
-            raise FatalError()
-
-        if not self.our_break_types:
-            return False
-
-        accepted_out_type = self.our_break_types["out"]
-        accepted_in_type = self.our_break_types.get("in", None)
-
-        out_type_is_compatible = (
-            accepted_out_type.always_is_copyable_from
-            or accepted_out_type.is_copyable_from(get_type_of_value(value))
-        )
-
-        in_type_is_compatible = (
-            accepted_in_type is None
-            or (restart_type is not None and restart_type.is_copyable_from(accepted_in_type))
-        )
-
-        if mode == self.our_break_mode and out_type_is_compatible and in_type_is_compatible:
-            self._result = value
-            if restart_type is not None:
-                self._restart_continuation = self.frame_manager.create_continuation(
-                    self.callback, restart_type, self.continuation_break_types
-                )
             return True
-        else:
-            return False
+        return False
+
+    def create_continuation(self, callback, break_types):
+        from rdhlang5.executor.function import Continuation
+ 
+        return Continuation(self.frame_manager, self.caught_frames, callback, self.caught_restart_type, break_types)
 
     def __enter__(self):
-        if is_debug():
-            if self.callback:
-                raise FatalError()
-            if self._result is not MISSING:
-                raise FatalError()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
+        if isinstance(exc_value, FatalError):
+            return False
         if isinstance(exc_value, BreakException):
-            return self.attempt_close(exc_value.mode, exc_value.value, exc_value.restart_type)
-        if self._result is MISSING and exc_value is None and not self.top_level:
-            raise FatalError()
+            return self.attempt_capture(exc_value.mode, exc_value.value, exc_value.restart_type)
+        return False
 
 class FrameManager(object):
     def __init__(self):
         self.frames = []
         self.index = 0
+        self.mode = "wind"
 
     def get_next_frame(self, opcode):
-        if self.index == len(self.frames):
+        if self.fully_wound():
+            if self.mode != "wind":
+                raise FatalError()
             return Frame(self, opcode)
         else:
+            if self.mode not in ("shift", "reset"):
+                raise FatalError()
             old_frame = self.frames[self.index]
             if old_frame.opcode is not opcode:
                 raise FatalError()
             return old_frame
 
-    def create_continuation(self, callback, restart_type, break_types):
-        if self.index == len(self.frames):
+    def fully_wound(self):
+        return self.index == len(self.frames)
+
+    def capture(self, break_mode=None, top_level=False):
+        return Capturer(self, break_mode, top_level)
+
+    def slice_frames(self):
+        if self.fully_wound():
             raise FatalError()
 
-        from rdhlang5.executor.function import Continuation
+        self.mode = "wind"
 
-        new_continuation = Continuation(self, self.frames[self.index:], callback, restart_type, break_types)
+        sliced_frames = self.frames[self.index:]
         self.frames = self.frames[:self.index]
-        return new_continuation
+        return sliced_frames
 
     def prepare_restart(self, frames, restart_value):
-        self.frames = self.frames + frames
+        self.mode = "reset"
+        self.frames = self.frames + [f.clone() for f in frames]
+
+        for f in self.frames:
+            if f.has_restart_value():
+                raise FatalError()
+
         self.frames[-1].restart_value = restart_value
 
 class Frame(object):
     __slots__ = [ "manager", "opcode", "locals", "restart_value" ]
 
-    def __init__(self, manager, opcode):
+    def __init__(self, manager, opcode, initial_locals=None):
         self.manager = manager
         self.opcode = opcode
-        self.locals = {}
+        self.locals = initial_locals or {}
         self.restart_value = MISSING
+
+    def clone(self):
+        return Frame(
+            self.manager,
+            self.opcode,
+            initial_locals=dict(self.locals)
+        )
+
+    def unwind(self, mode, value, restart_type):
+        if restart_type:
+            self.manager.mode = "shift"
+        raise BreakException(mode, value, self.opcode, restart_type)
+
+    def value(self, value):
+        return self.unwind("value", value, None)
+
+    def exception(self, value):
+        return self.unwind("exception", value, None)
+
+    def yield_(self, value, restart_type=None):
+        return self.unwind("yield", value, restart_type)
+
+    def attempt_close_or_raise(self, mode, value, opcode, restart_type):
+        if not self.attempt_close(mode, value):
+            raise BreakException(mode, value, opcode, restart_type)
 
     def step(self, name, func):
         locals = self.locals
@@ -288,20 +189,59 @@ class Frame(object):
             raise FatalError()
         restart_value = self.restart_value
         self.restart_value = MISSING
+        self.manager.mode = "wind"
         return restart_value
 
     def __enter__(self):
         if self.manager.index == len(self.manager.frames):
+            if self.manager.mode not in ("wind", "reset"):
+                raise FatalError()
+            self.manager.mode = "wind"
             self.manager.frames.append(self)
+        else:
+            if self.manager.mode not in ("reset", "shift"):
+                raise FatalError()
+            self.manager.mode = "reset"
 
         self.manager.index += 1
 
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
+        if isinstance(exc_value, FatalError):
+            return
+
+        if is_debug() and isinstance(exc_value, BreakException) and self.opcode.allowed_break_types:
+            allowed_break_types = self.opcode.allowed_break_types.get(exc_value.mode, MISSING)
+            type_of_value = get_type_of_value(exc_value.value)
+
+            if allowed_break_types is MISSING:
+                raise FatalError("Can not unwind {} with type {}, opcode {} allowed {}".format(exc_value.mode, type_of_value, self.opcode, allowed_break_types))
+
+            for allowed_break_type in allowed_break_types:
+                allowed_out = allowed_break_type["out"]
+                allowed_in = allowed_break_type.get("in", None)
+
+                out_is_compatible = allowed_out.is_copyable_from(type_of_value)
+                in_is_compatible = allowed_in is None or (
+                    exc_value.restart_type is not None and exc_value.restart_type.is_copyable_from(allowed_in)
+                )
+
+                if out_is_compatible and in_is_compatible:
+                    break
+            else:
+                raise FatalError("Can not unwind {} with type {}, opcode{}, allowed {}".format(exc_value.mode, type_of_value, self.opcode, allowed_break_types))
+
         exc_type_allows_restart = exc_value and isinstance(exc_value, BreakException) and exc_value.restart_type is not None
+
+        if self.manager.mode == "reset":
+            raise FatalError()
 
         if not exc_type_allows_restart and self.manager.index == len(self.manager.frames):
             del self.manager.frames[-1]
+        else:
+            if exc_type_allows_restart:
+                if self.manager.mode not in ("shift"):
+                    raise FatalError()
 
         self.manager.index -= 1

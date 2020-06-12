@@ -1,4 +1,3 @@
-from __builtin__ import False
 from collections import defaultdict
 import threading
 import weakref

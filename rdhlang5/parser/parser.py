@@ -1,31 +1,28 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-from cookielib import offset_from_tz_string
 import json
 
 from antlr4.CommonTokenStream import CommonTokenStream
 from antlr4.InputStream import InputStream
 from antlr4.error.ErrorListener import ConsoleErrorListener
 
-from rdhlang5.executor.exceptions import PreparationException
 from rdhlang5.executor.raw_code_factories import function_lit, nop, comma_op, \
     literal_op, dereference_op, unbound_dereference, addition_op, \
-    transform_op, int_type, multiplication_op, division_op, subtraction_op, \
-    object_type, prepare_op, is_opcode, object_template_op, infer_all, \
-    no_value_type, combine_opcodes, static_op, invoke_op, assignment_op, \
-    unbound_assignment, list_template_op, list_type, close_op, context_op, \
+    transform_op, multiplication_op, division_op, subtraction_op, \
+    object_type, is_opcode, object_template_op, infer_all, \
+    no_value_type, combine_opcodes, invoke_op, assignment_op, \
+    unbound_assignment, list_template_op, list_type, context_op, \
     loop_op, condition_op, binary_integer_op, equality_op, dereference, \
-    local_function, reset_op, inferred_type, prepare_function_lit
+    local_function, reset_op, inferred_type, prepare_function_lit, transform
 from rdhlang5.parser.grammar.langLexer import langLexer
 from rdhlang5.parser.grammar.langParser import langParser
 from rdhlang5.parser.grammar.langVisitor import langVisitor
-from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
-    rich_composite_type, READONLY_DEFAULT_OBJECT_TYPE
+from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE
 from rdhlang5.type_system.exceptions import FatalError
 from rdhlang5.type_system.managers import get_manager
 from rdhlang5.type_system.object_types import RDHObject
-from rdhlang5.utils import MISSING, default, spread_dict, is_debug
+from rdhlang5.utils import MISSING, default, spread_dict
 
 
 class RDHLang5Visitor(langVisitor):
@@ -330,12 +327,15 @@ class RDHLang5Visitor(langVisitor):
         return transform_op(
             "break", "value",
             invoke_op(local_function(
-                reset_op(
-                    transform_op(
-                        "value", "break",
-                        invoke_op(generator_expression, **get_debug_info(ctx)),
-                        **get_debug_info(ctx)
-                    )
+                transform(
+                    ("yield", "value"),
+                    ("value", "break"),
+                    reset_op(
+                        invoke_op(
+                            generator_expression,
+                            **get_debug_info(ctx)
+                        ), **get_debug_info(ctx)
+                    ),
                 ),
                 loop_op(
                     comma_op(
@@ -350,17 +350,15 @@ class RDHLang5Visitor(langVisitor):
                         ),
                         assignment_op(
                             context_op(), literal_op("local"),
-                            reset_op(
-                                transform_op(
-                                    "value", "break",
-                                    invoke_op(
-                                        dereference("local.continuation", **get_debug_info(ctx)),
-                                        **get_debug_info(ctx)
-                                    ),
+                            transform(
+                                ("yield", "value"),
+                                ("value", "break"),
+                                reset_op(
+                                    dereference("local.continuation", **get_debug_info(ctx)), nop(),
                                     **get_debug_info(ctx)
-                                )
-                            ),
-                            **get_debug_info(ctx)
+                                ),
+                                **get_debug_info(ctx)
+                            )
                         )
                     )
                 ),

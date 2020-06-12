@@ -1,5 +1,4 @@
 from UserDict import DictMixin
-from collections import OrderedDict
 
 from rdhlang5.type_system.composites import InferredType, bind_type_to_value, \
     unbind_type_to_value, CompositeType, Composite
@@ -10,10 +9,10 @@ from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict, \
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.micro_ops import MicroOpType, MicroOp, \
     raise_micro_op_conflicts
+from rdhlang5.utils import MISSING
 
 
 WILDCARD = object()
-MISSING = object()
 
 
 def get_key_and_type(micro_op_type):

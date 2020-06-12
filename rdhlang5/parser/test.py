@@ -5,8 +5,6 @@ from time import time
 from unittest.case import TestCase
 import unittest.main
 
-import jsonpickle
-
 from rdhlang5.executor.bootstrap import bootstrap_function
 from rdhlang5.executor.exceptions import PreparationException
 from rdhlang5.parser.parser import parse
@@ -74,7 +72,7 @@ class TestBasicFunction(TestCase):
             function() { return 42; }
         """)
         result = bootstrap_function(code, check_safe_exit=True)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
     def test_returns_string(self):
@@ -82,7 +80,7 @@ class TestBasicFunction(TestCase):
             function() { return "hello"; }
         """)
         result = bootstrap_function(code, check_safe_exit=True)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, "hello")
 
     def test_addition(self):
@@ -90,7 +88,7 @@ class TestBasicFunction(TestCase):
             function() { return 12 + 30; }
         """)
         result = bootstrap_function(code, check_safe_exit=True)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
     def test_precidence(self):
@@ -98,7 +96,7 @@ class TestBasicFunction(TestCase):
             function() { return (1 + 1) * 23 - 2 * 1 + 2; }
         """)
         result = bootstrap_function(code, check_safe_exit=True)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
     def test_return_argument(self):
@@ -106,7 +104,7 @@ class TestBasicFunction(TestCase):
             function(int) { return argument; }
         """)
         result = bootstrap_function(code, argument=42, check_safe_exit=True)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
     def test_dereference_argument_parameter(self):
@@ -114,7 +112,7 @@ class TestBasicFunction(TestCase):
             function(Object { foo: int }) { return foo; }
         """)
         result = bootstrap_function(code, argument=RDHObject({ "foo": 42 }), check_safe_exit=True)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
     def test_initialize_and_return_local(self):
@@ -122,7 +120,7 @@ class TestBasicFunction(TestCase):
             function() { int foo = 40; return foo + 2; }
         """)
         result = bootstrap_function(code, check_safe_exit=True)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
     def test_initialize_and_return_local_object(self):
@@ -133,7 +131,7 @@ class TestBasicFunction(TestCase):
             }
         """)
         result = bootstrap_function(code, check_safe_exit=True)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
     def test_some_const_locals(self):
@@ -145,7 +143,7 @@ class TestBasicFunction(TestCase):
             }
         """)
         result = bootstrap_function(code, check_safe_exit=True)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
     def test_many_const_locals(self):
@@ -158,7 +156,7 @@ class TestBasicFunction(TestCase):
             }
         """)
         result = bootstrap_function(code, check_safe_exit=True)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
     def test_mutate_locals(self):
@@ -172,7 +170,7 @@ class TestBasicFunction(TestCase):
             }
         """)
         result = bootstrap_function(code, check_safe_exit=True)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
 
@@ -187,7 +185,7 @@ class TestBasicFunction(TestCase):
             }
         """)
         result = bootstrap_function(code, check_safe_exit=True)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
 
@@ -202,7 +200,7 @@ class TestBasicFunction(TestCase):
             }
         """)
         result = bootstrap_function(code, check_safe_exit=True)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
     def test_list(self):
@@ -213,7 +211,7 @@ class TestBasicFunction(TestCase):
             }
         """)
         result = bootstrap_function(code)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 6)
 
     def test_list_of_objects(self):
@@ -224,7 +222,7 @@ class TestBasicFunction(TestCase):
             }
         """)
         result = bootstrap_function(code)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 6)
 
     def test_object_with_lists(self):
@@ -235,7 +233,7 @@ class TestBasicFunction(TestCase):
             }
         """)
         result = bootstrap_function(code)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 6)
 
 
@@ -248,7 +246,7 @@ class TestBasicFunction(TestCase):
             }
         """)
         result = bootstrap_function(code)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 12)
 
 
@@ -261,7 +259,7 @@ class TestBasicFunction(TestCase):
             }
         """)
         result = bootstrap_function(code)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 12)
 
 
@@ -274,7 +272,7 @@ class TestBasicFunction(TestCase):
             }
         """)
         result = bootstrap_function(code)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 9)
 
     def test_insert_into_list(self):
@@ -286,7 +284,7 @@ class TestBasicFunction(TestCase):
             }
         """)
         result = bootstrap_function(code)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 4)
 
     def test_insert_object_into_list(self):
@@ -298,7 +296,7 @@ class TestBasicFunction(TestCase):
             }
         """)
         result = bootstrap_function(code)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 6)
 
 class TestBuiltIns(TestCase):
@@ -310,7 +308,7 @@ class TestBuiltIns(TestCase):
         """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True)
         list(result.value)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(len(result.value), 4)
         # The values come out in reverse due to the list function using insert(0, element) repeatedly. Need an append(element) operator
         self.assertEquals(list(result.value), [ 4, 3, 2, 1 ])
@@ -326,7 +324,7 @@ class TestInferredTypes(TestCase):
             }
         """)
         result = bootstrap_function(code)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
 class TestFunctionDeclaration(TestCase):
@@ -340,7 +338,7 @@ class TestFunctionDeclaration(TestCase):
             }
         """)
         result = bootstrap_function(code)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
     def test_access_outer_context(self):
@@ -354,7 +352,7 @@ class TestFunctionDeclaration(TestCase):
             }
         """)
         result = bootstrap_function(code)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 12)
 
     def test_mutate_outer_context(self):
@@ -374,7 +372,7 @@ class TestFunctionDeclaration(TestCase):
             }
         """)
         result = bootstrap_function(code, check_safe_exit=True)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 32)
 
     def test_mutate_outer_context_loop(self):
@@ -397,7 +395,7 @@ class TestFunctionDeclaration(TestCase):
             }
         """)
         result = bootstrap_function(code, check_safe_exit=True)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 2 ** (3 * 3))
 
 class TestLoops(TestCase):
@@ -412,7 +410,7 @@ class TestLoops(TestCase):
             }
         """)
         result = bootstrap_function(code, check_safe_exit=True)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 10)
 
     def test_for_range(self):
@@ -426,7 +424,7 @@ class TestLoops(TestCase):
             }
         """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True)
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 1 + 2 + 3 + 4)
         
 
@@ -474,19 +472,40 @@ class TestEuler(TestCase):
     """
 
     def test_1(self):
-        return
         code = parse("""
             function() {
-                int i = 1, result = 0;
-                while(i < 1000) {
+                int result = 0;
+                for(var i from range([ 1, 1000 ])) {
                     if(i % 3 == 0 || i % 5 == 0) {
                         result = result + i;
                     };
-                    i = i + 1;
                 };
                 return result;
-            }
-        """)
+            };
+        """, debug=True)
+
+#         code = parse("""
+#             function() {
+#                 return sum(i for i in range(1, 1000) if i % 3 == 0 || i % 5 == 0);
+#                 
+#                 return range(1, 1000).filter(i => i % 3 == 0 || i % 5 == 0).sum();
+#                 
+#                 return sum(filter(range(1, 1000), i => i % 3 == 0 || i % 5 == 0));
+# 
+#                 return sum(for(var i from range(1, 1000)) {
+#                     if(i % 3 == 0 || i % 5 == 0) {
+#                         yield i;
+#                     };
+#                 });
+#                 
+#                 var foobaz = for(var i from range(1, 1000)) {
+#                     if(i % 3 == 0 || i % 5 == 0) {
+#                         yield i;
+#                     };
+#                 };
+#                 return sum(foobaz);
+#             }
+#         """)
         result = bootstrap_function(code, check_safe_exit=True)
         self.assertEquals(result.value, 233168)
 

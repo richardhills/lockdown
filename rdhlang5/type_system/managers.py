@@ -1,10 +1,9 @@
 import weakref
 
-from log import logger
 from rdhlang5.type_system.core_types import Type, UnitType, NoValueType
 from rdhlang5.type_system.exceptions import FatalError, InvalidData
 from rdhlang5.type_system.runtime import replace_all_refs
-from rdhlang5.utils import InternalMarker, NO_VALUE, is_debug
+from rdhlang5.utils import InternalMarker, NO_VALUE
 
 
 weak_objs_by_id = {}

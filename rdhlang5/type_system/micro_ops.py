@@ -1,4 +1,4 @@
-from abc import ABCMeta, abstractmethod
+from abc import abstractmethod
 
 from rdhlang5.type_system.core_types import Type
 from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict

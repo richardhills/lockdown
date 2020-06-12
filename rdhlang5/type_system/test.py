@@ -1,10 +1,7 @@
-import gc
-from time import sleep
 from unittest import main
 from unittest.case import TestCase
 
-from rdhlang5.type_system.composites import CompositeType, InferredType, \
-    results_by_target_id
+from rdhlang5.type_system.composites import CompositeType, InferredType
 from rdhlang5.type_system.core_types import IntegerType, UnitType, StringType, \
     AnyType, Const, OneOfType, BooleanType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \

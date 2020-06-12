@@ -1,27 +1,23 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-from _collections import defaultdict
-from abc import abstractmethod, ABCMeta
-from distutils.log import fatal
-
-from contextlib2 import ExitStack
+from abc import abstractmethod
 
 from log import logger
 from rdhlang5.executor.exceptions import PreparationException
-from rdhlang5.executor.flow_control import BreakTypesFactory, BreakException
+from rdhlang5.executor.flow_control import BreakTypesFactory
 from rdhlang5.executor.function_type import OpenFunctionType, ClosedFunctionType
 from rdhlang5.executor.type_factories import enrich_type
 from rdhlang5.type_system.composites import CompositeType
 from rdhlang5.type_system.core_types import AnyType, Type, merge_types, Const, \
     UnitType, NoValueType, AllowedValuesNotAvailable, unwrap_types, IntegerType, \
-    BooleanType, remove_type, TopType
+    BooleanType, remove_type
 from rdhlang5.type_system.default_composite_types import rich_composite_type
 from rdhlang5.type_system.dict_types import RDHDict, DictGetterType, \
     DictSetterType, DictWildcardGetterType, DictWildcardSetterType
 from rdhlang5.type_system.exceptions import FatalError, InvalidDereferenceType, \
     InvalidDereferenceKey, InvalidAssignmentType, InvalidAssignmentKey
-from rdhlang5.type_system.list_types import RDHListType, RDHList, ListGetterType, \
+from rdhlang5.type_system.list_types import RDHList, ListGetterType, \
     ListSetterType, ListWildcardGetterType, ListWildcardSetterType, \
     ListWildcardDeletterType, ListInsertType, ListWildcardInsertType
 from rdhlang5.type_system.managers import get_type_of_value, get_manager
@@ -34,15 +30,15 @@ from rdhlang5.utils import MISSING, NO_VALUE, is_debug, one_shot_memoize
 EVALUATE_CAPTURE_TYPES = { "out": AnyType() }
 
 
-def evaluate(expression, context, flow_manager, immediate_context=None):
-    with flow_manager.capture("value", EVALUATE_CAPTURE_TYPES) as new_flow_manager:
-        mode, value, opcode, restart_type = expression.jump(context, new_flow_manager, immediate_context=immediate_context)
-        new_flow_manager.attempt_close_or_raise(mode, value, opcode, restart_type)
-    return new_flow_manager.result
+def evaluate(expression, context, frame_manager, immediate_context=None):
+    with frame_manager.capture("value") as result:
+        mode, value, opcode, restart_type = expression.jump(context, frame_manager, immediate_context=immediate_context)
+        result.attempt_capture(mode, value, opcode, restart_type)
+    return result.value
 
 
-def get_expression_break_types(expression, context, flow_manager, immediate_context=None):
-    other_break_types = expression.get_break_types(context, flow_manager, immediate_context)
+def get_expression_break_types(expression, context, frame_manager, immediate_context=None, target_break_mode="value"):
+    other_break_types = dict(expression.get_break_types(context, frame_manager, immediate_context))
 
     if not isinstance(other_break_types, dict):
         raise FatalError()
@@ -61,8 +57,8 @@ def get_expression_break_types(expression, context, flow_manager, immediate_cont
             if "in" in break_type and not isinstance(break_type["in"], Type):
                 raise FatalError()
 
-    value_break_types = other_break_types.pop("value", MISSING)
-    return value_break_types, other_break_types
+    target_break_types = other_break_types.pop(target_break_mode, MISSING)
+    return target_break_types, other_break_types
 
 
 def flatten_out_types(break_types):
@@ -106,15 +102,16 @@ class TypeErrorFactory(object):
 class Opcode(object):
     def __init__(self, data, visitor):
         self.data = data
+        self.allowed_break_types = None
 
 #    __metaclass__ = ABCMeta
 
     @abstractmethod
-    def get_break_types(self, context, flow_manager, immediate_context=None):
+    def get_break_types(self, context, frame_manager, immediate_context=None):
         raise NotImplementedError()
 
     @abstractmethod
-    def jump(self, context, flow_manager, immediate_context=None):
+    def jump(self, context, frame_manager, immediate_context=None):
         raise NotImplementedError()
 
     def get_line_and_column(self):
@@ -124,13 +121,14 @@ class Opcode(object):
         return str(type(self))
 
 class Nop(Opcode):
-    def get_break_types(self, context, flow_manager, immediate_context=None):
-        break_types = BreakTypesFactory()
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
         break_types.add("value", NoValueType())
         return break_types.build()
 
-    def jump(self, context, manager, immediate_context=None):
-        return manager.value(NO_VALUE, self)
+    def jump(self, context, frame_manager, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
+            return frame.value(NO_VALUE)
 
     def to_code(self):
         return "nop"
@@ -141,13 +139,16 @@ class LiteralOp(Opcode):
         self.value = data.value
         self.type = get_type_of_value(self.value)
 
-    def get_break_types(self, context, flow_manager, immediate_context=None):
-        break_types = BreakTypesFactory()
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        if self.value == 42:
+            pass
+        break_types = BreakTypesFactory(self)
         break_types.add("value", self.type)
         return break_types.build()
 
-    def jump(self, context, break_manager, immediate_context=None):
-        return break_manager.value(self.value, self)
+    def jump(self, context, frame_manager, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
+            return frame.value(self.value)
 
     def __str__(self):
         return "LiteralOp<{}>".format(self.value)
@@ -160,8 +161,8 @@ class ObjectTemplateOp(Opcode):
         super(ObjectTemplateOp, self).__init__(data, visitor)
         self.opcodes = { key: enrich_opcode(opcode, visitor) for key, opcode in data.opcodes.items() }
 
-    def get_break_types(self, context, flow_manager, immediate_context=None):
-        break_types = BreakTypesFactory()
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
 
         micro_ops = {}
         initial_data = {}
@@ -169,7 +170,7 @@ class ObjectTemplateOp(Opcode):
         all_value_types = []
 
         for key, opcode in self.opcodes.items():
-            value_type, other_break_types = get_expression_break_types(opcode, context, flow_manager)
+            value_type, other_break_types = get_expression_break_types(opcode, context, frame_manager)
             break_types.merge(other_break_types)
 
             if value_type is MISSING:
@@ -205,27 +206,27 @@ class ObjectTemplateOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager, immediate_context=None):
-        with flow_manager.get_next_frame(self) as frame:
+    def jump(self, context, frame_manager, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
             result = {}
             for key, opcode in self.opcodes.items():
-                result[key], _ = frame.step(key, lambda: evaluate(opcode, context, flow_manager))
+                result[key], _ = frame.step(key, lambda: evaluate(opcode, context, frame_manager))
 
-        return flow_manager.value(RDHObject(result, debug_reason="object-template"), self)
+            return frame.value(RDHObject(result, debug_reason="object-template"))
 
 class DictTemplateOp(Opcode):
     def __init__(self, data, visitor):
         super(DictTemplateOp, self).__init__(data, visitor)
         self.opcodes = { key: enrich_opcode(opcode, visitor) for key, opcode in data.opcodes.items() }
 
-    def get_break_types(self, context, flow_manager, immediate_context=None):
-        break_types = BreakTypesFactory()
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
 
         micro_ops = {}
         initial_data = {}
 
         for key, opcode in self.opcodes.items():
-            value_type, other_break_types = get_expression_break_types(opcode, context, flow_manager)
+            value_type, other_break_types = get_expression_break_types(opcode, context, frame_manager)
             break_types.merge(other_break_types)
             value_type = flatten_out_types(value_type)
 
@@ -254,13 +255,13 @@ class DictTemplateOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager, immediate_context=None):
-        with flow_manager.get_next_frame(self) as frame:
+    def jump(self, context, frame_manager, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
             result = {}
             for key, opcode in self.opcodes.items():
-                result[key], _ = frame.step(key, lambda: evaluate(opcode, context, flow_manager))
+                result[key], _ = frame.step(key, lambda: evaluate(opcode, context, frame_manager))
 
-        return flow_manager.value(RDHDict(result), self)
+            return frame.value(RDHDict(result))
 
 
 class ListTemplateOp(Opcode):
@@ -268,8 +269,8 @@ class ListTemplateOp(Opcode):
         super(ListTemplateOp, self).__init__(data, visitor)
         self.opcodes = [ enrich_opcode(opcode, visitor) for opcode in data.opcodes ]
 
-    def get_break_types(self, context, flow_manager, immediate_context=None):
-        break_types = BreakTypesFactory()
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
 
         micro_ops = {}
         initial_data = {}
@@ -277,7 +278,7 @@ class ListTemplateOp(Opcode):
         all_value_types = []
 
         for index, opcode in enumerate(self.opcodes):
-            value_type, other_break_types = get_expression_break_types(opcode, context, flow_manager)
+            value_type, other_break_types = get_expression_break_types(opcode, context, frame_manager)
             break_types.merge(other_break_types)
             value_type = flatten_out_types(value_type)
             all_value_types.append(value_type)
@@ -315,14 +316,14 @@ class ListTemplateOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager, immediate_context=None):
-        with flow_manager.get_next_frame(self) as frame:
+    def jump(self, context, frame_manager, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
             result = []
             for index, opcode in enumerate(self.opcodes):
-                new_value, _ = frame.step(index, lambda: evaluate(opcode, context, flow_manager))
+                new_value, _ = frame.step(index, lambda: evaluate(opcode, context, frame_manager))
                 result.append(new_value)
 
-        return flow_manager.value(RDHList(result), self)
+            return frame.value(RDHList(result))
 
 
 def get_context_type(context):
@@ -350,13 +351,14 @@ def get_context_type(context):
 
 
 class ContextOp(Opcode):
-    def get_break_types(self, context, flow_manager, immediate_context=None):
-        break_types = BreakTypesFactory()
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
         break_types.add("value", get_context_type(context))
         return break_types.build()
 
-    def jump(self, context, flow_manager, immediate_context=None):
-        return flow_manager.value(context, self)
+    def jump(self, context, frame_manager, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
+            return frame.value(context)
 
     def __str__(self):
         return "Context"
@@ -372,16 +374,15 @@ class DereferenceOp(Opcode):
         self.of = enrich_opcode(data.of, visitor)
         self.reference = enrich_opcode(data.reference, visitor)
 
-    @one_shot_memoize
-    def get_break_types(self, context, flow_manager, immediate_context=None):
-        break_types = BreakTypesFactory()
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
 
-        reference_types, reference_break_types = get_expression_break_types(self.reference, context, flow_manager)
+        reference_types, reference_break_types = get_expression_break_types(self.reference, context, frame_manager)
         break_types.merge(reference_break_types)
         if reference_types is not MISSING:
             reference_types = flatten_out_types(reference_types)
 
-        of_types, of_break_types = get_expression_break_types(self.of, context, flow_manager)
+        of_types, of_break_types = get_expression_break_types(self.of, context, frame_manager)
         break_types.merge(of_break_types)
         if of_types is not MISSING:
             of_types = flatten_out_types(of_types)
@@ -389,11 +390,11 @@ class DereferenceOp(Opcode):
         invalid_dereferences = set()
 
         if reference_types is not MISSING and of_types is not MISSING:
-            for reference_type in unwrap_types(reference_types):
-                try:
-                    for reference in reference_type.get_allowed_values():
-                        for of_type in unwrap_types(of_types):
-                            if isinstance(of_type, CompositeType):
+            for of_type in unwrap_types(of_types):
+                if isinstance(of_type, CompositeType):
+                    try:
+                        for reference_type in unwrap_types(reference_types):
+                            for reference in reference_type.get_allowed_values():
                                 micro_op = of_type.get_micro_op_type(("get", reference))
                                 if micro_op is None:
                                     micro_op = of_type.get_micro_op_type(("get-wildcard",))
@@ -404,10 +405,10 @@ class DereferenceOp(Opcode):
                                         invalid_dereferences.add(reference)
                                 else:
                                     invalid_dereferences.add(reference)
-                            elif of_type is not MISSING:
-                                break_types.add("value", AnyType())
-                except AllowedValuesNotAvailable:
-                    invalid_dereferences.add(reference)
+                    except AllowedValuesNotAvailable:
+                        invalid_dereferences.add(reference)
+                elif of_type is not MISSING:
+                    break_types.add("value", AnyType())
 
         self.invalid_dereference_error = len(list(invalid_dereferences)) > 0
 
@@ -416,32 +417,32 @@ class DereferenceOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager, immediate_context=None):
-        with flow_manager.get_next_frame(self) as frame:
-            of, _ = frame.step("of", lambda: evaluate(self.of, context, flow_manager))
-            reference, _ = frame.step("reference", lambda: evaluate(self.reference, context, flow_manager))
+    def jump(self, context, frame_manager, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
+            of, _ = frame.step("of", lambda: evaluate(self.of, context, frame_manager))
+            reference, _ = frame.step("reference", lambda: evaluate(self.reference, context, frame_manager))
 
             manager = get_manager(of)
 
             if manager is None:
-                return flow_manager.exception(self.INVALID_DEREFERENCE(reference=reference), self)
+                return frame.exception(self.INVALID_DEREFERENCE(reference=reference))
 
             try:
                 direct_micro_op_type = manager.get_micro_op_type(("get", reference))
                 if direct_micro_op_type:
                     micro_op = direct_micro_op_type.create(manager)
-                    return flow_manager.value(micro_op.invoke(trust_caller=True), self)
+                    return frame.value(micro_op.invoke(trust_caller=True))
 
                 wildcard_micro_op_type = manager.get_micro_op_type(("get-wildcard",))
                 if wildcard_micro_op_type:
                     micro_op = wildcard_micro_op_type.create(manager)
-                    return flow_manager.value(micro_op.invoke(reference, trust_caller=True), self)
+                    return frame.value(micro_op.invoke(reference, trust_caller=True))
 
-                return flow_manager.exception(self.INVALID_DEREFERENCE(reference=reference), self)
+                return frame.exception(self.INVALID_DEREFERENCE(reference=reference))
             except InvalidDereferenceType:
-                return flow_manager.exception(self.INVALID_DEREFERENCE(reference=reference), self)
+                return frame.exception(self.INVALID_DEREFERENCE(reference=reference))
             except InvalidDereferenceKey:
-                return flow_manager.exception(self.INVALID_DEREFERENCE(reference=reference), self)
+                return frame.exception(self.INVALID_DEREFERENCE(reference=reference))
 
     def __str__(self):
         return "{}.{}".format(self.of, self.reference)
@@ -456,14 +457,14 @@ class DynamicDereferenceOp(Opcode):
         super(DynamicDereferenceOp, self).__init__(data, visitor)
         self.reference = data.reference
 
-    def get_break_types(self, context, flow_manager, immediate_context=None):
-        break_types = BreakTypesFactory()
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
 
         break_types.add("exception", self.INVALID_DEREFERENCE.get_type(reference=self.reference))
 
         return break_types.build()
 
-    def jump(self, context, flow_manager, immediate_context=None):
+    def jump(self, context, frame_manager, immediate_context=None):
         raise FatalError(self.reference)
 
 
@@ -478,20 +479,20 @@ class AssignmentOp(Opcode):
         self.rvalue = enrich_opcode(data.rvalue, visitor)
 
     @one_shot_memoize
-    def get_break_types(self, context, flow_manager, immediate_context=None):
-        break_types = BreakTypesFactory()
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
 
-        reference_types, reference_break_types = get_expression_break_types(self.reference, context, flow_manager)
+        reference_types, reference_break_types = get_expression_break_types(self.reference, context, frame_manager)
         break_types.merge(reference_break_types)
         if reference_types is not MISSING:
             reference_types = flatten_out_types(reference_types)
 
-        of_types, of_break_types = get_expression_break_types(self.of, context, flow_manager)
+        of_types, of_break_types = get_expression_break_types(self.of, context, frame_manager)
         break_types.merge(of_break_types)
         if of_types is not MISSING:
             of_types = flatten_out_types(of_types)
 
-        rvalue_type, rvalue_break_types = get_expression_break_types(self.rvalue, context, flow_manager)
+        rvalue_type, rvalue_break_types = get_expression_break_types(self.rvalue, context, frame_manager)
         break_types.merge(rvalue_break_types)
         if rvalue_type is not MISSING:
             rvalue_type = flatten_out_types(rvalue_type)
@@ -535,17 +536,11 @@ class AssignmentOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager, immediate_context=None):
-        with flow_manager.get_next_frame(self) as frame:
-            of, _ = frame.step("of", lambda: evaluate(self.of, context, flow_manager))
-            reference, _ = frame.step("reference", lambda: evaluate(self.reference, context, flow_manager))
-            rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, flow_manager))
-
-            if reference in ("result", "test", "i", "j", "testResult", "current"):
-                logger.debug("{} = {}".format(reference, rvalue))
-
-#            if reference == "j":
-#                print "hey"
+    def jump(self, context, frame_manager, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
+            of, _ = frame.step("of", lambda: evaluate(self.of, context, frame_manager))
+            reference, _ = frame.step("reference", lambda: evaluate(self.reference, context, frame_manager))
+            rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, frame_manager))
 
             manager = get_manager(of)
 
@@ -553,24 +548,24 @@ class AssignmentOp(Opcode):
                 direct_micro_op_type = manager.get_micro_op_type(("set", reference))
                 if direct_micro_op_type:
                     if self.invalid_rvalue_error and not direct_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
-                        return flow_manager.exception(self.INVALID_RVALUE(), self)
+                        return frame.exception(self.INVALID_RVALUE())
 
                     micro_op = direct_micro_op_type.create(manager)
-                    return flow_manager.value(micro_op.invoke(rvalue, trust_caller=True), self)
+                    return frame.value(micro_op.invoke(rvalue, trust_caller=True))
 
                 wildcard_micro_op_type = manager.get_micro_op_type(("set-wildcard",))
                 if wildcard_micro_op_type:
                     if self.invalid_rvalue_error and not wildcard_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
-                        return flow_manager.exception(self.INVALID_RVALUE(), self)
+                        return frame.exception(self.INVALID_RVALUE())
 
                     micro_op = wildcard_micro_op_type.create(manager)
-                    return flow_manager.value(micro_op.invoke(reference, rvalue, trust_caller=True), self)
+                    return frame.value(micro_op.invoke(reference, rvalue, trust_caller=True))
 
-                return flow_manager.exception(self.INVALID_LVALUE(), self)
+                return frame.exception(self.INVALID_LVALUE())
             except InvalidAssignmentType:
-                return flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
+                return frame.exception(self.INVALID_ASSIGNMENT())
             except InvalidAssignmentKey:
-                return flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
+                return frame.exception(self.INVALID_ASSIGNMENT())
 
     def to_code(self):
         return "{}.{} = {}".format(self.of.to_code(), self.reference.to_code(), self.rvalue.to_code())
@@ -585,20 +580,20 @@ class InsertOp(Opcode):
         self.reference = enrich_opcode(data.reference, visitor)
         self.rvalue = enrich_opcode(data.rvalue, visitor)
 
-    def get_break_types(self, context, flow_manager, immediate_context=None):
-        break_types = BreakTypesFactory()
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
 
-        reference_types, reference_break_types = get_expression_break_types(self.reference, context, flow_manager)
+        reference_types, reference_break_types = get_expression_break_types(self.reference, context, frame_manager)
         break_types.merge(reference_break_types)
         if reference_types is not MISSING:
             reference_types = flatten_out_types(reference_types)
 
-        of_types, of_break_types = get_expression_break_types(self.of, context, flow_manager)
+        of_types, of_break_types = get_expression_break_types(self.of, context, frame_manager)
         break_types.merge(of_break_types)
         if of_types is not MISSING:
             of_types = flatten_out_types(of_types)
 
-        rvalue_type, rvalue_break_types = get_expression_break_types(self.rvalue, context, flow_manager)
+        rvalue_type, rvalue_break_types = get_expression_break_types(self.rvalue, context, frame_manager)
         break_types.merge(rvalue_break_types)
         if rvalue_type is not MISSING:
             rvalue_type = flatten_out_types(rvalue_type)
@@ -641,11 +636,11 @@ class InsertOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager, immediate_context=None):
-        with flow_manager.get_next_frame(self) as frame:
-            of, _ = frame.step("of", lambda: evaluate(self.of, context, flow_manager))
-            reference, _ = frame.step("reference", lambda: evaluate(self.reference, context, flow_manager))
-            rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, flow_manager))
+    def jump(self, context, frame_manager, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
+            of, _ = frame.step("of", lambda: evaluate(self.of, context, frame_manager))
+            reference, _ = frame.step("reference", lambda: evaluate(self.reference, context, frame_manager))
+            rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, frame_manager))
 
             manager = get_manager(of)
 
@@ -653,24 +648,24 @@ class InsertOp(Opcode):
                 direct_micro_op_type = manager.get_micro_op_type(("insert", reference))
                 if direct_micro_op_type:
                     if self.invalid_rvalue_error and not direct_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
-                        return flow_manager.exception(self.INVALID_RVALUE(), self)
+                        return frame.exception(self.INVALID_RVALUE())
 
                     micro_op = direct_micro_op_type.create(manager)
-                    return flow_manager.value(micro_op.invoke(rvalue, trust_caller=True), self)
+                    return frame.value(micro_op.invoke(rvalue, trust_caller=True))
 
                 wildcard_micro_op_type = manager.get_micro_op_type(("insert-wildcard",))
                 if wildcard_micro_op_type:
                     if self.invalid_rvalue_error and not wildcard_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
-                        return flow_manager.exception(self.INVALID_RVALUE(), self)
+                        return frame.exception(self.INVALID_RVALUE())
 
                     micro_op = wildcard_micro_op_type.create(manager)
-                    return flow_manager.value(micro_op.invoke(reference, rvalue, trust_caller=True), self)
+                    return frame.value(micro_op.invoke(reference, rvalue, trust_caller=True))
 
-                return flow_manager.exception(self.INVALID_LVALUE(), self)
+                return frame.exception(self.INVALID_LVALUE())
             except InvalidAssignmentType:
-                return flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
+                return frame.exception(self.INVALID_ASSIGNMENT())
             except InvalidAssignmentKey:
-                return flow_manager.exception(self.INVALID_ASSIGNMENT(), self)
+                return frame.exception(self.INVALID_ASSIGNMENT())
 
 
 def BinaryOp(name, symbol, func, argument_type, result_type):
@@ -682,15 +677,15 @@ def BinaryOp(name, symbol, func, argument_type, result_type):
             self.lvalue = enrich_opcode(self.data.lvalue, visitor)
             self.rvalue = enrich_opcode(self.data.rvalue, visitor)
 
-        def get_break_types(self, context, flow_manager, immediate_context=None):
-            break_types = BreakTypesFactory()
+        def get_break_types(self, context, frame_manager, immediate_context=None):
+            break_types = BreakTypesFactory(self)
 
-            lvalue_type, lvalue_break_types = get_expression_break_types(self.lvalue, context, flow_manager)
+            lvalue_type, lvalue_break_types = get_expression_break_types(self.lvalue, context, frame_manager)
             if lvalue_type is not MISSING:
                 lvalue_type = flatten_out_types(lvalue_type)
             break_types.merge(lvalue_break_types)
 
-            rvalue_type, rvalue_break_types = get_expression_break_types(self.rvalue, context, flow_manager)
+            rvalue_type, rvalue_break_types = get_expression_break_types(self.rvalue, context, frame_manager)
             if rvalue_type is not MISSING:
                 rvalue_type = flatten_out_types(rvalue_type)
             break_types.merge(rvalue_break_types)
@@ -702,21 +697,21 @@ def BinaryOp(name, symbol, func, argument_type, result_type):
 
             return break_types.build()
 
-        def jump(self, context, break_manager, immediate_context=None):
-            with break_manager.get_next_frame(self) as frame:
+        def jump(self, context, frame_manager, immediate_context=None):
+            with frame_manager.get_next_frame(self) as frame:
                 def get_lvalue():
-                    lvalue, _ = frame.step("lvalue", lambda: evaluate(self.lvalue, context, break_manager))
+                    lvalue, _ = frame.step("lvalue", lambda: evaluate(self.lvalue, context, frame_manager))
                     if not argument_type.is_copyable_from(get_type_of_value(lvalue)):
-                        raise break_manager.exception(self.MISSING_OPERANDS(), self)
+                        raise frame.exception(self.MISSING_OPERANDS())
                     return lvalue
     
                 def get_rvalue():
-                    rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, break_manager))
+                    rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, frame_manager))
                     if not argument_type.is_copyable_from(get_type_of_value(rvalue)):
-                        raise break_manager.exception(self.MISSING_OPERANDS(), self)
+                        raise frame.exception(self.MISSING_OPERANDS())
                     return rvalue
 
-                return break_manager.value(func(get_lvalue, get_rvalue), self)
+                return frame.value(func(get_lvalue, get_rvalue))
 
         def to_code(self):
             return "{} {} {}".format(self.lvalue.to_code(), symbol, self.rvalue.to_code())
@@ -740,11 +735,11 @@ class TransformOp(Opcode):
             raise PreparationException("output missing in transform opcode")
         self.output = self.data.output
 
-    def get_break_types(self, context, flow_manager, immediate_context=None):
-        break_types = BreakTypesFactory()
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
 
         if self.expression:
-            expression_break_types = self.expression.get_break_types(context, flow_manager)
+            expression_break_types = dict(self.expression.get_break_types(context, frame_manager))
             if self.input in expression_break_types:
                 expression_break_types[self.output] = expression_break_types.pop(self.input)
             break_types.merge(expression_break_types)
@@ -753,18 +748,16 @@ class TransformOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager, immediate_context=None):
-        with flow_manager.get_next_frame(self) as frame:
+    def jump(self, context, frame_manager, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
             if self.expression:
-                capture_modes = { "out": AnyType() }
+                with frame_manager.capture(self.input) as capture_result:
+                    mode, value, opcode, restart_type = self.expression.jump(context, frame_manager)
+                    capture_result.attempt_close_or_raise(mode, value, opcode, restart_type)
 
-                with flow_manager.capture(self.input, capture_modes) as new_flow_manager:
-                    mode, value, opcode, restart_type = self.expression.jump(context, new_flow_manager)
-                    new_flow_manager.attempt_close_or_raise(mode, value, opcode, restart_type)
-
-                return flow_manager.unwind(self.output, new_flow_manager.result, self, None)
+                return frame.unwind(self.output, capture_result.value, None)
             else:
-                return flow_manager.unwind(self.output, NO_VALUE, self, None)
+                return frame.unwind(self.output, NO_VALUE, None)
         raise FatalError()
 
     def to_code(self):
@@ -776,11 +769,11 @@ class ShiftOp(Opcode):
         self.opcode = enrich_opcode(data.code, visitor)
         self.restart_type = enrich_opcode(data.restart_type, visitor)
 
-    def get_break_types(self, context, flow_manager, immediate_context=None):
-        break_types = BreakTypesFactory()
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
 
-        value_type, other_break_types = get_expression_break_types(self.opcode, context, flow_manager, immediate_context) 
-        restart_type_value = evaluate(self.restart_type, context, flow_manager)
+        value_type, other_break_types = get_expression_break_types(self.opcode, context, frame_manager, immediate_context) 
+        restart_type_value = evaluate(self.restart_type, context, frame_manager)
         self.restart_type = enrich_type(restart_type_value)
 
         value_type = flatten_out_types(value_type)
@@ -791,18 +784,20 @@ class ShiftOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager, immediate_context=None):
-        with flow_manager.get_next_frame(self) as frame:
+    def jump(self, context, frame_manager, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
             if frame.has_restart_value():
                 restart_value = frame.pop_restart_value()
+
                 if is_debug():
                     if not self.restart_type.is_copyable_from(get_type_of_value(restart_value)):
                         raise FatalError()
-                raise flow_manager.unwind("value", restart_value, self, self.restart_type)
 
-            value = evaluate(self.opcode, context, flow_manager)
+                raise frame.unwind("value", restart_value, None)
 
-            raise flow_manager.unwind("yield", value, self, self.restart_type)
+            value = evaluate(self.opcode, context, frame_manager)
+
+            raise frame.yield_(value, self.restart_type)
 
 
 class ResetOp(Opcode):
@@ -810,7 +805,14 @@ class ResetOp(Opcode):
 
     def __init__(self, data, visitor):
         super(ResetOp, self).__init__(data, visitor)
-        self.opcode = enrich_opcode(data.code, visitor)
+        if hasattr(data, "code"):
+            self.opcode = enrich_opcode(data.code, visitor)
+            self.function = None
+            self.argument = None
+        else:
+            self.opcode = None
+            self.function = enrich_opcode(data.function, visitor)
+            self.argument = enrich_opcode(data.argument, visitor)
 
     def get_value_and_continuation_block_type(self, out_break_type, in_break_type, continuation_break_types):
         return RDHObjectType({
@@ -818,13 +820,23 @@ class ResetOp(Opcode):
             "continuation": Const(ClosedFunctionType(in_break_type, continuation_break_types))
         })
 
-    def get_break_types(self, context, flow_manager, immediate_context=None):
-        break_types = BreakTypesFactory()
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
 
-        opcode_break_types = self.opcode.get_break_types(context, flow_manager)
-        self.continuation_break_types = dict(opcode_break_types)
-        yield_break_types = opcode_break_types.pop("yield", [])
-        break_types.merge(opcode_break_types)
+        if self.opcode:
+            opcode_break_types = dict(self.opcode.get_break_types(context, frame_manager))
+            self.continuation_break_types = dict(opcode_break_types)
+            yield_break_types = opcode_break_types.pop("yield", [])
+            break_types.merge(opcode_break_types)
+        else:
+            function_type, function_break_types = get_expression_break_types(self.function, context, frame_manager)
+            function_type = flatten_out_types(function_type)
+            break_types.merge(function_break_types)
+
+            self.continuation_break_types = function_type.break_types
+            function_break_types = dict(function_type.break_types)
+            yield_break_types = function_break_types.pop("yield", [])
+            break_types.merge(function_break_types)
 
         missing_in_error = False
 
@@ -832,7 +844,7 @@ class ResetOp(Opcode):
             if "in" not in yield_break_type:
                 missing_in_error = True
             break_types.add(
-                "value",
+                "yield",
                 self.get_value_and_continuation_block_type(
                     yield_break_type["out"], yield_break_type["in"], self.continuation_break_types
                 )
@@ -843,32 +855,58 @@ class ResetOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager, immediate_context=None):
-        def enter_opcode(new_flow_manager):
-            return self.opcode.jump(context, new_flow_manager)
+    def jump(self, context, frame_manager, immediate_context=None):
+        from rdhlang5.executor.function import Continuation
 
-        capture_modes = {
-            "out": AnyType(),
-            "in": TopType()
-        }
+        with frame_manager.get_next_frame(self) as frame:
+            if self.opcode:
+                def enter_expression():
+                    return self.opcode.jump(context, frame_manager)
+                with frame_manager.capture("yield") as capture_result:
+                    enter_expression()
 
-        new_flow_manager = flow_manager.capture("yield", capture_modes, enter_opcode, continuation_break_types=self.continuation_break_types)
+                if capture_result.caught_frames is MISSING:
+                    raise frame.exception(self.MISSING_IN_BREAK_TYPE())
 
-        if not new_flow_manager.has_restart_continuation:
-            flow_manager.exception(self.MISSING_IN_BREAK_TYPE(self), self)
+                restart_continuation = capture_result.create_continuation(
+                    enter_expression, self.continuation_break_types
+                )
+            else:
+                argument, _ = frame.step("argument", lambda: evaluate(self.argument, context, frame_manager))
+                function, _ = frame.step("function", lambda: evaluate(self.function, context, frame_manager))
 
-        restart_continuation_type = new_flow_manager.restart_continuation.get_type()
+                def enter_function():
+                    function.invoke(argument, frame_manager)
 
-        result = RDHObject({
-            "value": new_flow_manager.result,
-            "continuation": new_flow_manager.restart_continuation
-        }, bind=self.get_value_and_continuation_block_type(
-            get_type_of_value(new_flow_manager.result),
-            restart_continuation_type.argument_type,
-            restart_continuation_type.break_types
-        ))
+                with frame_manager.capture("yield") as capture_result:
+                    enter_function()
 
-        return flow_manager.value(result, self)
+                if capture_result.caught_frames is MISSING:
+                    raise frame.exception(self.MISSING_IN_BREAK_TYPE())
+
+                if isinstance(function, Continuation):
+                    # Avoid using enter_function as the callback, hook into the original
+                    # continuation callback, avoiding an infinite chain of linked callbacks.
+                    restart_continuation = capture_result.create_continuation(
+                        function.callback, self.continuation_break_types
+                    )
+                else:
+                    restart_continuation = capture_result.create_continuation(
+                        enter_function, self.continuation_break_types
+                    )
+
+            restart_continuation_type = restart_continuation.get_type()
+
+            result = RDHObject({
+                "value": capture_result.value,
+                "continuation": restart_continuation
+            }, bind=self.get_value_and_continuation_block_type(
+                get_type_of_value(capture_result.value),
+                restart_continuation_type.argument_type,
+                restart_continuation_type.break_types
+            ))
+
+            return frame.yield_(result)
 
 
 class CommaOp(Opcode):
@@ -876,12 +914,12 @@ class CommaOp(Opcode):
         super(CommaOp, self).__init__(data, visitor)
         self.opcodes = [ enrich_opcode(o, visitor) for o in data.opcodes ]
 
-    def get_break_types(self, context, flow_manager, immediate_context=None):
-        break_types = BreakTypesFactory()
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
         value_type = [{ "out": NoValueType() }]
 
         for opcode in self.opcodes:
-            value_type, other_break_types = get_expression_break_types(opcode, context, flow_manager)
+            value_type, other_break_types = get_expression_break_types(opcode, context, frame_manager)
             break_types.merge(other_break_types)
             if value_type is MISSING:
                 break
@@ -891,13 +929,13 @@ class CommaOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager, immediate_context=None):
+    def jump(self, context, frame_manager, immediate_context=None):
         value = NO_VALUE
-        with flow_manager.get_next_frame(self) as frame:
+        with frame_manager.get_next_frame(self) as frame:
             for index, opcode in enumerate(self.opcodes):
-                value, _ = frame.step(index, lambda: evaluate(opcode, context, flow_manager))
+                value, _ = frame.step(index, lambda: evaluate(opcode, context, frame_manager))
 
-        return flow_manager.value(value, self)
+            return frame.value(value)
 
     def to_code(self):
         return ";\n".join([ o.to_code() for o in self.opcodes ])
@@ -906,13 +944,13 @@ class LoopOp(Opcode):
     def __init__(self, data, visitor):
         self.code = enrich_opcode(data.code, visitor)
 
-    def get_break_types(self, context, flow_manager, immediate_context=None):
-        _, other_break_types = get_expression_break_types(self.code, context, flow_manager)
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        _, other_break_types = get_expression_break_types(self.code, context, frame_manager)
         return other_break_types
 
-    def jump(self, context, flow_manager, immediate_context=None):
+    def jump(self, context, frame_manager, immediate_context=None):
         while True:
-            evaluate(self.code, context, flow_manager)
+            evaluate(self.code, context, frame_manager)
 
     def to_code(self):
         return "Loop {{ {} }}".format(self.code.to_code())
@@ -923,18 +961,18 @@ class ConditionalOp(Opcode):
         self.when_true = enrich_opcode(data.when_true, visitor)
         self.when_false = enrich_opcode(data.when_false, visitor)
 
-    def get_break_types(self, context, flow_manager, immediate_context=None):
-        break_types = BreakTypesFactory()
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
 
-        condition_type, condition_break_types = get_expression_break_types(self.condition, context, flow_manager)
-        when_true_type, when_true_break_types = get_expression_break_types(self.when_true, context, flow_manager)
-        when_false_type, when_false_break_types = get_expression_break_types(self.when_false, context, flow_manager)
+        condition_type, condition_break_types = get_expression_break_types(self.condition, context, frame_manager)
+        when_true_type, when_true_break_types = get_expression_break_types(self.when_true, context, frame_manager)
+        when_false_type, when_false_break_types = get_expression_break_types(self.when_false, context, frame_manager)
 
         if BooleanType().is_copyable_from(condition_type):
             # TODO be more liberal
             raise FatalError()
 
-        # TODO throw away one branch if condition_type can't be true of false
+        # TODO throw away one branch if condition_type can't be true or false
         break_types.merge(condition_break_types)
         break_types.merge(when_true_break_types)
         break_types.merge(when_false_break_types)
@@ -950,30 +988,33 @@ class ConditionalOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager, immediate_context=None):
-        with flow_manager.get_next_frame(self) as frame:
-            condition, _ = frame.step("condition", lambda: evaluate(self.condition, context, flow_manager))
+    def jump(self, context, frame_manager, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
+            if frame.manager.mode == "reset":
+                pass
+            condition, _ = frame.step("condition", lambda: evaluate(self.condition, context, frame_manager))
 
             if condition is True:
-                result, _ = frame.step("result", lambda: evaluate(self.when_true, context, flow_manager))
+                result, true_new = frame.step("true_result", lambda: evaluate(self.when_true, context, frame_manager))
             elif condition is False:
-                result, _ = frame.step("result", lambda: evaluate(self.when_false, context, flow_manager))
+                result, _ = frame.step("false_result", lambda: evaluate(self.when_false, context, frame_manager))
             else:
                 # be more liberal
                 raise FatalError()
 
-            return flow_manager.value(result, self)
+            return frame.value(result)
 
 
 class PrepareOp(Opcode):
     PREPARATION_ERROR = TypeErrorFactory("PrepareOp: preparation_error")
 
     def __init__(self, data, visitor):
+        super(PrepareOp, self).__init__(data, visitor)
         self.code = enrich_opcode(data.code, visitor)
 
-    def get_break_types(self, context, flow_manager, immediate_context=None):
-        break_types = BreakTypesFactory()
-        function_value_type, other_break_types = get_expression_break_types(self.code, context, flow_manager, immediate_context)
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
+        function_value_type, other_break_types = get_expression_break_types(self.code, context, frame_manager, immediate_context)
 
         break_types.merge(other_break_types)
 
@@ -986,20 +1027,21 @@ class PrepareOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager, immediate_context=None):
-        function_data = evaluate(self.code, context, flow_manager)
+    def jump(self, context, frame_manager, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
+            function_data = evaluate(self.code, context, frame_manager)
 
-        from rdhlang5.executor.function import prepare
+            from rdhlang5.executor.function import prepare
 
-        immediate_context = immediate_context or {}
-        immediate_context["suggested_outer_type"] = get_context_type(context)
+            immediate_context = immediate_context or {}
+            immediate_context["suggested_outer_type"] = get_context_type(context)
 
-        try:
-            function = prepare(function_data, context, flow_manager, immediate_context)
-        except PreparationException as e:
-            raise flow_manager.exception(self.PREPARATION_ERROR(), self)
+            try:
+                function = prepare(function_data, context, frame_manager, immediate_context)
+            except PreparationException as e:
+                raise frame.exception(self.PREPARATION_ERROR())
 
-        return flow_manager.value(function, self)
+            return frame.value(function)
 
 
 class CloseOp(Opcode):
@@ -1011,15 +1053,15 @@ class CloseOp(Opcode):
         self.function = enrich_opcode(data.function, visitor)
         self.outer_context = enrich_opcode(data.outer_context, visitor)
 
-    def get_break_types(self, context, flow_manager, immediate_context=None):
-        break_types = BreakTypesFactory()
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
 
-        function_type, function_break_types = get_expression_break_types(self.function, context, flow_manager, immediate_context=immediate_context)
+        function_type, function_break_types = get_expression_break_types(self.function, context, frame_manager, immediate_context=immediate_context)
         if function_type is not MISSING:
             function_type = flatten_out_types(function_type)
         break_types.merge(function_break_types)
 
-        outer_context_type, outer_context_break_types = get_expression_break_types(self.outer_context, context, flow_manager)
+        outer_context_type, outer_context_break_types = get_expression_break_types(self.outer_context, context, frame_manager)
         outer_context_type = flatten_out_types(outer_context_type)
         break_types.merge(outer_context_break_types)
 
@@ -1041,64 +1083,50 @@ class CloseOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager, immediate_context=None):
-        open_function = evaluate(self.function, context, flow_manager, immediate_context)
-        outer_context = evaluate(self.outer_context, context, flow_manager, immediate_context)
+    def jump(self, context, frame_manager, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
+            open_function, _ = frame.step("function", lambda: evaluate(self.function, context, frame_manager, immediate_context))
+            outer_context, _ = frame.step("outer", lambda: evaluate(self.outer_context, context, frame_manager, immediate_context))
 
-        from rdhlang5.executor.function import OpenFunction
+            from rdhlang5.executor.function import OpenFunction
 
-        if not isinstance(open_function, OpenFunction):
-            return flow_manager.exception(self.INVALID_FUNCTION(), self)
+            if not isinstance(open_function, OpenFunction):
+                return frame.exception(self.INVALID_FUNCTION())
 
-        if (is_debug() or self.outer_context_type_error) and not open_function.outer_type.is_copyable_from(get_type_of_value(outer_context)):
-            return flow_manager.exception(self.INVALID_OUTER_CONTEXT(), self)
+            if (is_debug() or self.outer_context_type_error) and not open_function.outer_type.is_copyable_from(get_type_of_value(outer_context)):
+                return frame.exception(self.INVALID_OUTER_CONTEXT())
 
-        return flow_manager.value(open_function.close(outer_context), self)
+            return frame.value(open_function.close(outer_context))
 
     def to_code(self):
         return "Closed_{}".format(self.function.to_code())
 
 class StaticOp(Opcode):
     def __init__(self, data, visitor):
+        super(StaticOp, self).__init__(data, visitor)
         self.code = enrich_opcode(data.code, visitor)
         self.value = MISSING
         self.mode = MISSING
 
-    def lazy_initialize(self, context, original_flow_manager, immediate_context):
-        from rdhlang5.executor.bootstrap import create_no_escape_flow_manager
-
+    def lazy_initialize(self, context, frame_manager, immediate_context):
         if self.value is MISSING and self.mode is MISSING:
-            flow_manager = create_no_escape_flow_manager()
+            with frame_manager.capture() as capture_result:
+                capture_result.attempt_capture(*self.code.jump(context, frame_manager, immediate_context))
 
-            expression_break_types = self.code.get_break_types(context, flow_manager, immediate_context)
+            self.value = capture_result.value
+            self.mode = capture_result.caught_break_mode
 
-            break_managers = defaultdict(list)
-
-            with ExitStack() as stack:
-                for mode, break_types in expression_break_types.items():
-                    for break_type in break_types:
-                        flow_manager = stack.enter_context(flow_manager.capture(mode, break_type, top_level=True))
-                        break_managers[mode].append(flow_manager)
-
-                mode, value, opcode, restart_type = self.code.jump(context, flow_manager, immediate_context)
-                raise BreakException(mode, value, opcode, restart_type)
-
-            for mode, break_managers in break_managers.items():
-                for break_manager in break_managers:
-                    if break_manager.has_result:
-                        self.mode = mode
-                        self.value = break_manager.result
-
-    def get_break_types(self, context, flow_manager, immediate_context=None):
-        break_types = BreakTypesFactory()
-        self.lazy_initialize(context, flow_manager, immediate_context)
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
+        self.lazy_initialize(context, frame_manager, immediate_context)
         if self.value is not MISSING:
             break_types.add(self.mode, get_type_of_value(self.value))
         return break_types.build()
 
-    def jump(self, context, flow_manager, immediate_context=None):
-        self.lazy_initialize(context, flow_manager, immediate_context)
-        return flow_manager.unwind(self.mode, self.value, self, None)
+    def jump(self, context, frame_manager, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
+            self.lazy_initialize(context, frame_manager, immediate_context)
+            return frame.unwind(self.mode, self.value, None)
 
     def to_code(self):
         if not self.value:
@@ -1114,16 +1142,16 @@ class InvokeOp(Opcode):
         self.function = enrich_opcode(data.function, visitor)
         self.argument = enrich_opcode(data.argument, visitor)
 
-    def get_break_types(self, context, flow_manager, immediate_context=None):
-        break_types = BreakTypesFactory()
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
 
-        argument_type, other_argument_break_types = get_expression_break_types(self.argument, context, flow_manager)
+        argument_type, other_argument_break_types = get_expression_break_types(self.argument, context, frame_manager)
         if argument_type is not MISSING:
             argument_type = flatten_out_types(argument_type)
         break_types.merge(other_argument_break_types)
 
         function_type, other_function_break_types = get_expression_break_types(
-            self.function, context, flow_manager, immediate_context={ "suggested_argument_type": argument_type }
+            self.function, context, frame_manager, immediate_context={ "suggested_argument_type": argument_type }
         )
         break_types.merge(other_function_break_types)
 
@@ -1144,20 +1172,20 @@ class InvokeOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager, immediate_context=None):
+    def jump(self, context, frame_manager, immediate_context=None):
         logger.debug("Invoke:jump")
         from rdhlang5.executor.function import RDHFunction
 
-        with flow_manager.get_next_frame(self) as frame:
-            function, _ = frame.step("function", lambda: evaluate(self.function, context, flow_manager))
-            argument, _ = frame.step("argument", lambda: evaluate(self.argument, context, flow_manager))
+        with frame_manager.get_next_frame(self) as frame:
+            function, _ = frame.step("function", lambda: evaluate(self.function, context, frame_manager))
+            argument, _ = frame.step("argument", lambda: evaluate(self.argument, context, frame_manager))
 
             if not isinstance(function, RDHFunction):
-                return flow_manager.exception(self.INVALID_FUNCTION_TYPE(), self)
+                return frame.exception(self.INVALID_FUNCTION_TYPE())
             if not function.get_type().argument_type.is_copyable_from(get_type_of_value(argument)):
-                return flow_manager.exception(self.INVALID_ARGUMENT_TYPE(), self) 
+                return frame.exception(self.INVALID_ARGUMENT_TYPE()) 
 
-            return function.invoke(argument, flow_manager)
+            return function.invoke(argument, frame_manager)
 
         raise FatalError()
 
@@ -1172,9 +1200,9 @@ class MatchOp(Opcode):
         self.value = enrich_opcode(data.value, visitor)
         self.matchers = [ enrich_opcode(m, visitor) for m in data.matchers ]
 
-    def get_break_types(self, context, flow_manager, immediate_context=None):
-        break_types = BreakTypesFactory()
-        value_type, value_break_types = get_expression_break_types(self.value, context, flow_manager)
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
+        value_type, value_break_types = get_expression_break_types(self.value, context, frame_manager)
         value_type = flatten_out_types(value_type)
 
         break_types.merge(value_break_types)
@@ -1183,7 +1211,7 @@ class MatchOp(Opcode):
             matcher_function_type, matcher_break_types = get_expression_break_types(
                 matcher,
                 context,
-                flow_manager,
+                frame_manager,
                 immediate_context={ "suggested_argument_type": value_type }
             )
             matcher_function_type = flatten_out_types(matcher_function_type)
@@ -1200,17 +1228,17 @@ class MatchOp(Opcode):
 
         return break_types.build()
 
-    def jump(self, context, flow_manager, immediate_context=None):
-        with flow_manager.get_next_frame(self) as frame:
-            value, _ = frame.step("value", lambda: evaluate(self.value, context, flow_manager))
+    def jump(self, context, frame_manager, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
+            value, _ = frame.step("value", lambda: evaluate(self.value, context, frame_manager))
             value_type = get_type_of_value(value)
 
             for index, matcher in enumerate(self.matchers):
-                matcher_function, _ = frame.step(index, lambda: evaluate(matcher, context, flow_manager))
+                matcher_function, _ = frame.step(index, lambda: evaluate(matcher, context, frame_manager))
                 if matcher_function.argument_type.is_copyable_from(value_type):
-                    return matcher_function.invoke(value, flow_manager)
+                    return matcher_function.invoke(value, frame_manager)
             else:
-                return flow_manager.exception(self.NO_MATCH(), self)
+                return frame.exception(self.NO_MATCH())
 
         raise FatalError()
 
@@ -1222,7 +1250,7 @@ class MatchOp(Opcode):
 #         self.type = enrich_opcode(data.type, visitor)
 # 
 #     def get_break_types(self, context, flow_manager):
-#         break_types = BreakTypesFactory()
+#         break_types = BreakTypesFactory(self)
 # 
 #         value_type, value_break_types = get_expression_break_types(self.value, context, flow_manager)
 #         type_data = evaluate(self.type, context, flow_manager)

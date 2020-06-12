@@ -1,6 +1,4 @@
-from _collections import defaultdict
-from abc import ABCMeta, abstractmethod
-import weakref
+from abc import abstractmethod
 
 from rdhlang5.type_system.exceptions import FatalError
 from rdhlang5.utils import InternalMarker

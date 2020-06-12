@@ -2,7 +2,7 @@
 from __future__ import unicode_literals
 
 from rdhlang5.type_system.core_types import Type
-from __builtin__ import False
+from rdhlang5.type_system.exceptions import FatalError
 
 
 def enrich_break_type(data):
@@ -15,6 +15,8 @@ def enrich_break_type(data):
     return result
 
 def are_break_types_a_subset(self, other):
+    if other is None or other.break_types is None:
+        raise FatalError
     for mode, other_break_types_for_mode in other.break_types.items():
         for other_break_type_for_mode in other_break_types_for_mode:
             our_break_types_for_mode = self.break_types.get(mode, None)
@@ -61,6 +63,10 @@ class ClosedFunctionType(Type):
     def __init__(self, argument_type, break_types):
         self.argument_type = argument_type
         self.break_types = break_types
+        if argument_type is None:
+            raise FatalError()
+        if break_types is None:
+            raise FatalError()
 
     def is_copyable_from(self, other):
         if not isinstance(other, ClosedFunctionType):

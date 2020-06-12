@@ -1,24 +1,16 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-from _collections import defaultdict
-import json
-
-from munch import munchify
-from pip._vendor.contextlib2 import ExitStack
-
-from rdhlang5.executor.flow_control import FrameManager, FlowManager, \
-    BreakException
+from rdhlang5.executor.flow_control import FrameManager
 from rdhlang5.executor.function import prepare
 from rdhlang5.executor.opcodes import get_context_type
 from rdhlang5.executor.raw_code_factories import inferred_type, function_lit, \
     int_type, infer_all, dereference, loop_op, comma_op, condition_op, \
-    equality_op, binary_integer_op, nop, return_op, list_type, \
+    binary_integer_op, nop, list_type, \
     function_type, list_template_op, insert_op, transform_op, literal_op, \
     invoke_op, object_template_op, prepared_function, no_value_type, \
-    assignment_op, dict_template_op, addition_op, context_op, reset_op, shift_op, \
-    match_op
-from rdhlang5.type_system.core_types import AnyType, NoValueType
+    assignment_op, dict_template_op, addition_op, reset_op, shift_op, \
+    transform
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE
 from rdhlang5.type_system.managers import get_manager
 from rdhlang5.type_system.object_types import RDHObject
@@ -29,16 +21,6 @@ class ObjectDictWrapper(object):
     def __init__(self, data):
         for k, v in data.items():
             self.__dict__[k] = v
-
-
-def create_no_escape_flow_manager():
-    frame_manager = FrameManager()
-    return FlowManager(None, None, {}, frame_manager)
-
-
-def create_application_flow_manager():
-    frame_manager = FrameManager()
-    return FlowManager("exit", { "out": AnyType()}, {}, frame_manager, top_level=True)
 
 class BootstrapException(Exception):
     pass
@@ -70,7 +52,7 @@ def get_default_global_context():
                         )
                     )
                 ),
-                None, create_no_escape_flow_manager()
+                None, FrameManager()
             ).close(None),
             "list": prepare(
                 function_lit(
@@ -87,9 +69,7 @@ def get_default_global_context():
                     inferred_type(),
                     object_template_op({
                         "result": list_template_op([]),
-                        "callback": prepared_function(
-                            transform_op("value", "break", invoke_op(dereference("outer.argument")))
-                        )
+                        "callback": dereference("argument")
                     }),
                     comma_op(
                         transform_op(
@@ -100,11 +80,10 @@ def get_default_global_context():
                                         no_value_type(),
                                         infer_all(),
                                         inferred_type(),
-                                        reset_op(
-                                            transform_op(
-                                                "value", "break",
-                                                invoke_op(dereference("outer.local.callback"))
-                                            )
+                                        transform(
+                                            ("yield", "value"),
+                                            ("value", "break"),
+                                            reset_op(dereference("outer.local.callback"), nop())
                                         ),
                                         comma_op(
                                             insert_op(
@@ -125,7 +104,7 @@ def get_default_global_context():
                         dereference("local.result")
                     )
                 ),
-                None, create_no_escape_flow_manager()
+                None, FrameManager()
             ).close(None)
         }, debug_reason="default-global-context")
     }, bind=DEFAULT_OBJECT_TYPE, debug_reason="default-global-context")
@@ -161,20 +140,18 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False)
         context = get_default_global_context()
 
     get_manager(context).add_composite_type(DEFAULT_OBJECT_TYPE)
-    break_managers = defaultdict(list)
 
-    with ExitStack() as stack:
+    frame_manager = FrameManager()
+
+    with frame_manager.capture() as capture_result:
         open_function = prepare(
             data,
             context,
-            create_no_escape_flow_manager(),
+            frame_manager,
             immediate_context={
                 "suggested_outer_type": get_context_type(context)
             }
         )
-
-        break_manager = stack.enter_context(create_application_flow_manager())
-        break_managers["exit"].append(break_manager)
 
         function_break_types = open_function.get_type().break_types
 
@@ -188,22 +165,11 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False)
 
 {}""".format(mode, break_message))
                 continue
-            for break_type in break_types:
-                break_manager = stack.enter_context(break_manager.capture(mode, break_type, top_level=True))
-                break_managers[mode].append(break_manager)
 
         if error_msgs:
             raise BootstrapException("\n\n".join(error_msgs))
 
         closed_function = open_function.close(context)
-#        print closed_function.to_code()
-        mode, value, opcode, restart_type = closed_function.invoke(argument, break_manager)
-        raise BreakException(mode, value, opcode, restart_type)
+        capture_result.attempt_capture(*closed_function.invoke(argument, frame_manager))
 
-    for mode, break_managers in break_managers.items():
-        for break_manager in break_managers:
-            if break_manager.has_result:
-                return munchify({
-                    "mode": mode,
-                    "value": break_manager.result
-                })
+    return capture_result

@@ -1,4 +1,4 @@
-from rdhlang5.type_system.core_types import OneOfType, AnyType, Const
+from rdhlang5.type_system.core_types import OneOfType, AnyType
 from rdhlang5.type_system.dict_types import RDHDictType, DictWildcardGetterType, \
     DictWildcardSetterType, DictWildcardDeletterType
 from rdhlang5.type_system.list_types import RDHListType, ListWildcardGetterType, \

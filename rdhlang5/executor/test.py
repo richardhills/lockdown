@@ -4,9 +4,8 @@ from __future__ import unicode_literals
 from unittest import main
 from unittest.case import TestCase
 
-from rdhlang5.executor.bootstrap import bootstrap_function, prepare, \
-    create_application_flow_manager, create_no_escape_flow_manager
-from rdhlang5.executor.exceptions import PreparationException
+from rdhlang5.executor.bootstrap import bootstrap_function
+from rdhlang5.executor.function import prepare
 from rdhlang5.executor.raw_code_factories import function_lit, no_value_type, \
     build_break_types, int_type, literal_op, return_op, addition_op, \
     dereference_op, context_op, comma_op, any_type, object_type, \
@@ -15,13 +14,14 @@ from rdhlang5.executor.raw_code_factories import function_lit, no_value_type, \
     unbound_dereference, match_op, dereference, prepared_function, one_of_type, \
     string_type, bool_type, try_catch_op, throw_op, const_string_type, \
     function_type, close_op, shift_op
-from rdhlang5.type_system.core_types import IntegerType, AnyType, StringType
+from rdhlang5.type_system.core_types import IntegerType, StringType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     rich_composite_type
 from rdhlang5.type_system.list_types import RDHList, RDHListType
 from rdhlang5.type_system.managers import get_manager
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType
 from rdhlang5.utils import NO_VALUE, set_debug
+from rdhlang5.executor.flow_control import FrameManager
 
 
 class TestPreparedFunction(TestCase):
@@ -32,16 +32,15 @@ class TestPreparedFunction(TestCase):
 
         result = bootstrap_function(func)
 
-        self.assertEquals(result.mode, "value")
+        self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
-
 
     def test_basic_function_return(self):
         func = function_lit(no_value_type(), build_break_types(int_type()), return_op(literal_op(42)))
 
         result = bootstrap_function(func, check_safe_exit=True)
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_addition(self):
@@ -49,8 +48,9 @@ class TestPreparedFunction(TestCase):
 
         result = bootstrap_function(func, check_safe_exit=True)
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
+
 
 class TestDereference(TestCase):
     def test_return_variable(self):
@@ -79,9 +79,8 @@ class TestDereference(TestCase):
 
         result = bootstrap_function(func, context=context, check_safe_exit=True)
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
-
 
     def test_add_locals(self):
         func = function_lit(
@@ -124,8 +123,9 @@ class TestDereference(TestCase):
 
         result = bootstrap_function(func, context=context, check_safe_exit=True)
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
+
 
 class TestComma(TestCase):
     def test_comma(self):
@@ -137,12 +137,13 @@ class TestComma(TestCase):
             check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_restart_comma(self):
         context = RDHObject({})
-        flow_manager = create_application_flow_manager()
+
+        frame_manager = FrameManager()
 
         func = prepare(
             function_lit(
@@ -153,18 +154,34 @@ class TestComma(TestCase):
                     shift_op(literal_op("second"), int_type())
                 ))
             ),
-            context, create_no_escape_flow_manager()
+            context, frame_manager
         ).close(None)
 
-        first_yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: func.invoke(NO_VALUE, new_fm))
-        self.assertEquals(first_yielder.result, "first")
+        def first():
+            func.invoke(NO_VALUE, frame_manager)
 
-        second_yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: first_yielder.restart_continuation.invoke(4, new_fm))
-        self.assertEquals(second_yielder.result, "second")
+        with frame_manager.capture("yield") as first_yielder:
+            first()
+        self.assertEquals(first_yielder.value, "first")
 
-        returner = flow_manager.capture("return", { "out": AnyType() }, lambda new_fm: second_yielder.restart_continuation.invoke(42, new_fm))
+        def second():
+            first_yield_restart_continuation = first_yielder.create_continuation(first, func.break_types)
+            first_yield_restart_continuation.invoke(4, frame_manager)
 
-        self.assertEquals(returner.result, 42)
+        with frame_manager.capture("yield") as second_yielder:
+            second()
+
+        self.assertEquals(second_yielder.value, "second")
+
+        def third():
+            second_yield_restart_continuation = second_yielder.create_continuation(second, func.break_types)
+            second_yield_restart_continuation.invoke(42, frame_manager)
+
+        with frame_manager.capture("return") as returner:
+            third()
+
+        self.assertEquals(returner.value, 42)
+
 
 class TestTemplates(TestCase):
     def test_return(self):
@@ -178,7 +195,7 @@ class TestTemplates(TestCase):
             check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertTrue(isinstance(result.value, RDHObject))
         get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
         self.assertEquals(result.value.foo, 42)
@@ -194,7 +211,7 @@ class TestTemplates(TestCase):
             check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertTrue(isinstance(result.value, RDHObject))
         get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
         self.assertEquals(result.value.foo.bar, 42)
@@ -211,7 +228,7 @@ class TestTemplates(TestCase):
             check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertTrue(isinstance(result.value, RDHObject))
         get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
         self.assertEquals(result.value.foo, 42)
@@ -229,7 +246,7 @@ class TestTemplates(TestCase):
             check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertTrue(isinstance(result.value, RDHObject))
         get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
         self.assertEquals(result.value.foo, 42)
@@ -247,7 +264,7 @@ class TestTemplates(TestCase):
             check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertTrue(isinstance(result.value, RDHObject))
         get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
         self.assertEquals(result.value.foo, 42)
@@ -265,7 +282,7 @@ class TestTemplates(TestCase):
             check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertTrue(isinstance(result.value, RDHObject))
         get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
         self.assertEquals(result.value.foo, 42)
@@ -293,10 +310,11 @@ class TestTemplates(TestCase):
             check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertTrue(isinstance(result.value, RDHObject))
         get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
         self.assertEquals(result.value.foo.bar, 42)
+
 
 class TestLocals(TestCase):
     def test_initialization(self):
@@ -310,7 +328,7 @@ class TestLocals(TestCase):
             check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_initialization_from_argument(self):
@@ -325,12 +343,12 @@ class TestLocals(TestCase):
             check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 123)
 
     def test_restart_into_local_initialization(self):
         context = RDHObject({})
-        flow_manager = create_application_flow_manager()
+        frame_manager = FrameManager()
 
         func = prepare(
             function_lit(
@@ -338,20 +356,29 @@ class TestLocals(TestCase):
                 int_type(), shift_op(literal_op("hello"), int_type()),
                 return_op(dereference_op(context_op(), literal_op("local")))
             ),
-            context, create_no_escape_flow_manager()
+            context, frame_manager
         ).close(None)
 
-        yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: func.invoke(NO_VALUE, new_fm))
+        def start():
+            func.invoke(NO_VALUE, frame_manager)
 
-        self.assertEquals(yielder.result, "hello")
+        with frame_manager.capture("yield") as yielder:
+            start()
 
-        returner = flow_manager.capture("return", { "out": AnyType() }, lambda new_fm: yielder.restart_continuation.invoke(32, new_fm))
+        self.assertEquals(yielder.value, "hello")
 
-        self.assertEquals(returner.result, 32)
+        def restart():
+            yielder_restart_continuation = yielder.create_continuation(start, func.break_types)
+            yielder_restart_continuation.invoke(32, frame_manager)
+
+        with frame_manager.capture("return") as returner:
+            restart()
+
+        self.assertEquals(returner.value, 32)
 
     def test_restart_into_local_initialization_and_code(self):
         context = RDHObject({})
-        flow_manager = create_application_flow_manager()
+        frame_manager = FrameManager()
 
         func = prepare(
             function_lit(
@@ -359,17 +386,30 @@ class TestLocals(TestCase):
                 int_type(), shift_op(literal_op("first"), int_type()),
                 return_op(addition_op(dereference_op(context_op(), literal_op("local")), shift_op(literal_op("second"), int_type())))
             ),
-            context, create_no_escape_flow_manager()
+            context, frame_manager
         ).close(None)
 
-        first_yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: func.invoke(NO_VALUE, new_fm))
-        self.assertEquals(first_yielder.result, "first")
-        second_yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: first_yielder.restart_continuation.invoke(40, new_fm))
-        self.assertEquals(second_yielder.result, "second")
+        def first():
+            func.invoke(NO_VALUE, frame_manager)
 
-        returner = flow_manager.capture("return", { "out": AnyType() }, lambda new_fm: second_yielder.restart_continuation.invoke(2, new_fm))
+        with frame_manager.capture("yield") as first_yielder:
+            first()
+        self.assertEquals(first_yielder.value, "first")
 
-        self.assertEquals(returner.result, 42)
+        def second():
+            first_restart_continuation = first_yielder.create_continuation(first, func.break_types)
+            first_restart_continuation.invoke(40, frame_manager)
+
+        with frame_manager.capture("yield") as second_yielder:
+            second()
+        self.assertEquals(second_yielder.value, "second")
+
+        with frame_manager.capture("return") as returner:
+            second_restart_continuation = second_yielder.create_continuation(first, func.break_types)
+            second_restart_continuation.invoke(2, frame_manager)
+
+        self.assertEquals(returner.value, 42)
+
 
 class TestAssignment(TestCase):
     def test_assignment(self):
@@ -384,7 +424,7 @@ class TestAssignment(TestCase):
             check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_assignment_from_argument(self):
@@ -400,8 +440,9 @@ class TestAssignment(TestCase):
             check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 43)
+
 
 class TestArguments(TestCase):
     def test_simple_return_argument(self):
@@ -412,7 +453,7 @@ class TestArguments(TestCase):
 
         result = bootstrap_function(func, argument=42, check_safe_exit=True)
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_doubler(self):
@@ -423,8 +464,9 @@ class TestArguments(TestCase):
 
         result = bootstrap_function(func, argument=21, check_safe_exit=True)
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
+
 
 class TestConditional(TestCase):
     def test_basic_truth(self):
@@ -434,7 +476,7 @@ class TestConditional(TestCase):
                 return_op(condition_op(literal_op(True), literal_op(34), literal_op(53)))
             ), check_safe_exit=True
         )
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 34)
 
     def test_basic_false(self):
@@ -444,7 +486,7 @@ class TestConditional(TestCase):
                 return_op(condition_op(literal_op(False), literal_op(34), literal_op(53)))
             ), check_safe_exit=True
         )
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 53)
 
 
@@ -457,7 +499,7 @@ class TestLoops(TestCase):
             ), check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_count_then_return(self):
@@ -478,8 +520,9 @@ class TestLoops(TestCase):
             ), check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
+
 
 class TestInferredBreakTypes(TestCase):
     def test_basic_inferrence(self):
@@ -490,7 +533,7 @@ class TestInferredBreakTypes(TestCase):
             ), check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_infer_all(self):
@@ -500,7 +543,7 @@ class TestInferredBreakTypes(TestCase):
             ), check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_infer_exception(self):
@@ -510,7 +553,7 @@ class TestInferredBreakTypes(TestCase):
             )
         )
 
-        self.assertEquals(result.mode, "exception")
+        self.assertEquals(result.caught_break_mode, "exception")
         self.assertEquals(result.value.type, "TypeError")
 
     def test_without_infer_exception_fails(self):
@@ -520,6 +563,7 @@ class TestInferredBreakTypes(TestCase):
                     no_value_type(), build_break_types(int_type()), addition_op(literal_op("hello"), literal_op(5))
                 )
             )
+
 
 class TestFunctionPreparation(TestCase):
     def test_basic(self):
@@ -532,8 +576,9 @@ class TestFunctionPreparation(TestCase):
             )
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
+
 
 class TestFunctionInvocation(TestCase):
     def test_basic(self):
@@ -548,7 +593,7 @@ class TestFunctionInvocation(TestCase):
             ), check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_basic_with_inferred_types(self):
@@ -563,7 +608,7 @@ class TestFunctionInvocation(TestCase):
             ), check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_basic_with_inferred_local_type(self):
@@ -578,8 +623,9 @@ class TestFunctionInvocation(TestCase):
             ), check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
+
 
 class TestUnboundReference(TestCase):
     def test_unbound_reference_to_arguments(self):
@@ -592,7 +638,7 @@ class TestUnboundReference(TestCase):
             ), check_safe_exit=True, argument=RDHObject({ "foo": 39, "bar": 3 })
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_unbound_reference_to_locals(self):
@@ -607,7 +653,7 @@ class TestUnboundReference(TestCase):
             ), check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_unbound_reference_to_locals_and_arguments(self):
@@ -622,8 +668,9 @@ class TestUnboundReference(TestCase):
             ), check_safe_exit=True, argument=RDHObject({ "foo": 39 })
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
+
 
 class TestMatch(TestCase):
     def test_interesting(self):
@@ -649,14 +696,14 @@ class TestMatch(TestCase):
             func, check_safe_exit=True, argument=RDHObject({ "foo": 39 })
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
         result = bootstrap_function(
             func, check_safe_exit=True, argument=RDHObject({ "foo": "hello" })
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "invalid")
 
     def test_to_string_from_int(self):
@@ -691,21 +738,20 @@ class TestMatch(TestCase):
         )
 
         result = bootstrap_function(func, check_safe_exit=True, argument=1)
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "one")
         result = bootstrap_function(func, check_safe_exit=True, argument=2)
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "two")
         result = bootstrap_function(func, check_safe_exit=True, argument=3)
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "three")
         result = bootstrap_function(func, check_safe_exit=True, argument=4)
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "four")
         result = bootstrap_function(func, check_safe_exit=True, argument=5)
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "invalid")
-
 
     def test_to_match_with_one_of_type_combo(self):
         func = function_lit(
@@ -731,20 +777,21 @@ class TestMatch(TestCase):
         )
 
         result = bootstrap_function(func, check_safe_exit=True, argument=2)
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "int is not a string")
         result = bootstrap_function(func, check_safe_exit=True, argument=True)
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "bool is not a string")
         result = bootstrap_function(func, check_safe_exit=True, argument="hello world")
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "hello world")
 
-        prepared_func = prepare(func, RDHObject({}), create_no_escape_flow_manager())
+        prepared_func = prepare(func, RDHObject({}), FrameManager())
         self.assertEquals(len(prepared_func.break_types), 1)
         self.assertTrue("return" in prepared_func.break_types)
         for return_break_type in prepared_func.break_types["return"]:
             self.assertTrue(StringType().is_copyable_from(return_break_type["out"]))
+
 
 class TestTryCatch(TestCase):
     def test_slightly_strange_try_catch(self):
@@ -758,10 +805,10 @@ class TestTryCatch(TestCase):
             )
         )
         result = bootstrap_function(func, argument="hello world")
-        self.assertEquals(result.mode, "exception")
+        self.assertEquals(result.caught_break_mode, "exception")
         self.assertEquals(result.value, "hello world")
         result = bootstrap_function(func, argument=41)
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_silly_tostring_casing(self):
@@ -802,19 +849,18 @@ class TestTryCatch(TestCase):
         )
 
         result = bootstrap_function(func, argument=1)
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "one")
         result = bootstrap_function(func, argument=2)
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "two")
         result = bootstrap_function(func, argument=3)
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "unknown")
         result = bootstrap_function(func, argument="hello")
-        self.assertEquals(result.mode, "exception")
+        self.assertEquals(result.caught_break_mode, "exception")
         self.assertIsInstance(result.value, RDHObject)
         self.assertEquals(result.value.type, "TypeError")
-
 
     def test_catch_real_exception(self):
         #  Function safely handles an internal exception
@@ -832,7 +878,7 @@ class TestTryCatch(TestCase):
             )
         )
         result = bootstrap_function(func, check_safe_exit=True)
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "DereferenceOp: invalid_dereference foo")
 
 
@@ -849,7 +895,7 @@ class TestUtilityMethods(TestCase):
             ), check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_misc2(self):
@@ -870,11 +916,12 @@ class TestUtilityMethods(TestCase):
             ), check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_fizzbuzz(self):
         pass
+
 
 class TestStatics(TestCase):
     def test_static_value_dereference(self):
@@ -884,102 +931,131 @@ class TestStatics(TestCase):
             ), check_safe_exit=True
         )
 
-        self.assertEquals(result.mode, "return")
+        self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
 
 class TestContinuations(TestCase):
     def test_single_restart(self):
         context = RDHObject({})
-        flow_manager = create_application_flow_manager()
+        frame_manager = FrameManager()
 
         func = prepare(
             function_lit(
                 no_value_type(), build_break_types(any_type(), yield_types={ "out": any_type(), "in": int_type() }),
                 return_op(addition_op(shift_op(literal_op("hello"), int_type()), literal_op(40)))
             ),
-            context, create_no_escape_flow_manager()
+            context, frame_manager
         ).close(None)
 
-        yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: func.invoke(NO_VALUE, new_fm))
+        def first():
+            func.invoke(NO_VALUE, frame_manager)
+        with frame_manager.capture("yield") as yielder:
+            first()
 
-        self.assertEquals(yielder.result, "hello")
+        self.assertEquals(yielder.value, "hello")
 
-        returner = flow_manager.capture("return", { "out": AnyType() }, lambda new_fm: yielder.restart_continuation.invoke(2, new_fm))
+        def second():
+            yielder.create_continuation(first, {}).invoke(2, frame_manager)
+        with frame_manager.capture("return") as returner:
+            second()
 
-        self.assertEquals(returner.result, 42)
+        self.assertEquals(returner.value, 42)
 
     def test_repeated_restart(self):
         context = RDHObject({})
-        flow_manager = create_application_flow_manager()
+        frame_manager = FrameManager()
 
         func = prepare(
             function_lit(
                 no_value_type(), build_break_types(int_type(), yield_types={ "out": any_type(), "in": int_type() }),
                 return_op(addition_op(shift_op(literal_op("first"), int_type()), shift_op(literal_op("second"), int_type())))
             ),
-            context, create_no_escape_flow_manager()
+            context, frame_manager
         ).close(None)
 
-        first_yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: func.invoke(NO_VALUE, new_fm))
-        self.assertEquals(first_yielder.result, "first")
+        def first():
+            func.invoke(NO_VALUE, frame_manager)
+        with frame_manager.capture("yield") as first_yielder:
+            first()
 
-        second_yielder = flow_manager.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_fm: first_yielder.restart_continuation.invoke(39, new_fm))
-        self.assertEquals(second_yielder.result, "second")
+        self.assertEquals(first_yielder.value, "first")
 
-        returner = flow_manager.capture("return", { "out": AnyType() }, lambda new_fm: second_yielder.restart_continuation.invoke(3, new_fm))
+        def second():
+            first_yielder_continuation = first_yielder.create_continuation(first, {})
+            first_yielder_continuation.invoke(39, frame_manager)
+        with frame_manager.capture("yield") as second_yielder:
+            second()
 
-        self.assertEquals(returner.result, 42)
+        self.assertEquals(second_yielder.value, "second")
+
+        def third():
+            second_yielder_continuation = second_yielder.create_continuation(second, {})
+            second_yielder_continuation.invoke(3, frame_manager)
+
+        with frame_manager.capture() as returner:
+            third()
+
+        self.assertEquals(returner.value, 42)
 
     def test_repeated_restart_with_outer_return_handling(self):
         context = RDHObject({})
-        flow_manager = create_application_flow_manager()
+        frame_manager = FrameManager()
 
         func = prepare(
             function_lit(
                 no_value_type(), build_break_types(int_type(), yield_types={ "out": any_type(), "in": int_type() }),
                 return_op(addition_op(shift_op(literal_op("first"), int_type()), shift_op(literal_op("second"), int_type())))
             ),
-            context, create_no_escape_flow_manager()
+            context, frame_manager
         ).close(None)
 
-        with flow_manager.capture("return", { "out": AnyType() }) as returner:
-            first_yielder = returner.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_bm: func.invoke(NO_VALUE, new_bm))
-            self.assertEquals(first_yielder.result, "first")
+        with frame_manager.capture("return") as return_capturer:
+            def first():
+                func.invoke(NO_VALUE, frame_manager)
+            with frame_manager.capture("yield") as first_yielder:
+                first()
+            self.assertEquals(first_yielder.value, "first")
 
-            second_yielder = returner.capture("yield", { "out": AnyType(), "in": IntegerType() }, lambda new_bm: first_yielder.restart_continuation.invoke(39, new_bm))
-            self.assertEquals(second_yielder.result, "second")
+            def second():
+                first_yielder.create_continuation(first, {}).invoke(39, frame_manager)
+            with frame_manager.capture("yield") as second_yielder:
+                second()
+            self.assertEquals(second_yielder.value, "second")
 
-            second_yielder.restart_continuation.invoke(3, returner)
+            second_yielder.create_continuation(second, {}).invoke(3, frame_manager)
 
-        self.assertEquals(returner.result, 42)
+        self.assertEquals(return_capturer.value, 42)
 
     def test_repeated_restart_while_using_restart_values(self):
         context = RDHObject({})
-        flow_manager = create_application_flow_manager()
+        frame_manager = FrameManager()
 
         func = prepare(
             function_lit(
                 no_value_type(), build_break_types(any_type(), yield_types={ "out": any_type(), "in": int_type() }),
                 return_op(addition_op(shift_op(literal_op(30), int_type()), shift_op(literal_op(10), int_type())))
             ),
-            context, create_no_escape_flow_manager()
+            context, frame_manager
         ).close(None)
 
-        first_yielder = flow_manager.capture(
-            "yield", { "out": AnyType(), "in": IntegerType() },
-            lambda new_fm: func.invoke(NO_VALUE, new_fm)
-        )
-        second_yielder = flow_manager.capture(
-            "yield", { "out": AnyType(), "in": IntegerType() },
-            lambda new_fm: first_yielder.restart_continuation.invoke(first_yielder.result + 1, new_fm)
-        )
-        returner = flow_manager.capture(
-            "return", { "out": AnyType() },
-            lambda new_fm: second_yielder.restart_continuation.invoke(second_yielder.result + 1, new_fm)
-        )
+        def first():
+            func.invoke(NO_VALUE, frame_manager)
+        with frame_manager.capture("yield") as first_yielder:
+            first()
 
-        self.assertEquals(returner.result, 42)
+        def second():
+            first_yielder.create_continuation(first, {}).invoke(first_yielder.value + 1, frame_manager)
+        with frame_manager.capture("yield") as second_yielder:
+            second()
+
+        def third():
+            second_yielder.create_continuation(second, {}).invoke(second_yielder.value + 1, frame_manager)
+        with frame_manager.capture("return") as returner:
+            third()
+
+        self.assertEquals(returner.value, 42)
+
 
 if __name__ == '__main__':
     set_debug(True)

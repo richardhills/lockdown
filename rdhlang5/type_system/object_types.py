@@ -1,5 +1,4 @@
 from collections import OrderedDict
-import json
 
 from rdhlang5.type_system.composites import InferredType, bind_type_to_value, \
     unbind_type_to_value, DefaultFactoryType, CompositeType, Composite
@@ -11,11 +10,10 @@ from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict, \
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.micro_ops import MicroOpType, MicroOp, \
     raise_micro_op_conflicts
-from rdhlang5.utils import is_debug
+from rdhlang5.utils import is_debug, MISSING
 
 
 WILDCARD = object()
-MISSING = object()
 
 def get_key_and_type(micro_op_type):
     return getattr(micro_op_type, "key", WILDCARD), getattr(micro_op_type, "type", MISSING)
@@ -751,6 +749,8 @@ class RDHObject(Composite, object):
         if initial_data is None:
             initial_data = {}
         for key, value in initial_data.items():
+            if value is MISSING:
+                raise FatalError()
             self.__dict__[key] = value
         manager = get_manager(self, "RDHObject")
         manager.default_factory = default_factory
