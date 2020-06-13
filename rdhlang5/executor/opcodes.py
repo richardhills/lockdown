@@ -33,7 +33,13 @@ EVALUATE_CAPTURE_TYPES = { "out": AnyType() }
 
 def evaluate(expression, context, frame_manager, immediate_context=None):
     if not is_debug():
-        mode, value, opcode, restart_type = expression.jump(context, frame_manager, immediate_context=immediate_context)
+        # Optimized version that avoids creating a Capturer object, but only works for values
+        try:
+            mode, value, opcode, restart_type = expression.jump(context, frame_manager, immediate_context=immediate_context)
+        except BreakException as b:
+            if b.mode == "value":
+                return b.value
+            raise
         if mode == "value":
             return value
         raise BreakException(mode, value, opcode, restart_type)
@@ -569,6 +575,8 @@ class AssignmentOp(Opcode):
             of, _ = frame.step("of", lambda: evaluate(self.of, context, frame_manager))
             reference, _ = frame.step("reference", lambda: evaluate(self.reference, context, frame_manager))
             rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, frame_manager))
+
+            #print "{}.{} = {}".format(of, reference, rvalue)
 
             manager = get_manager(of)
 
