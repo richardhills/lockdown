@@ -33,9 +33,7 @@ EVALUATE_CAPTURE_TYPES = { "out": AnyType() }
 
 def evaluate(expression, context, frame_manager, immediate_context=None):
     with frame_manager.capture("value") as result:
-        mode, value, opcode, restart_type = expression.jump(context, frame_manager, immediate_context=immediate_context)
-        if not result.attempt_capture(mode, value, restart_type):
-            raise BreakException(mode, value, opcode, restart_type)
+        result.attempt_capture_or_raise(*expression.jump(context, frame_manager, immediate_context=immediate_context))
     return result.value
 
 
@@ -622,6 +620,8 @@ class InsertOp(Opcode):
         self.of = enrich_opcode(data.of, visitor)
         self.reference = enrich_opcode(data.reference, visitor)
         self.rvalue = enrich_opcode(data.rvalue, visitor)
+        self.direct_micro_ops = {}
+        self.wildcard_micro_ops = {}
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
@@ -653,9 +653,13 @@ class InsertOp(Opcode):
                             micro_op = None
                             if isinstance(of_type, CompositeType) and reference is not None:
                                 micro_op = of_type.get_micro_op_type(("insert", reference))
+                                if micro_op:
+                                    self.direct_micro_ops[reference] = micro_op
 
                                 if not micro_op:
                                     micro_op = of_type.get_micro_op_type(("insert-wildcard",))
+                                    if micro_op:
+                                        self.wildcard_micro_ops[reference] = micro_op
 
                             if micro_op:
                                 if not micro_op.type.is_copyable_from(rvalue_type):
@@ -688,7 +692,7 @@ class InsertOp(Opcode):
             manager = get_manager(of)
 
             try:
-                direct_micro_op_type = manager.get_micro_op_type(("insert", reference))
+                direct_micro_op_type = self.direct_micro_ops.get(reference, None)
                 if direct_micro_op_type:
                     if self.invalid_rvalue_error and not direct_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
                         return frame.exception(self.INVALID_RVALUE())
@@ -696,13 +700,29 @@ class InsertOp(Opcode):
                     micro_op = direct_micro_op_type.create(manager)
                     return frame.value(micro_op.invoke(rvalue, trust_caller=True))
 
-                wildcard_micro_op_type = manager.get_micro_op_type(("insert-wildcard",))
+                wildcard_micro_op_type = self.wildcard_micro_ops.get(reference, None)
                 if wildcard_micro_op_type:
                     if self.invalid_rvalue_error and not wildcard_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
                         return frame.exception(self.INVALID_RVALUE())
 
                     micro_op = wildcard_micro_op_type.create(manager)
                     return frame.value(micro_op.invoke(reference, rvalue, trust_caller=True))
+
+#                 direct_micro_op_type = manager.get_micro_op_type(("insert", reference))
+#                 if direct_micro_op_type:
+#                     if self.invalid_rvalue_error and not direct_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
+#                         return frame.exception(self.INVALID_RVALUE())
+# 
+#                     micro_op = direct_micro_op_type.create(manager)
+#                     return frame.value(micro_op.invoke(rvalue, trust_caller=True))
+# 
+#                 wildcard_micro_op_type = manager.get_micro_op_type(("insert-wildcard",))
+#                 if wildcard_micro_op_type:
+#                     if self.invalid_rvalue_error and not wildcard_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
+#                         return frame.exception(self.INVALID_RVALUE())
+# 
+#                     micro_op = wildcard_micro_op_type.create(manager)
+#                     return frame.value(micro_op.invoke(reference, rvalue, trust_caller=True))
 
                 return frame.exception(self.INVALID_LVALUE())
             except InvalidAssignmentType:
@@ -745,13 +765,13 @@ def BinaryOp(name, symbol, func, argument_type, result_type):
                 def get_lvalue():
                     lvalue, _ = frame.step("lvalue", lambda: evaluate(self.lvalue, context, frame_manager))
                     if not argument_type.is_copyable_from(get_type_of_value(lvalue)):
-                        raise frame.exception(self.MISSING_OPERANDS())
+                        return frame.exception(self.MISSING_OPERANDS())
                     return lvalue
     
                 def get_rvalue():
                     rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, frame_manager))
                     if not argument_type.is_copyable_from(get_type_of_value(rvalue)):
-                        raise frame.exception(self.MISSING_OPERANDS())
+                        return frame.exception(self.MISSING_OPERANDS())
                     return rvalue
 
 #                print "{} {} {}".format(get_lvalue(), symbol, get_rvalue())
@@ -797,9 +817,7 @@ class TransformOp(Opcode):
         with frame_manager.get_next_frame(self) as frame:
             if self.expression:
                 with frame_manager.capture(self.input) as capture_result:
-                    mode, value, opcode, restart_type = self.expression.jump(context, frame_manager)
-                    if not capture_result.attempt_capture(mode, value, restart_type):
-                        raise BreakException(mode, value, opcode, restart_type)
+                    capture_result.attempt_capture_or_raise(*self.expression.jump(context, frame_manager))
 
                 return frame.unwind(self.output, capture_result.value, None)
             else:
@@ -909,10 +927,10 @@ class ResetOp(Opcode):
                 def enter_expression():
                     return self.opcode.jump(context, frame_manager)
                 with frame_manager.capture("yield") as capture_result:
-                    enter_expression()
+                    capture_result.attempt_capture_or_raise(*enter_expression())
 
                 if capture_result.caught_frames is MISSING:
-                    raise frame.exception(self.MISSING_IN_BREAK_TYPE())
+                    return frame.exception(self.MISSING_IN_BREAK_TYPE())
 
                 restart_continuation = capture_result.create_continuation(
                     enter_expression, self.continuation_break_types
@@ -922,13 +940,13 @@ class ResetOp(Opcode):
                 function, _ = frame.step("function", lambda: evaluate(self.function, context, frame_manager))
 
                 def enter_function():
-                    function.invoke(argument, frame_manager)
+                    return function.invoke(argument, frame_manager)
 
                 with frame_manager.capture("yield") as capture_result:
-                    enter_function()
+                    capture_result.attempt_capture_or_raise(*enter_function())
 
                 if capture_result.caught_frames is MISSING:
-                    raise frame.exception(self.MISSING_IN_BREAK_TYPE())
+                    return frame.exception(self.MISSING_IN_BREAK_TYPE())
 
                 if isinstance(function, Continuation):
                     # Avoid using enter_function as the callback, hook into the original
@@ -1085,7 +1103,7 @@ class PrepareOp(Opcode):
             try:
                 function = prepare(function_data, context, frame_manager, immediate_context)
             except PreparationException as e:
-                raise frame.exception(self.PREPARATION_ERROR())
+                return frame.exception(self.PREPARATION_ERROR())
 
             return frame.value(function)
 
@@ -1157,8 +1175,7 @@ class StaticOp(Opcode):
     def lazy_initialize(self, context, frame_manager, immediate_context):
         if self.value is MISSING and self.mode is MISSING:
             with frame_manager.capture() as capture_result:
-                mode, value, _, restart_type = self.code.jump(context, frame_manager, immediate_context)
-                capture_result.attempt_capture(mode, value, restart_type)
+                capture_result.attempt_capture_or_raise(*self.code.jump(context, frame_manager, immediate_context))
 
             self.value = capture_result.value
             self.mode = capture_result.caught_break_mode

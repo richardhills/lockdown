@@ -12,7 +12,7 @@ from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict, \
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.micro_ops import MicroOpType, MicroOp, \
     raise_micro_op_conflicts
-from rdhlang5.utils import MISSING
+from rdhlang5.utils import MISSING, is_debug
 
 
 WILDCARD = object()
@@ -850,7 +850,7 @@ def RDHListType(element_types, wildcard_type, allow_push=True, allow_wildcard_in
             micro_ops[("delete-wildcard",)] = ListWildcardDeletterType(True)
         if allow_wildcard_insert:
             micro_ops[("insert-wildcard",)] = ListWildcardInsertType(wildcard_type, not is_sparse, False)
-            micro_ops[("get", "insert")] = BuiltInFunctionGetterType(ListInsertFunctionType(wildcard_type))
+            micro_ops[("get", "insert")] = BuiltInFunctionGetterType(ListInsertFunctionType(micro_ops[("insert-wildcard",)], wildcard_type))
 
     return CompositeType(micro_ops)
 

@@ -8,8 +8,11 @@ import unittest.main
 from rdhlang5.executor.bootstrap import bootstrap_function
 from rdhlang5.executor.exceptions import PreparationException
 from rdhlang5.parser.parser import parse
+from rdhlang5.type_system.default_composite_types import DEFAULT_LIST_TYPE
+from rdhlang5.type_system.list_types import RDHList
+from rdhlang5.type_system.managers import get_manager
 from rdhlang5.type_system.object_types import RDHObject
-from rdhlang5.utils import set_debug
+from rdhlang5.utils import set_debug, set_bind_runtime_contexts
 
 
 class TestJSONParsing(TestCase):
@@ -307,8 +310,9 @@ class TestBuiltIns(TestCase):
             }
         """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True)
-        list(result.value)
         self.assertEquals(result.caught_break_mode, "value")
+        self.assertIsInstance(result.value, RDHList)
+        get_manager(result.value).add_composite_type(DEFAULT_LIST_TYPE)
         self.assertEquals(len(result.value), 4)
         # The values come out in reverse due to the list function using insert(0, element) repeatedly. Need an append(element) operator
         self.assertEquals(list(result.value), [ 4, 3, 2, 1 ])
@@ -446,9 +450,9 @@ class TestSpeed(TestCase):
         code = parse("""
             function() {
                 int i = 0, j = 0;
-                while(i < 10) {
+                while(i < 20) {
                     j = 0;
-                    while(j < 10) {
+                    while(j < 20) {
                         int foo = i * j;
                         int bar = i * j;
                         int baz = i * j;
@@ -460,7 +464,7 @@ class TestSpeed(TestCase):
             }
         """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True)
-        self.assertEquals(result.value, 10 * 10)
+        self.assertEquals(result.value, 20 * 20)
         end = time()
         self.assertLess(end - start, 25)
         print end - start
@@ -661,7 +665,3 @@ class TestEuler(TestCase):
         result = bootstrap_function(code, check_safe_exit=True)
         self.assertEquals(result.value, 837799)
 
-if __name__ == "__main__":
-    #import sys;sys.argv = ['', 'Test.testName']
-    set_debug(True)
-    unittest.main()

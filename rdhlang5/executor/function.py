@@ -20,7 +20,7 @@ from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
 from rdhlang5.type_system.exceptions import FatalError, InvalidInferredType
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType
-from rdhlang5.utils import MISSING, is_debug
+from rdhlang5.utils import MISSING, is_debug, bind_runtime_contexts
 
 
 def prepare(data, outer_context, flow_manager, immediate_context=None):
@@ -399,7 +399,7 @@ class ClosedFunction(RDHFunction):
                     "static": self.static,
                     "types": self.types_context
                 },
-                    bind=self.local_initialization_context_type,
+                    bind=self.local_initialization_context_type if bind_runtime_contexts() else None,
                     instantiator_has_verified_bind=True,
                     debug_reason="local-initialization-context"
                 )
@@ -410,7 +410,8 @@ class ClosedFunction(RDHFunction):
             logger.debug( "ClosedFunction:local_initializer")
             local, _ = frame.step("local", lambda: evaluate(self.local_initializer, new_context, frame_manager))
 
-            frame.step("remove_local_initialization_context_type", lambda: get_manager(new_context).remove_composite_type(self.local_initialization_context_type))
+            if bind_runtime_contexts():
+                frame.step("remove_local_initialization_context_type", lambda: get_manager(new_context).remove_composite_type(self.local_initialization_context_type))
 
             logger.debug( "ClosedFunction:local_check")
             if is_debug() and not self.local_type.is_copyable_from(get_type_of_value(local)):
@@ -426,7 +427,7 @@ class ClosedFunction(RDHFunction):
                     "local": local,
                     "types": self.types_context
                 },
-                    bind=self.execution_context_type,
+                    bind=self.execution_context_type if bind_runtime_contexts() else None,
                     instantiator_has_verified_bind=True,
                     debug_reason="code-execution-context"
                 )
@@ -438,7 +439,8 @@ class ClosedFunction(RDHFunction):
             logger.debug("ClosedFunction:code_execute")
             result, _ = frame.step("code", lambda: evaluate(self.code, new_context, frame_manager))
 
-            frame.step("remove_code_execution_context_type", lambda: get_manager(new_context).remove_composite_type(self.execution_context_type))
+            if bind_runtime_contexts():
+                frame.step("remove_code_execution_context_type", lambda: get_manager(new_context).remove_composite_type(self.execution_context_type))
 
             return frame.value(result)
 
@@ -482,7 +484,7 @@ class Continuation(RDHFunction):
         self.restarted = True
         if self.frame_manager.fully_wound():
             self.frame_manager.prepare_restart(self.frames, restart_value)
-        raise self.callback()
+        return self.callback()
 
 
 def format_break_type(break_type):

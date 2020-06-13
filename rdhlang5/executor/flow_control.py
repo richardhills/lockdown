@@ -80,6 +80,10 @@ class Capturer(object):
             return True
         return False
 
+    def attempt_capture_or_raise(self, mode, value, opcode, restart_type):
+        if not self.attempt_capture(mode, value, restart_type):
+            raise BreakException(mode, value, opcode, restart_type)
+
     def create_continuation(self, callback, break_types):
         from rdhlang5.executor.function import Continuation
  

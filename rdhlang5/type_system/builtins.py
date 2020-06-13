@@ -50,7 +50,7 @@ class BuiltInFunctionGetter(MicroOp):
         raise_micro_op_conflicts(self, [ ], self.target_manager.get_flattened_micro_op_types())
         return self.function_class(self.target_manager)
 
-def ListInsertFunctionType(wildcard_type):
+def ListInsertFunctionType(insert_micro_op_type, wildcard_type):
     from rdhlang5.executor.function import RDHFunction
     from rdhlang5.type_system.list_types import RDHListType
     break_types = BreakTypesFactory(None)
@@ -77,7 +77,7 @@ def ListInsertFunctionType(wildcard_type):
                 argument_manager = get_manager(argument)
                 argument_manager.add_composite_type(our_type.argument_type)
 
-                insert_micro_op_type = self.target_manager.get_micro_op_type(("insert-wildcard",))
+#                insert_micro_op_type = self.target_manager.get_micro_op_type(("insert-wildcard",))
 
                 if not insert_micro_op_type:
                     raise FatalError()

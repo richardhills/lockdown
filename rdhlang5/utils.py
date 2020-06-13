@@ -53,5 +53,21 @@ def set_debug(debug):
         raise FatalError()
     DEBUG_MODE = debug
 
+BIND_RUNTIME_CONTEXTS = None
+
+def bind_runtime_contexts():
+    if is_debug():
+        return True
+    global BIND_RUNTIME_CONTEXTS
+    if BIND_RUNTIME_CONTEXTS is None:
+        raise FatalError()
+    return BIND_RUNTIME_CONTEXTS
+
+def set_bind_runtime_contexts(bind):
+    global BIND_RUNTIME_CONTEXTS
+    if BIND_RUNTIME_CONTEXTS is not None:
+        raise FatalError()
+    BIND_RUNTIME_CONTEXTS = bind
+
 NO_VALUE = InternalMarker("NO_VALUE")
 MISSING = InternalMarker("MISSING")

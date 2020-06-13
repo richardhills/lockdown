@@ -1056,7 +1056,3 @@ class TestContinuations(TestCase):
 
         self.assertEquals(returner.value, 42)
 
-
-if __name__ == '__main__':
-    set_debug(True)
-    main()

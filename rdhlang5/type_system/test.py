@@ -1100,7 +1100,3 @@ class TestCoreTypes(TestCase):
         self.assertFalse(BooleanType().is_copyable_from(UnitType(5)))
         self.assertFalse(IntegerType().is_copyable_from(UnitType(True)))
 
-
-if __name__ == '__main__':
-    set_debug(True)
-    main()
