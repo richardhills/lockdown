@@ -170,6 +170,7 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False)
             raise BootstrapException("\n\n".join(error_msgs))
 
         closed_function = open_function.close(context)
-        capture_result.attempt_capture(*closed_function.invoke(argument, frame_manager))
+        mode, value, _, restart_type = closed_function.invoke(argument, frame_manager)
+        capture_result.attempt_capture(mode, value, restart_type)
 
     return capture_result

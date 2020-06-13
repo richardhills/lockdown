@@ -580,11 +580,9 @@ class TestEuler(TestCase):
         code = parse("""
             function() {
                 int sumSquares = 0, sum = 0;
-                int i = 1;
-                while(i <= 100) {
+                for(var i from range([ 1, 101 ])) {
                     sumSquares = sumSquares + i * i;
                     sum = sum + i;
-                    i = i + 1;
                 };
                 return sum * sum - sumSquares;
             }
@@ -593,7 +591,10 @@ class TestEuler(TestCase):
         self.assertEquals(result.value, 25164150)
 
     def test_9(self):
-        return # this test takes about 30 seconds in non-debug mode
+        return
+        import cProfile, pstats, StringIO    
+        pr = cProfile.Profile()    
+        pr.enable()
         code = parse("""
             function() {
                 int a = 1;
@@ -605,7 +606,7 @@ class TestEuler(TestCase):
                             break;
                         };
                         int test = a * a + b * b - c * c;
-                        if(test < 0) {
+                        if(test > 0) {
                             break;
                         };
                         if(test == 0) {
@@ -620,6 +621,12 @@ class TestEuler(TestCase):
         result = bootstrap_function(code, check_safe_exit=True)
         self.assertEquals(result.value, 31875000)
 
+        pr.disable()    
+        s = StringIO.StringIO()    
+        sortby = 'cumulative'    
+        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)    
+        ps.print_stats()    
+        pr.dump_stats("profile_test9")
 
     def test_14(self):
         return # This test is currently too slow - requires caching of results to speed up

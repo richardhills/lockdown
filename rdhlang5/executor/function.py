@@ -449,6 +449,8 @@ class ClosedFunction(RDHFunction):
         )
 
 class Continuation(RDHFunction):
+    __slots__ = [ "frame_manager", "frames", "callback", "restart_type", "break_types" ]
+
     def __init__(self, frame_manager, frames, callback, restart_type, break_types):
         if isinstance(restart_type, TopType):
             pass

@@ -56,6 +56,8 @@ class BreakTypesFactory(object):
         return result
 
 class Capturer(object):
+    __slots__ = [ "frame_manager", "break_mode", "top_level", "value", "caught_break_mode", "caught_restart_type", "caught_frames" ]
+
     def __init__(self, frame_manager, break_mode=None, top_level=False):
         self.frame_manager = frame_manager
         self.break_mode = break_mode
@@ -64,7 +66,7 @@ class Capturer(object):
         self.value = MISSING
         self.caught_break_mode = MISSING
         self.caught_restart_type = MISSING
-        self.caught_frames = MISSING 
+        self.caught_frames = MISSING
 
     def attempt_capture(self, mode, value, restart_type):
         if self.break_mode is None or self.break_mode == mode:
@@ -94,6 +96,8 @@ class Capturer(object):
         return False
 
 class FrameManager(object):
+    __slots__ = [ "frames", "index", "mode" ]
+
     def __init__(self):
         self.frames = []
         self.index = 0
@@ -114,6 +118,9 @@ class FrameManager(object):
 
     def fully_wound(self):
         return self.index == len(self.frames)
+
+    def pop_frame(self):
+        del self.frames[-1]
 
     def capture(self, break_mode=None, top_level=False):
         return Capturer(self, break_mode, top_level)
@@ -157,6 +164,9 @@ class Frame(object):
     def unwind(self, mode, value, restart_type):
         if restart_type:
             self.manager.mode = "shift"
+
+        if not is_debug() and restart_type is None:
+            return mode, value, self.opcode, None
         raise BreakException(mode, value, self.opcode, restart_type)
 
     def value(self, value):
@@ -234,13 +244,13 @@ class Frame(object):
 
         exc_type_allows_restart = exc_value and isinstance(exc_value, BreakException) and exc_value.restart_type is not None
 
-        if self.manager.mode == "reset":
+        if is_debug() and self.manager.mode == "reset":
             raise FatalError()
 
-        if not exc_type_allows_restart and self.manager.index == len(self.manager.frames):
-            del self.manager.frames[-1]
+        if not exc_type_allows_restart and self.manager.fully_wound():
+            self.manager.pop_frame()
         else:
-            if exc_type_allows_restart:
+            if is_debug() and exc_type_allows_restart:
                 if self.manager.mode not in ("shift"):
                     raise FatalError()
 
