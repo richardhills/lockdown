@@ -32,9 +32,15 @@ EVALUATE_CAPTURE_TYPES = { "out": AnyType() }
 
 
 def evaluate(expression, context, frame_manager, immediate_context=None):
-    with frame_manager.capture("value") as result:
-        result.attempt_capture_or_raise(*expression.jump(context, frame_manager, immediate_context=immediate_context))
-    return result.value
+    if not is_debug():
+        mode, value, opcode, restart_type = expression.jump(context, frame_manager, immediate_context=immediate_context)
+        if mode == "value":
+            return value
+        raise BreakException(mode, value, opcode, restart_type)
+    else:
+        with frame_manager.capture("value") as result:
+            result.attempt_capture_or_raise(*expression.jump(context, frame_manager, immediate_context=immediate_context))
+        return result.value
 
 
 def get_expression_break_types(expression, context, frame_manager, immediate_context=None, target_break_mode="value"):
