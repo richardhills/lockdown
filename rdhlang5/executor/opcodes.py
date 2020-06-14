@@ -460,6 +460,8 @@ class DereferenceOp(Opcode):
             of = frame.step("of", lambda: evaluate(self.of, context, frame_manager))
             reference = frame.step("reference", lambda: evaluate(self.reference, context, frame_manager))
 
+#            print "{}".format(reference)
+
             manager = get_manager(of)
 
             if manager is None:
@@ -601,6 +603,8 @@ class AssignmentOp(Opcode):
             of = frame.step("of", lambda: evaluate(self.of, context, frame_manager))
             reference = frame.step("reference", lambda: evaluate(self.reference, context, frame_manager))
             rvalue = frame.step("rvalue", lambda: evaluate(self.rvalue, context, frame_manager))
+
+            #print "{} = {}".format(reference, rvalue)
 
             manager = get_manager(of)
 
@@ -780,6 +784,7 @@ def BinaryOp(name, symbol, func, argument_type, result_type):
             super(_BinaryOp, self).__init__(data, visitor)
             self.lvalue = enrich_opcode(self.data.lvalue, visitor)
             self.rvalue = enrich_opcode(self.data.rvalue, visitor)
+            self.missing_operands_exception = True
 
         def get_break_types(self, context, frame_manager, immediate_context=None):
             break_types = BreakTypesFactory(self)

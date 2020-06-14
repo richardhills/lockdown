@@ -595,41 +595,31 @@ class TestEuler(TestCase):
         self.assertEquals(result.value, 25164150)
 
     def test_9(self):
-#        import cProfile, pstats, StringIO    
-#        pr = cProfile.Profile()    
-#        pr.enable()
         code = parse("""
-            function() {
-                int a = 1;
-                while(a < 998) {
-                    int b = 1;
-                    while(b < a) {
-                        int c = 1000 - a - b;
-                        if(c <= 0) {
-                            break;
-                        };
-                        int test = a * a + b * b - c * c;
-                        if(test > 0) {
-                            break;
-                        };
-                        if(test == 0) {
-                            return a * b * c;
-                        };
-                        b = b + 1;
-                    };
-                    a = a + 1;
-                };
-            }
+             function() {
+                 int a = 1, topb = 998;
+                 while(a < 998) {
+                     int b = topb;
+                     while(b > a) {
+                         int c = 1000 - a - b;
+                         int test = a * a + b * b - c * c;
+                         if(test < 0) {
+                             topb = b + 1;
+                             break;
+                         };
+                         if(test == 0) {
+                             return a * b * c;
+                         };
+                         b = b - 1;
+                     };
+                     a = a + 1;
+                 };
+             }
+
         """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True)
         self.assertEquals(result.value, 31875000)
 
-#        pr.disable()    
-#        s = StringIO.StringIO()    
-#        sortby = 'cumulative'    
-#        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)    
-#        ps.print_stats()    
-#        pr.dump_stats("profile_test9")
 
     def test_14(self):
         return # This test is currently too slow - requires caching of results to speed up
