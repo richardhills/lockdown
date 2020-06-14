@@ -56,8 +56,6 @@ def set_debug(debug):
 BIND_RUNTIME_CONTEXTS = None
 
 def bind_runtime_contexts():
-    if is_debug():
-        return True
     global BIND_RUNTIME_CONTEXTS
     if BIND_RUNTIME_CONTEXTS is None:
         raise FatalError()

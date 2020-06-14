@@ -29,7 +29,7 @@ def build_closed_function_type(data):
     return ClosedFunctionType(
         enrich_type(data.argument),
         RDHDict({
-            mode: [ enrich_break_type(b) for b in break_types ]
+            mode: RDHList([ enrich_break_type(b) for b in break_types ])
             for mode, break_types in data.break_types.items()
         }, bind=DEFAULT_DICT_TYPE, debug_reason="type")
     )

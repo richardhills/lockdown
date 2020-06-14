@@ -17,7 +17,9 @@ from rdhlang5.type_system.core_types import Type, NoValueType, IntegerType, \
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     DEFAULT_DICT_TYPE, READONLY_DEFAULT_OBJECT_TYPE, \
     readonly_rich_composite_type
+from rdhlang5.type_system.dict_types import RDHDict
 from rdhlang5.type_system.exceptions import FatalError, InvalidInferredType
+from rdhlang5.type_system.list_types import RDHList
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType
 from rdhlang5.utils import MISSING, is_debug, bind_runtime_contexts
@@ -115,9 +117,9 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
 
     actual_break_types_factory.merge(local_other_break_types)
 
-    declared_break_types = {
-        mode: [enrich_break_type(break_type) for break_type in break_types] for mode, break_types in static.break_types.__dict__.items()
-    }
+    declared_break_types = RDHDict({
+        mode: RDHList([enrich_break_type(break_type) for break_type in break_types]) for mode, break_types in static.break_types.__dict__.items()
+    })
 
     get_manager(declared_break_types).add_composite_type(DEFAULT_DICT_TYPE)
 
@@ -376,6 +378,8 @@ class ClosedFunction(RDHFunction):
         self.local_initialization_context_type = local_initialization_context_type
         self.execution_context_type = execution_context_type
 
+        self._is_restartable = None
+
     def get_type(self):
         return ClosedFunctionType(
             self.argument_type, self.break_types
@@ -385,6 +389,19 @@ class ClosedFunction(RDHFunction):
     def allowed_break_types(self):
         return self.break_types
 
+    @property
+    def is_restartable(self):
+        if self._is_restartable is None:
+            if not self.allowed_break_types:
+                return True
+            for break_types in self.allowed_break_types.values():
+                for break_type in break_types:
+                    if "in" in break_type:
+                        self._is_restartable = True
+                        return True
+            self._is_restartable = False
+        return self._is_restartable
+
     def invoke(self, argument, frame_manager):
         logger.debug("ClosedFunction")
         if is_debug() and not self.argument_type.is_copyable_from(get_type_of_value(argument)):
@@ -392,7 +409,7 @@ class ClosedFunction(RDHFunction):
         logger.debug("ClosedFunction:argument_check")
 
         with frame_manager.get_next_frame(self) as frame:
-            new_context, _ = frame.step("local_initialization_context", lambda: RDHObject({
+            new_context= frame.step("local_initialization_context", lambda: RDHObject({
                     "prepare": self.prepare_context,
                     "outer": self.outer_context,
                     "argument": argument,
@@ -408,7 +425,7 @@ class ClosedFunction(RDHFunction):
             get_manager(new_context)._context_type = self.local_initialization_context_type
 
             logger.debug( "ClosedFunction:local_initializer")
-            local, _ = frame.step("local", lambda: evaluate(self.local_initializer, new_context, frame_manager))
+            local= frame.step("local", lambda: evaluate(self.local_initializer, new_context, frame_manager))
 
             if bind_runtime_contexts():
                 frame.step("remove_local_initialization_context_type", lambda: get_manager(new_context).remove_composite_type(self.local_initialization_context_type))
@@ -419,7 +436,7 @@ class ClosedFunction(RDHFunction):
                 raise FatalError()
 
             logger.debug( "ClosedFunction:code_context")
-            new_context, _ = frame.step("code_execution_context", lambda: RDHObject({
+            new_context= frame.step("code_execution_context", lambda: RDHObject({
                     "prepare": self.prepare_context,
                     "outer": self.outer_context,
                     "argument": argument,
@@ -437,7 +454,7 @@ class ClosedFunction(RDHFunction):
             get_manager(new_context)._context_type = self.execution_context_type
 
             logger.debug("ClosedFunction:code_execute")
-            result, _ = frame.step("code", lambda: evaluate(self.code, new_context, frame_manager))
+            result= frame.step("code", lambda: evaluate(self.code, new_context, frame_manager))
 
             if bind_runtime_contexts():
                 frame.step("remove_code_execution_context_type", lambda: get_manager(new_context).remove_composite_type(self.execution_context_type))

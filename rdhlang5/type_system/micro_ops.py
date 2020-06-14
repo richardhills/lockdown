@@ -19,6 +19,9 @@ class MicroOpType(object):
     def create(self, target_manager):
         raise NotImplementedError(self)
 
+    def invoke(self, *args):
+        raise NotImplementedError(self)
+
     @abstractmethod
     def can_be_derived_from(self, other_micro_op_type):
         raise NotImplementedError(self)

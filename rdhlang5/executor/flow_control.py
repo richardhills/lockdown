@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+from __builtin__ import True
 from _collections import defaultdict
 
 from rdhlang5.type_system.core_types import Type
+from rdhlang5.type_system.dict_types import RDHDict
 from rdhlang5.type_system.exceptions import FatalError
 from rdhlang5.type_system.managers import get_type_of_value
 from rdhlang5.utils import MISSING, InternalMarker, is_debug
@@ -51,7 +53,7 @@ class BreakTypesFactory(object):
 
     def build(self):
         result = dict(self.result)
-        if is_debug() and self.opcode:
+        if self.opcode:
             self.opcode.allowed_break_types = result
         return result
 
@@ -109,6 +111,9 @@ class FrameManager(object):
 
     def get_next_frame(self, opcode):
         if self.fully_wound():
+            if not is_debug() and not opcode.is_restartable:
+                return PASS_THROUGH_FRAME
+
             if self.mode != "wind":
                 raise FatalError()
             return Frame(self, opcode)
@@ -149,6 +154,36 @@ class FrameManager(object):
 
         self.frames[-1].restart_value = restart_value
 
+class PassThroughFrame(object):
+    def step(self, name, func):
+        return func()
+
+    def unwind(self, mode, value, restart_type):
+        if is_debug():
+            raise FatalError()
+
+        if restart_type is None:
+            return mode, value, None, None
+        raise BreakException(mode, value, None, restart_type)
+
+    def value(self, value):
+        #return self.unwind("value", value, None)
+        return "value", value, None, None
+
+    def exception(self, value):
+        return self.unwind("exception", value, None)
+
+    def yield_(self, value, restart_type=None):
+        return self.unwind("yield", value, restart_type)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+PASS_THROUGH_FRAME = PassThroughFrame()
+
 class Frame(object):
     __slots__ = [ "manager", "opcode", "locals", "restart_value" ]
 
@@ -182,18 +217,12 @@ class Frame(object):
     def yield_(self, value, restart_type=None):
         return self.unwind("yield", value, restart_type)
 
-    def attempt_close_or_raise(self, mode, value, opcode, restart_type):
-        if not self.attempt_close(mode, value):
-            raise BreakException(mode, value, opcode, restart_type)
-
     def step(self, name, func):
         locals = self.locals
         value = locals.get(name, MISSING)
         if value is MISSING:
             locals[name] = value = func()
-            return value, True
-        else:
-            return value, False
+        return value
 
     def has_restart_value(self):
         return self.restart_value is not MISSING
@@ -207,7 +236,7 @@ class Frame(object):
         return restart_value
 
     def __enter__(self):
-        if self.manager.index == len(self.manager.frames):
+        if self.manager.fully_wound():
             if self.manager.mode not in ("wind", "reset"):
                 raise FatalError()
             self.manager.mode = "wind"

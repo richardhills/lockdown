@@ -70,6 +70,19 @@ def ListInsertFunctionType(insert_micro_op_type, wildcard_type):
         def allowed_break_types(self):
             return function_type.break_types
 
+        @property
+        def is_restartable(self):
+            if self._is_restartable is None:
+                if not self.allowed_break_types:
+                    return True
+                for break_types in self.allowed_break_types.values():
+                    for break_type in break_types:
+                        if "in" in break_type:
+                            self._is_restartable = True
+                            return True
+                self._is_restartable = False
+            return self._is_restartable
+
         def invoke(self, argument, frame_manager):
             with frame_manager.get_next_frame(self) as frame:
                 our_type = self.get_type()

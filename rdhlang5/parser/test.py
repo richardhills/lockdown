@@ -595,10 +595,9 @@ class TestEuler(TestCase):
         self.assertEquals(result.value, 25164150)
 
     def test_9(self):
-        return
-        import cProfile, pstats, StringIO    
-        pr = cProfile.Profile()    
-        pr.enable()
+#        import cProfile, pstats, StringIO    
+#        pr = cProfile.Profile()    
+#        pr.enable()
         code = parse("""
             function() {
                 int a = 1;
@@ -625,12 +624,12 @@ class TestEuler(TestCase):
         result = bootstrap_function(code, check_safe_exit=True)
         self.assertEquals(result.value, 31875000)
 
-        pr.disable()    
-        s = StringIO.StringIO()    
-        sortby = 'cumulative'    
-        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)    
-        ps.print_stats()    
-        pr.dump_stats("profile_test9")
+#        pr.disable()    
+#        s = StringIO.StringIO()    
+#        sortby = 'cumulative'    
+#        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)    
+#        ps.print_stats()    
+#        pr.dump_stats("profile_test9")
 
     def test_14(self):
         return # This test is currently too slow - requires caching of results to speed up

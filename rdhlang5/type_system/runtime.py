@@ -2,6 +2,8 @@ import ctypes
 import gc
 import inspect
 import types
+from rdhlang5.utils import bind_runtime_contexts
+from rdhlang5.type_system.exceptions import FatalError
 
 
 def proxy0(data):
@@ -56,6 +58,9 @@ def replace_all_refs(old_obj, new_obj):
 
         Inspired by https://benkurtovic.com/2015/01/28/python-object-replacement.html
     """
+
+    if not bind_runtime_contexts():
+        raise FatalError()
 
     gc.collect()
     

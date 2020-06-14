@@ -860,6 +860,7 @@ class TestTryCatch(TestCase):
         result = bootstrap_function(func, argument="hello")
         self.assertEquals(result.caught_break_mode, "exception")
         self.assertIsInstance(result.value, RDHObject)
+        get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
         self.assertEquals(result.value.type, "TypeError")
 
     def test_catch_real_exception(self):

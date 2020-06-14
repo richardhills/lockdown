@@ -228,6 +228,11 @@ class ObjectGetterType(ObjectMicroOpType):
     def create(self, target_manager):
         return ObjectGetter(target_manager, self.key, self.type, self.key_error, self.type_error)
 
+    def invoke(self, target_manager, trust_caller):
+        if is_debug():
+            raise FatalError()
+        return target_manager.obj.__dict__[self.key]
+
     def can_be_derived_from(self, other_micro_op_type):
         return (
             (not other_micro_op_type.key_error or self.key_error)
@@ -440,13 +445,13 @@ class ObjectWildcardSetter(MicroOp):
         self.type_error = type_error
 
     def invoke(self, key, new_value, trust_caller=False, **kwargs):
-        new_value_type = get_type_of_value(new_value)
-
         if is_debug() or not trust_caller or self.key_error or self.type_error:
             raise_micro_op_conflicts(self, [ key, new_value ], self.target_manager.get_flattened_micro_op_types())
 
-        if (is_debug() or not trust_caller) and not self.type.is_copyable_from(new_value_type):
-            raise FatalError()
+        if (is_debug() or not trust_caller):
+            new_value_type = get_type_of_value(new_value)
+            if not self.type.is_copyable_from(new_value_type):
+                raise FatalError()
 
         self.target_manager.unbind_key(key)
 
@@ -469,6 +474,17 @@ class ObjectSetterType(ObjectMicroOpType):
 
     def create(self, target_manager):
         return ObjectSetter(target_manager, self.key, self.type, self.key_error, self.type_error)
+
+    def invoke(self, target_manager, new_value, trust_caller):
+        if is_debug():
+            raise FatalError()
+
+        target_manager.unbind_key(self.key)
+
+        target_manager.obj.__dict__[self.key] = new_value
+
+        target_manager.bind_key(self.key)
+
 
     def can_be_derived_from(self, other_micro_op_type):
         return (
@@ -541,13 +557,13 @@ class ObjectSetter(MicroOp):
         self.type_error = type_error
 
     def invoke(self, new_value, trust_caller=False, **kwargs):
-        new_value_type = get_type_of_value(new_value)
-
         if is_debug() or not trust_caller or self.key_error or self.type_error:
             raise_micro_op_conflicts(self, [ new_value ], self.target_manager.get_flattened_micro_op_types())
 
-        if (is_debug() or not trust_caller) and not self.type.is_copyable_from(new_value_type):
-            raise FatalError()
+        if (is_debug() or not trust_caller):
+            new_value_type = get_type_of_value(new_value)
+            if not self.type.is_copyable_from(new_value_type):
+                raise FatalError()
 
         self.target_manager.unbind_key(self.key)
 

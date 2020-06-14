@@ -3,7 +3,8 @@ import weakref
 from rdhlang5.type_system.core_types import Type, UnitType, NoValueType
 from rdhlang5.type_system.exceptions import FatalError, InvalidData
 from rdhlang5.type_system.runtime import replace_all_refs
-from rdhlang5.utils import InternalMarker, NO_VALUE
+from rdhlang5.utils import InternalMarker, NO_VALUE, is_debug,\
+    bind_runtime_contexts
 
 
 weak_objs_by_id = {}
@@ -13,8 +14,6 @@ managers_by_id = {}
 def get_manager(obj, trigger=None):
     manager = managers_by_id.get(id(obj), None)
     if manager:
-#        if is_debug():
-#            logger.debug("{}:{}:{}:{}:{}".format(len(managers_by_id), trigger, id(obj), type(obj), getattr(manager, "debug_reason", None)))
         return manager
 
     if isinstance(obj, InternalMarker):
@@ -41,21 +40,29 @@ def get_manager(obj, trigger=None):
     if isinstance(obj, Composite):
         manager = CompositeObjectManager(obj)
     elif isinstance(obj, list):
+        if not bind_runtime_contexts():
+            raise FatalError()
         from rdhlang5.type_system.list_types import RDHList
         obj = RDHList(obj)
         replace_all_refs(old_obj, obj)            
         manager = CompositeObjectManager(obj)
     elif isinstance(obj, tuple):
+        if is_debug():
+            raise FatalError()
         from rdhlang5.type_system.list_types import RDHList
         obj = RDHList(obj)
         replace_all_refs(old_obj, obj)            
         manager = CompositeObjectManager(obj)
     elif isinstance(obj, dict):
+        if not bind_runtime_contexts():
+            raise FatalError()
         from rdhlang5.type_system.dict_types import RDHDict
         obj = RDHDict(obj, debug_reason="monkey-patch")
         replace_all_refs(old_obj, obj)
         manager = CompositeObjectManager(obj)
     elif isinstance(obj, object) and hasattr(obj, "__dict__"):
+        if not bind_runtime_contexts():
+            raise FatalError()
         from rdhlang5.type_system.object_types import RDHObject
         original_type = obj.__class__
         new_type = type("RDH{}".format(original_type.__name__), (RDHObject, original_type,), {})

@@ -26,7 +26,7 @@ from rdhlang5.type_system.object_types import RDHObject, RDHObjectType, \
     ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
     ObjectWildcardSetterType
 from rdhlang5.utils import MISSING, NO_VALUE, is_debug, one_shot_memoize
-
+from pydoc import visiblename
 
 EVALUATE_CAPTURE_TYPES = { "out": AnyType() }
 
@@ -52,22 +52,23 @@ def evaluate(expression, context, frame_manager, immediate_context=None):
 def get_expression_break_types(expression, context, frame_manager, immediate_context=None, target_break_mode="value"):
     other_break_types = dict(expression.get_break_types(context, frame_manager, immediate_context))
 
-    if not isinstance(other_break_types, dict):
-        raise FatalError()
-    for mode, break_types in other_break_types.items():
-        if not isinstance(mode, basestring):
+    if is_debug():
+        if not isinstance(other_break_types, dict):
             raise FatalError()
-        if not isinstance(break_types, (list, tuple)):
-            raise FatalError()
-        for break_type in break_types:
-            if not isinstance(break_type, (dict, RDHDict)):
+        for mode, break_types in other_break_types.items():
+            if not isinstance(mode, basestring):
                 raise FatalError()
-            if "out" not in break_type:
+            if not isinstance(break_types, (list, tuple)):
                 raise FatalError()
-            if not isinstance(break_type["out"], Type):
-                raise FatalError()
-            if "in" in break_type and not isinstance(break_type["in"], Type):
-                raise FatalError()
+            for break_type in break_types:
+                if not isinstance(break_type, (dict, RDHDict)):
+                    raise FatalError()
+                if "out" not in break_type:
+                    raise FatalError()
+                if not isinstance(break_type["out"], Type):
+                    raise FatalError()
+                if "in" in break_type and not isinstance(break_type["in"], Type):
+                    raise FatalError()
 
     target_break_types = other_break_types.pop(target_break_mode, MISSING)
     return target_break_types, other_break_types
@@ -115,6 +116,7 @@ class Opcode(object):
     def __init__(self, data, visitor):
         self.data = data
         self.allowed_break_types = None
+        self._is_restartable = None
 
 #    __metaclass__ = ABCMeta
 
@@ -126,11 +128,25 @@ class Opcode(object):
     def jump(self, context, frame_manager, immediate_context=None):
         raise NotImplementedError()
 
+    @property
+    def is_restartable(self):
+        if self._is_restartable is None:
+            if not self.allowed_break_types:
+                return True
+            for break_types in self.allowed_break_types.values():
+                for break_type in break_types:
+                    if "in" in break_type:
+                        self._is_restartable = True
+                        return True
+            self._is_restartable = False
+        return self._is_restartable
+
     def get_line_and_column(self):
         return getattr(self.data, "line", None), getattr(self.data, "column", None)
 
     def to_code(self):
         return str(type(self))
+
 
 class Nop(Opcode):
     def get_break_types(self, context, frame_manager, immediate_context=None):
@@ -144,6 +160,7 @@ class Nop(Opcode):
 
     def to_code(self):
         return "nop"
+
 
 class LiteralOp(Opcode):
     def __init__(self, data, visitor):
@@ -167,6 +184,7 @@ class LiteralOp(Opcode):
 
     def to_code(self):
         return self.value
+
 
 class ObjectTemplateOp(Opcode):
     def __init__(self, data, visitor):
@@ -222,9 +240,10 @@ class ObjectTemplateOp(Opcode):
         with frame_manager.get_next_frame(self) as frame:
             result = {}
             for key, opcode in self.opcodes.items():
-                result[key], _ = frame.step(key, lambda: evaluate(opcode, context, frame_manager))
+                result[key] = frame.step(key, lambda: evaluate(opcode, context, frame_manager))
 
             return frame.value(RDHObject(result, debug_reason="object-template"))
+
 
 class DictTemplateOp(Opcode):
     def __init__(self, data, visitor):
@@ -271,7 +290,7 @@ class DictTemplateOp(Opcode):
         with frame_manager.get_next_frame(self) as frame:
             result = {}
             for key, opcode in self.opcodes.items():
-                result[key], _ = frame.step(key, lambda: evaluate(opcode, context, frame_manager))
+                result[key] = frame.step(key, lambda: evaluate(opcode, context, frame_manager))
 
             return frame.value(RDHDict(result))
 
@@ -332,7 +351,7 @@ class ListTemplateOp(Opcode):
         with frame_manager.get_next_frame(self) as frame:
             result = []
             for index, opcode in enumerate(self.opcodes):
-                new_value, _ = frame.step(index, lambda: evaluate(opcode, context, frame_manager))
+                new_value = frame.step(index, lambda: evaluate(opcode, context, frame_manager))
                 result.append(new_value)
 
             return frame.value(RDHList(result))
@@ -377,6 +396,7 @@ class ContextOp(Opcode):
 
     def to_code(self):
         return "Context"
+
 
 class DereferenceOp(Opcode):
     INVALID_DEREFERENCE = TypeErrorFactory("DereferenceOp: invalid_dereference {reference}")
@@ -437,8 +457,8 @@ class DereferenceOp(Opcode):
 
     def jump(self, context, frame_manager, immediate_context=None):
         with frame_manager.get_next_frame(self) as frame:
-            of, _ = frame.step("of", lambda: evaluate(self.of, context, frame_manager))
-            reference, _ = frame.step("reference", lambda: evaluate(self.reference, context, frame_manager))
+            of = frame.step("of", lambda: evaluate(self.of, context, frame_manager))
+            reference = frame.step("reference", lambda: evaluate(self.reference, context, frame_manager))
 
             manager = get_manager(of)
 
@@ -448,11 +468,15 @@ class DereferenceOp(Opcode):
             try:
                 direct_micro_op_type = self.direct_micro_ops.get(reference, None)
                 if direct_micro_op_type:
+                    if not is_debug():
+                        return frame.value(direct_micro_op_type.invoke(manager, True))
                     micro_op = direct_micro_op_type.create(manager)
                     return frame.value(micro_op.invoke(trust_caller=True))
 
                 wildcard_micro_op_type = self.wildcard_micro_ops.get(reference, None)
                 if wildcard_micro_op_type:
+                    if not is_debug():
+                        return frame.value(wildcard_micro_op_type.invoke(manager, reference, True))
                     micro_op = wildcard_micro_op_type.create(manager)
                     return frame.value(micro_op.invoke(reference, trust_caller=True))
 
@@ -478,6 +502,7 @@ class DereferenceOp(Opcode):
     def to_code(self):
         return "{}.{}".format(self.of.to_code(), self.reference.to_code())
 
+
 class DynamicDereferenceOp(Opcode):
     INVALID_DEREFERENCE = TypeErrorFactory("DynamicDereferenceOp: invalid_dereference")
 
@@ -502,6 +527,7 @@ class AssignmentOp(Opcode):
     INVALID_ASSIGNMENT = TypeErrorFactory("AssignmentOp: invalid_assignment")
 
     def __init__(self, data, visitor):
+        super(AssignmentOp, self).__init__(data, visitor)
         self.of = enrich_opcode(data.of, visitor)
         self.reference = enrich_opcode(data.reference, visitor)
         self.rvalue = enrich_opcode(data.rvalue, visitor)
@@ -572,11 +598,9 @@ class AssignmentOp(Opcode):
 
     def jump(self, context, frame_manager, immediate_context=None):
         with frame_manager.get_next_frame(self) as frame:
-            of, _ = frame.step("of", lambda: evaluate(self.of, context, frame_manager))
-            reference, _ = frame.step("reference", lambda: evaluate(self.reference, context, frame_manager))
-            rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, frame_manager))
-
-            #print "{}.{} = {}".format(of, reference, rvalue)
+            of = frame.step("of", lambda: evaluate(self.of, context, frame_manager))
+            reference = frame.step("reference", lambda: evaluate(self.reference, context, frame_manager))
+            rvalue = frame.step("rvalue", lambda: evaluate(self.rvalue, context, frame_manager))
 
             manager = get_manager(of)
 
@@ -586,17 +610,18 @@ class AssignmentOp(Opcode):
                     if (is_debug() or self.invalid_rvalue_error) and not direct_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
                         return frame.exception(self.INVALID_RVALUE())
 
-                    try:
-                        micro_op = direct_micro_op_type.create(manager)
-                        return frame.value(micro_op.invoke(rvalue, trust_caller=True))
-                    except TypeError:
-                        raise FatalError()
+                    if not is_debug():
+                        return frame.value(direct_micro_op_type.invoke(manager, rvalue, True))
+                    micro_op = direct_micro_op_type.create(manager)
+                    return frame.value(micro_op.invoke(rvalue, trust_caller=True))
 
                 wildcard_micro_op_type = self.wildcard_micro_ops.get(reference, None)
                 if wildcard_micro_op_type:
                     if (is_debug() or self.invalid_rvalue_error) and not wildcard_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
                         return frame.exception(self.INVALID_RVALUE())
 
+                    if not is_debug():
+                        return frame.value(direct_micro_op_type.invoke(manager, rvalue, True))
                     micro_op = wildcard_micro_op_type.create(manager)
                     return frame.value(micro_op.invoke(reference, rvalue, trust_caller=True))
  
@@ -625,12 +650,14 @@ class AssignmentOp(Opcode):
     def to_code(self):
         return "{}.{} = {}".format(self.of.to_code(), self.reference.to_code(), self.rvalue.to_code())
 
+
 class InsertOp(Opcode):
     INVALID_LVALUE = TypeErrorFactory("InsertOp: invalid_lvalue")
     INVALID_RVALUE = TypeErrorFactory("InsertOp: invalid_rvalue")
     INVALID_ASSIGNMENT = TypeErrorFactory("InsertOp: invalid_assignment")
 
     def __init__(self, data, visitor):
+        super(InsertOp, self).__init__(data, visitor)
         self.of = enrich_opcode(data.of, visitor)
         self.reference = enrich_opcode(data.reference, visitor)
         self.rvalue = enrich_opcode(data.rvalue, visitor)
@@ -699,9 +726,9 @@ class InsertOp(Opcode):
 
     def jump(self, context, frame_manager, immediate_context=None):
         with frame_manager.get_next_frame(self) as frame:
-            of, _ = frame.step("of", lambda: evaluate(self.of, context, frame_manager))
-            reference, _ = frame.step("reference", lambda: evaluate(self.reference, context, frame_manager))
-            rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, frame_manager))
+            of = frame.step("of", lambda: evaluate(self.of, context, frame_manager))
+            reference = frame.step("reference", lambda: evaluate(self.reference, context, frame_manager))
+            rvalue = frame.step("rvalue", lambda: evaluate(self.rvalue, context, frame_manager))
 
             manager = get_manager(of)
 
@@ -769,7 +796,9 @@ def BinaryOp(name, symbol, func, argument_type, result_type):
 
             if lvalue_type is not MISSING and rvalue_type is not MISSING:
                 break_types.add("value", result_type)
+            self.missing_operands_exception = False
             if not argument_type.is_copyable_from(lvalue_type) or not argument_type.is_copyable_from(rvalue_type):
+                self.missing_operands_exception = True
                 break_types.add("exception", self.MISSING_OPERANDS.get_type())
 
             return break_types.build()
@@ -777,15 +806,15 @@ def BinaryOp(name, symbol, func, argument_type, result_type):
         def jump(self, context, frame_manager, immediate_context=None):
             with frame_manager.get_next_frame(self) as frame:
                 def get_lvalue():
-                    lvalue, _ = frame.step("lvalue", lambda: evaluate(self.lvalue, context, frame_manager))
-                    if not argument_type.is_copyable_from(get_type_of_value(lvalue)):
-                        return frame.exception(self.MISSING_OPERANDS())
+                    lvalue = frame.step("lvalue", lambda: evaluate(self.lvalue, context, frame_manager))
+                    if self.missing_operands_exception and not argument_type.is_copyable_from(get_type_of_value(lvalue)):
+                        raise BreakException(*frame.exception(self.MISSING_OPERANDS()))
                     return lvalue
     
                 def get_rvalue():
-                    rvalue, _ = frame.step("rvalue", lambda: evaluate(self.rvalue, context, frame_manager))
-                    if not argument_type.is_copyable_from(get_type_of_value(rvalue)):
-                        return frame.exception(self.MISSING_OPERANDS())
+                    rvalue = frame.step("rvalue", lambda: evaluate(self.rvalue, context, frame_manager))
+                    if self.missing_operands_exception and not argument_type.is_copyable_from(get_type_of_value(rvalue)):
+                        raise BreakException(*frame.exception(self.MISSING_OPERANDS()))
                     return rvalue
 
 #                print "{} {} {}".format(get_lvalue(), symbol, get_rvalue())
@@ -840,6 +869,7 @@ class TransformOp(Opcode):
 
     def to_code(self):
         return "transform({} -> {}\n {}\n)".format(self.input, self.output, self.expression.to_code())
+
 
 class ShiftOp(Opcode):
     def __init__(self, data, visitor):
@@ -950,8 +980,8 @@ class ResetOp(Opcode):
                     enter_expression, self.continuation_break_types
                 )
             else:
-                argument, _ = frame.step("argument", lambda: evaluate(self.argument, context, frame_manager))
-                function, _ = frame.step("function", lambda: evaluate(self.function, context, frame_manager))
+                argument = frame.step("argument", lambda: evaluate(self.argument, context, frame_manager))
+                function = frame.step("function", lambda: evaluate(self.function, context, frame_manager))
 
                 def enter_function():
                     return function.invoke(argument, frame_manager)
@@ -1011,12 +1041,13 @@ class CommaOp(Opcode):
         value = NO_VALUE
         with frame_manager.get_next_frame(self) as frame:
             for index, opcode in enumerate(self.opcodes):
-                value, _ = frame.step(index, lambda: evaluate(opcode, context, frame_manager))
+                value = frame.step(index, lambda: evaluate(opcode, context, frame_manager))
 
             return frame.value(value)
 
     def to_code(self):
         return ";\n".join([ o.to_code() for o in self.opcodes ])
+
 
 class LoopOp(Opcode):
     def __init__(self, data, visitor):
@@ -1027,14 +1058,17 @@ class LoopOp(Opcode):
         return other_break_types
 
     def jump(self, context, frame_manager, immediate_context=None):
-        while True:
-            evaluate(self.code, context, frame_manager)
+        code = self.code
+        while 1:
+            evaluate(code, context, frame_manager)
 
     def to_code(self):
         return "Loop {{ {} }}".format(self.code.to_code())
 
+
 class ConditionalOp(Opcode):
     def __init__(self, data, visitor):
+        super(ConditionalOp, self).__init__(data, visitor)
         self.condition = enrich_opcode(data.condition, visitor)
         self.when_true = enrich_opcode(data.when_true, visitor)
         self.when_false = enrich_opcode(data.when_false, visitor)
@@ -1068,14 +1102,12 @@ class ConditionalOp(Opcode):
 
     def jump(self, context, frame_manager, immediate_context=None):
         with frame_manager.get_next_frame(self) as frame:
-            if frame.manager.mode == "reset":
-                pass
-            condition, _ = frame.step("condition", lambda: evaluate(self.condition, context, frame_manager))
+            condition = frame.step("condition", lambda: evaluate(self.condition, context, frame_manager))
 
             if condition is True:
-                result, true_new = frame.step("true_result", lambda: evaluate(self.when_true, context, frame_manager))
+                result = frame.step("true_result", lambda: evaluate(self.when_true, context, frame_manager))
             elif condition is False:
-                result, _ = frame.step("false_result", lambda: evaluate(self.when_false, context, frame_manager))
+                result = frame.step("false_result", lambda: evaluate(self.when_false, context, frame_manager))
             else:
                 # be more liberal
                 raise FatalError()
@@ -1163,8 +1195,8 @@ class CloseOp(Opcode):
 
     def jump(self, context, frame_manager, immediate_context=None):
         with frame_manager.get_next_frame(self) as frame:
-            open_function, _ = frame.step("function", lambda: evaluate(self.function, context, frame_manager, immediate_context))
-            outer_context, _ = frame.step("outer", lambda: evaluate(self.outer_context, context, frame_manager, immediate_context))
+            open_function = frame.step("function", lambda: evaluate(self.function, context, frame_manager, immediate_context))
+            outer_context = frame.step("outer", lambda: evaluate(self.outer_context, context, frame_manager, immediate_context))
 
             from rdhlang5.executor.function import OpenFunction
 
@@ -1178,6 +1210,7 @@ class CloseOp(Opcode):
 
     def to_code(self):
         return "Closed_{}".format(self.function.to_code())
+
 
 class StaticOp(Opcode):
     def __init__(self, data, visitor):
@@ -1210,6 +1243,7 @@ class StaticOp(Opcode):
         if not self.value:
             raise FatalError()
         return self.value.to_code()
+
 
 class InvokeOp(Opcode):
     INVALID_FUNCTION_TYPE = TypeErrorFactory("Invoke: invalid_function_type")
@@ -1245,7 +1279,9 @@ class InvokeOp(Opcode):
             else:
                 break_types.add("exception", self.INVALID_FUNCTION_TYPE.get_type(), opcode=self)
 
+            self.invalid_argument_type_exception = False
             if not argument_type_is_safe:
+                self.invalid_argument_type_exception = True
                 break_types.add("exception", self.INVALID_ARGUMENT_TYPE.get_type(), opcode=self)
 
         return break_types.build()
@@ -1255,12 +1291,12 @@ class InvokeOp(Opcode):
         from rdhlang5.executor.function import RDHFunction
 
         with frame_manager.get_next_frame(self) as frame:
-            function, _ = frame.step("function", lambda: evaluate(self.function, context, frame_manager))
-            argument, _ = frame.step("argument", lambda: evaluate(self.argument, context, frame_manager))
+            function = frame.step("function", lambda: evaluate(self.function, context, frame_manager))
+            argument = frame.step("argument", lambda: evaluate(self.argument, context, frame_manager))
 
             if not isinstance(function, RDHFunction):
                 return frame.exception(self.INVALID_FUNCTION_TYPE())
-            if not function.get_type().argument_type.is_copyable_from(get_type_of_value(argument)):
+            if self.invalid_argument_type_exception and not function.get_type().argument_type.is_copyable_from(get_type_of_value(argument)):
                 return frame.exception(self.INVALID_ARGUMENT_TYPE()) 
 
             return function.invoke(argument, frame_manager)
@@ -1269,6 +1305,7 @@ class InvokeOp(Opcode):
 
     def to_code(self):
         return "invoke({},\n{}\n)".format(self.argument.to_code(), self.function.to_code())
+
 
 class MatchOp(Opcode):
     NO_MATCH = TypeErrorFactory("Match: no_match")
@@ -1308,11 +1345,11 @@ class MatchOp(Opcode):
 
     def jump(self, context, frame_manager, immediate_context=None):
         with frame_manager.get_next_frame(self) as frame:
-            value, _ = frame.step("value", lambda: evaluate(self.value, context, frame_manager))
+            value = frame.step("value", lambda: evaluate(self.value, context, frame_manager))
             value_type = get_type_of_value(value)
 
             for index, matcher in enumerate(self.matchers):
-                matcher_function, _ = frame.step(index, lambda: evaluate(matcher, context, frame_manager))
+                matcher_function = frame.step(index, lambda: evaluate(matcher, context, frame_manager))
                 if matcher_function.argument_type.is_copyable_from(value_type):
                     return matcher_function.invoke(value, frame_manager)
             else:
