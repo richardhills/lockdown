@@ -61,6 +61,7 @@ def ListInsertFunctionType(insert_micro_op_type, wildcard_type):
     class ListInsertFunction(RDHFunction):
         def __init__(self, target_manager):
             self.target_manager = target_manager
+            self._is_restartable = None
 
         @classmethod
         def get_type(self):

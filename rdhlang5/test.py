@@ -14,7 +14,6 @@ from rdhlang5.type_system.test import *
 from rdhlang5.utils import set_bind_runtime_contexts, set_debug
 
 if __name__ == "__main__":
-    #import sys;sys.argv = ['', 'Test.testName']
     set_debug(True)
-    set_bind_runtime_contexts(True) # Some tests rely on this being True
+    set_bind_runtime_contexts(True)
     unittest.main()

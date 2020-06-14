@@ -40,28 +40,28 @@ def get_manager(obj, trigger=None):
     if isinstance(obj, Composite):
         manager = CompositeObjectManager(obj)
     elif isinstance(obj, list):
-        if not bind_runtime_contexts():
+        if is_debug() and not bind_runtime_contexts():
             raise FatalError()
         from rdhlang5.type_system.list_types import RDHList
         obj = RDHList(obj)
         replace_all_refs(old_obj, obj)            
         manager = CompositeObjectManager(obj)
     elif isinstance(obj, tuple):
-        if is_debug():
+        if is_debug() and not bind_runtime_contexts():
             raise FatalError()
         from rdhlang5.type_system.list_types import RDHList
         obj = RDHList(obj)
         replace_all_refs(old_obj, obj)            
         manager = CompositeObjectManager(obj)
     elif isinstance(obj, dict):
-        if not bind_runtime_contexts():
+        if is_debug() and not bind_runtime_contexts():
             raise FatalError()
         from rdhlang5.type_system.dict_types import RDHDict
         obj = RDHDict(obj, debug_reason="monkey-patch")
         replace_all_refs(old_obj, obj)
         manager = CompositeObjectManager(obj)
     elif isinstance(obj, object) and hasattr(obj, "__dict__"):
-        if not bind_runtime_contexts():
+        if is_debug() and not bind_runtime_contexts():
             raise FatalError()
         from rdhlang5.type_system.object_types import RDHObject
         original_type = obj.__class__

@@ -470,14 +470,14 @@ class DereferenceOp(Opcode):
             try:
                 direct_micro_op_type = self.direct_micro_ops.get(reference, None)
                 if direct_micro_op_type:
-                    if not is_debug():
+                    if False:# not is_debug():
                         return frame.value(direct_micro_op_type.invoke(manager, True))
                     micro_op = direct_micro_op_type.create(manager)
                     return frame.value(micro_op.invoke(trust_caller=True))
 
                 wildcard_micro_op_type = self.wildcard_micro_ops.get(reference, None)
                 if wildcard_micro_op_type:
-                    if not is_debug():
+                    if False:#not is_debug():
                         return frame.value(wildcard_micro_op_type.invoke(manager, reference, True))
                     micro_op = wildcard_micro_op_type.create(manager)
                     return frame.value(micro_op.invoke(reference, trust_caller=True))
@@ -614,7 +614,7 @@ class AssignmentOp(Opcode):
                     if (is_debug() or self.invalid_rvalue_error) and not direct_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
                         return frame.exception(self.INVALID_RVALUE())
 
-                    if not is_debug():
+                    if False:#not is_debug():
                         return frame.value(direct_micro_op_type.invoke(manager, rvalue, True))
                     micro_op = direct_micro_op_type.create(manager)
                     return frame.value(micro_op.invoke(rvalue, trust_caller=True))
@@ -624,7 +624,7 @@ class AssignmentOp(Opcode):
                     if (is_debug() or self.invalid_rvalue_error) and not wildcard_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
                         return frame.exception(self.INVALID_RVALUE())
 
-                    if not is_debug():
+                    if False:#not is_debug():
                         return frame.value(direct_micro_op_type.invoke(manager, rvalue, True))
                     micro_op = wildcard_micro_op_type.create(manager)
                     return frame.value(micro_op.invoke(reference, rvalue, trust_caller=True))
