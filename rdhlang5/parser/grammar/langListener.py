@@ -67,12 +67,30 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#assignmentOrInitializationLvalue.
+    def enterAssignmentOrInitializationLvalue(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#assignmentOrInitializationLvalue.
+    def exitAssignmentOrInitializationLvalue(self, ctx):
+        pass
+
+
     # Enter a parse tree produced by langParser#localVariableDeclaration.
     def enterLocalVariableDeclaration(self, ctx):
         pass
 
     # Exit a parse tree produced by langParser#localVariableDeclaration.
     def exitLocalVariableDeclaration(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#toObjectDestructuring.
+    def enterToObjectDestructuring(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#toObjectDestructuring.
+    def exitToObjectDestructuring(self, ctx):
         pass
 
 

@@ -38,6 +38,15 @@ class CompositeType(Type):
         self.is_revconst = is_revconst
         self.name = name or "unknown"
 
+#         if is_debug():
+#             for micro_op_type in micro_op_types.values():
+#                 micro_op_type_type = getattr(micro_op_type, "type", None)
+#                 if not micro_op_type_type:
+#                     continue
+#                 for micro_op_type_subtype in unwrap_types(micro_op_type_type):
+#                     if isinstance(micro_op_type_subtype, CompositeType) and micro_op_type_subtype.is_revconst != is_revconst:
+#                         raise FatalError()
+
     def replace_inferred_types(self, other):
         if not isinstance(other, CompositeType):
             return self
@@ -61,21 +70,16 @@ class CompositeType(Type):
             return self
 
         potential_replacement_opcodes = {}
-        need_to_replace = False
 
         for key, micro_op_type in self.micro_op_types.items():
             potential_replacement_opcodes[key] = micro_op_type.reify_revconst_types(self.micro_op_types)
-            need_to_replace = need_to_replace or bool(micro_op_type is not potential_replacement_opcodes[key])
 
-        if need_to_replace:
-            return CompositeType(
-                micro_op_types=potential_replacement_opcodes,
-                initial_data=self.initial_data,
-                is_revconst=self.is_revconst,
-                name="reified<{}>".format(self.name)
-            )
-        else:
-            return self
+        return CompositeType(
+            micro_op_types=potential_replacement_opcodes,
+            initial_data=self.initial_data,
+            is_revconst=False,
+            name="reified<{}>".format(self.name)
+        )
 
     def get_micro_op_type(self, tag):
         return self.micro_op_types.get(tag, None)
@@ -304,6 +308,9 @@ class CompositeObjectManager(object):
 
     def add_composite_type(self, type, caller_has_verified_type=False):
         type_id = id(type)
+
+        if type.is_revconst:
+            raise FatalError()
 
         new = self.attached_type_counts.get(type_id, 0) == 0 
 

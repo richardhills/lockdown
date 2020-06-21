@@ -84,8 +84,14 @@ symbolInitialization
    : SYMBOL '=' expression
    ;
 
+assignmentOrInitializationLvalue
+   : SYMBOL
+   | expression SYMBOL
+   ;
+
 codeBlock
    : expression symbolInitialization (',' symbolInitialization)* ';' codeBlock? # localVariableDeclaration
+   | '{' assignmentOrInitializationLvalue (',' assignmentOrInitializationLvalue)* '}' '=' expression ';' codeBlock? # toObjectDestructuring
    | 'static' symbolInitialization ';' codeBlock? # staticValueDeclaration
    | 'typedef' expression SYMBOL ';' codeBlock? # typedef
 /*   | 'import' SYMBOL ';' codeBlock? # importStatement */
@@ -131,7 +137,7 @@ expression
    ;
 
 objectTemplate
-   : '{' objectPropertyPair? (';' objectPropertyPair)* '}'
+   : '{' objectPropertyPair? (',' objectPropertyPair)* '}'
    ;
 
 objectPropertyPair

@@ -40,8 +40,18 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#assignmentOrInitializationLvalue.
+    def visitAssignmentOrInitializationLvalue(self, ctx):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#localVariableDeclaration.
     def visitLocalVariableDeclaration(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#toObjectDestructuring.
+    def visitToObjectDestructuring(self, ctx):
         return self.visitChildren(ctx)
 
 

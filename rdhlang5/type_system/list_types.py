@@ -77,6 +77,12 @@ class ListWildcardGetterType(ListMicroOpType):
             and self.type.is_copyable_from(other_micro_op_type.type)
         )
 
+    def reify_revconst_types(self, other_micro_op_types):
+        reified_type_to_use = self.type.reify_revconst_types()
+        if reified_type_to_use != self.type:
+            return ListWildcardGetterType(self.key, reified_type_to_use, self.key_error, self.type_error)
+        return self
+
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, ListWildcardGetterType):
             if isinstance(self.type, InferredType):
@@ -222,6 +228,12 @@ class ListGetterType(ListMicroOpType):
             and self.type.is_copyable_from(other_micro_op_type.type)
         )
 
+    def reify_revconst_types(self, other_micro_op_types):
+        reified_type_to_use = self.type.reify_revconst_types()
+        if reified_type_to_use != self.type:
+            return ListGetterType(self.key, reified_type_to_use, self.key_error, self.type_error)
+        return self
+
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, ListGetterType):
             if isinstance(self.type, InferredType):
@@ -229,7 +241,7 @@ class ListGetterType(ListMicroOpType):
             return self
         new_type = self.type.replace_inferred_types(other_micro_op_type.type)
         if new_type is not self.type:
-            return ListGetterType(new_type, key_error=self.key_error, type_error=self.type_error)
+            return ListGetterType(self.key, new_type, key_error=self.key_error, type_error=self.type_error)
         return self
 
     def bind(self, source_type, key, target_manager):
@@ -386,6 +398,12 @@ class ListWildcardSetterType(ListMicroOpType):
             and other_micro_op_type.type.is_copyable_from(self.type)
         )
 
+    def reify_revconst_types(self, other_micro_op_types):
+        reified_type_to_use = self.type.reify_revconst_types()
+        if reified_type_to_use != self.type:
+            return ListWildcardSetterType(reified_type_to_use, self.key_error, self.type_error)
+        return self
+
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, ListWildcardSetterType):
             if isinstance(self.type, InferredType):
@@ -467,6 +485,12 @@ class ListSetterType(ListMicroOpType):
             and other_micro_op_type.type.is_copyable_from(self.type)
         )
 
+    def reify_revconst_types(self, other_micro_op_types):
+        reified_type_to_use = self.type.reify_revconst_types()
+        if reified_type_to_use != self.type:
+            return ListSetterType(self.key, reified_type_to_use, self.key_error, self.type_error)
+        return self
+
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, ListSetterType):
             if isinstance(self.type, InferredType):
@@ -474,7 +498,7 @@ class ListSetterType(ListMicroOpType):
             return self
         new_type = self.type.replace_inferred_types(other_micro_op_type.type)
         if new_type is not self.type:
-            return ListSetterType(new_type, key_error=self.key_error, type_error=self.type_error)
+            return ListSetterType(self.key, new_type, key_error=self.key_error, type_error=self.type_error)
         return self
 
     def bind(self, source_type, key, target):

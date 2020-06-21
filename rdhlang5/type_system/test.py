@@ -7,7 +7,7 @@ from rdhlang5.type_system.core_types import IntegerType, UnitType, StringType, \
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     rich_composite_type
 from rdhlang5.type_system.dict_types import DictGetterType
-from rdhlang5.type_system.exceptions import MicroOpTypeConflict
+from rdhlang5.type_system.exceptions import MicroOpTypeConflict, FatalError
 from rdhlang5.type_system.list_types import RDHListType, RDHList, SPARSE_ELEMENT
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.object_types import ObjectGetterType, ObjectSetterType, \
@@ -223,7 +223,7 @@ class TestRevConstType(TestCase):
         }, is_revconst=True)
 
         obj = TestObject({ "foo": "hello" })
-        with self.assertRaises(MicroOpTypeConflict):
+        with self.assertRaises(FatalError):
             get_manager(obj).add_composite_type(rev_const_type)
 
     def test_rev_const_narrowing(self):

@@ -78,6 +78,14 @@ class RDHLang5Visitor(langVisitor):
             self.visit(ctx.expression())
         )
 
+    def visitAssignmentOrInitializationLvalue(self, ctx):
+        symbol = ctx.SYMBOL().getText()
+        type = ctx.expression()
+        if type:
+            type = self.visit(type)
+            return (type, symbol)
+        return symbol
+
     def visitLocalVariableDeclaration(self, ctx):
         type = self.visit(ctx.expression())
 
@@ -89,7 +97,7 @@ class RDHLang5Visitor(langVisitor):
             name, initial_value = self.visit(symbol_initialization)
 
             new_code_block = CodeBlockBuilder(
-                local_variable_types={ name: type },
+                local_variable_type=object_type({ name: type }),
                 local_initializer=object_template_op({ name: initial_value })
             )
             if remaining_code:
@@ -97,6 +105,41 @@ class RDHLang5Visitor(langVisitor):
             remaining_code = new_code_block
 
         return new_code_block
+
+    def visitToObjectDestructuring(self, ctx):
+        lvalues = [self.visit(l) for l in ctx.assignmentOrInitializationLvalue()]
+        rvalue = self.visit(ctx.expression())
+
+        code_block = ctx.codeBlock()
+        if code_block:
+            code_block = self.visit(code_block)
+
+        assignments = [n for n in lvalues if isinstance(n, basestring)]
+        initializers = [n for n in lvalues if isinstance(n, tuple)]
+
+        local_variable_types = {}
+        local_variable_initializers = {}
+
+        for type, name in initializers:
+            local_variable_types[name] = type
+            local_variable_initializers[name] = dereference("outer", "local", "_temp", name)
+
+        code_block = CodeBlockBuilder(
+                local_variable_type=object_type(local_variable_types),
+                local_initializer=object_template_op(local_variable_initializers)
+            ).chain(code_block, get_debug_info(ctx))
+
+        code_block = CodeBlockBuilder(
+            local_variable_type=inferred_type(),
+            local_initializer=object_template_op({
+                "_temp": rvalue
+            }),
+            code_expressions=[
+                unbound_assignment(name, dereference("local", "_temp", name)) for name in assignments
+            ]
+        ).chain(code_block, get_debug_info(ctx))
+
+        return code_block
 
     def visitStaticValueDeclaration(self, ctx):
         remaining_code = self.visit(ctx.codeBlock())
@@ -406,14 +449,14 @@ class CodeBlockBuilder(object):
     def __init__(
         self,
         code_expressions=MISSING,
-        local_variable_types=MISSING,
+        local_variable_type=MISSING,
         local_initializer=MISSING,
         extra_statics=MISSING,
         argument_type_expression=MISSING,
         breaks_types=MISSING
     ):
         self.code_expressions = code_expressions
-        self.local_variable_types = local_variable_types
+        self.local_variable_type = local_variable_type
         self.local_initializer = local_initializer
         self.extra_statics = extra_statics
         self.argument_type_expression = argument_type_expression
@@ -422,6 +465,9 @@ class CodeBlockBuilder(object):
     def chain(self, other, debug_info):
         can_merge_code_blocks = True
 
+        if other is None:
+            return self
+
         if other.argument_type_expression is not MISSING:
             # If the inner function needs an argument, we have no mechanism to provide it
             raise FatalError()
@@ -429,17 +475,17 @@ class CodeBlockBuilder(object):
             # The newly created function ignores other.breaks_types, so let's fail early if they're provided
             raise FatalError()
 
-        if self.local_variable_types is not MISSING and other.local_variable_types is not MISSING:
+        if self.local_variable_type is not MISSING and other.local_variable_type is not MISSING:
             # We can only take local variables from one of the two functions
             can_merge_code_blocks = False
-        if self.code_expressions is not MISSING and other.local_variable_types is not MISSING:
+        if self.code_expressions is not MISSING and other.local_variable_type is not MISSING:
             # We have code that should execute before the other functions local variables are declared
             can_merge_code_blocks = False
         if self.extra_statics is not MISSING and other.extra_statics is not MISSING:
             # We can only take extra statics from one of the two functions
             can_merge_code_blocks = False
-        if self.extra_statics is not MISSING and other.local_variable_types is not MISSING:
-            # The inner local_variable_types might reference something from statics
+        if self.extra_statics is not MISSING and other.local_variable_type is not MISSING:
+            # The inner local_variable_type might reference something from statics
             can_merge_code_blocks = False
 
         new_code_expressions = None
@@ -448,18 +494,18 @@ class CodeBlockBuilder(object):
 
         if can_merge_code_blocks:
             new_code_expressions = our_code_expressions + other_code_expressions
-            local_variable_types = default(self.local_variable_types, MISSING, other.local_variable_types)
+            local_variable_type = default(self.local_variable_type, MISSING, other.local_variable_type)
             local_initializer = default(self.local_initializer, MISSING, other.local_initializer)
             extra_statics = default(self.extra_statics, MISSING, other.extra_statics)
         else:
             new_code_expressions = our_code_expressions + [ other.create("expression", debug_info) ]
-            local_variable_types = self.local_variable_types
+            local_variable_type = self.local_variable_type
             local_initializer = self.local_initializer
             extra_statics = self.extra_statics
 
         return CodeBlockBuilder(
             code_expressions=new_code_expressions,
-            local_variable_types=local_variable_types,
+            local_variable_type=local_variable_type,
             local_initializer=local_initializer,
             extra_statics=extra_statics,
             argument_type_expression=self.argument_type_expression,
@@ -469,7 +515,7 @@ class CodeBlockBuilder(object):
     def requires_function(self):
         return (
             self.argument_type_expression is not MISSING
-            or self.local_variable_types is not MISSING
+            or self.local_variable_type is not MISSING
             or self.extra_statics is not MISSING
             or self.breaks_types is not MISSING
         )
@@ -494,10 +540,10 @@ class CodeBlockBuilder(object):
         else:
             argument_type = no_value_type()
 
-        if self.local_variable_types is not MISSING:
-            local_type = object_type(self.local_variable_types)
+        if self.local_variable_type is not MISSING:
+            local_type = self.local_variable_type
         else:
-            local_type = object_type({})
+            local_type = object_type({}) # For future python local variables...
 
         if self.local_initializer is not MISSING:
             local_initializer = self.local_initializer

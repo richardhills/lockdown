@@ -515,7 +515,11 @@ class DynamicDereferenceOp(Opcode):
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
 
-        break_types.add("exception", self.INVALID_DEREFERENCE.get_type(reference=self.reference))
+        break_types.add(
+            "exception",
+            self.INVALID_DEREFERENCE.get_type(reference=self.reference),
+            opcode=self
+        )
 
         return break_types.build()
 

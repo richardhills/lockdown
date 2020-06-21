@@ -92,6 +92,12 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
             return ObjectWildcardGetterType(new_type, key_error=self.key_error, type_error=self.type_error)
         return self
 
+    def reify_revconst_types(self, other_micro_op_types):
+        reified_type_to_use = self.type.reify_revconst_types()
+        if reified_type_to_use != self.type:
+            return ObjectWildcardGetterType(reified_type_to_use, self.key_error, self.type_error)
+        return self
+
     def bind(self, source_type, key, target_manager):
         if key is not None:
             if key not in target_manager.obj.__dict__:
@@ -239,6 +245,12 @@ class ObjectGetterType(ObjectMicroOpType):
             and (not other_micro_op_type.type_error or self.type_error)
             and self.type.is_copyable_from(other_micro_op_type.type)
         )
+
+    def reify_revconst_types(self, other_micro_op_types):
+        reified_type_to_use = self.type.reify_revconst_types()
+        if reified_type_to_use != self.type:
+            return ObjectGetterType(self.key, reified_type_to_use, self.key_error, self.type_error)
+        return self
 
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, ObjectGetterType):
@@ -394,6 +406,17 @@ class ObjectWildcardSetterType(ObjectMicroOpType):
             and other_micro_op_type.type.is_copyable_from(self.type)
         )
 
+    def reify_revconst_types(self, other_micro_op_types):
+        getter = other_micro_op_types.get(("get-wildcard", ), None)
+        type_to_use = self.type
+        if getter:
+            type_to_use = getter.type
+
+        reified_type_to_use = type_to_use.reify_revconst_types()
+        if reified_type_to_use != self.type:
+            return ObjectWildcardSetterType(reified_type_to_use, self.key_error, self.type_error)
+        return self
+
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, ObjectWildcardSetterType):
             if isinstance(self.type, InferredType):
@@ -505,8 +528,13 @@ class ObjectSetterType(ObjectMicroOpType):
 
     def reify_revconst_types(self, other_micro_op_types):
         getter = other_micro_op_types.get(("get", self.key), None)
+        type_to_use = self.type
         if getter:
-            return ObjectSetterType(self.key, getter.type, self.key_error, self.type_error)
+            type_to_use = getter.type
+
+        reified_type_to_use = type_to_use.reify_revconst_types()
+        if reified_type_to_use != self.type:
+            return ObjectSetterType(self.key, reified_type_to_use, self.key_error, self.type_error)
         return self
 
     def bind(self, source_type, key, target):
