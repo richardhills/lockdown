@@ -55,6 +55,11 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#toListDestructuring.
+    def visitToListDestructuring(self, ctx):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#staticValueDeclaration.
     def visitStaticValueDeclaration(self, ctx):
         return self.visitChildren(ctx)

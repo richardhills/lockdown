@@ -1,4 +1,5 @@
 from _abcoll import MutableSequence
+from _collections import defaultdict
 from collections import OrderedDict
 
 from rdhlang5.type_system.builtins import BuiltInFunctionGetterType, \
@@ -8,11 +9,12 @@ from rdhlang5.type_system.composites import InferredType, bind_type_to_value, \
 from rdhlang5.type_system.core_types import merge_types, Const, NoValueType
 from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict, \
     raise_if_safe, InvalidAssignmentType, InvalidDereferenceKey, \
-    InvalidDereferenceType, InvalidAssignmentKey, MissingMicroOp
+    InvalidDereferenceType, InvalidAssignmentKey, MissingMicroOp, \
+    IncorrectObjectTypeForMicroOp
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.micro_ops import MicroOpType, MicroOp, \
     raise_micro_op_conflicts
-from rdhlang5.utils import MISSING, is_debug
+from rdhlang5.utils import MISSING, is_debug, micro_op_repr
 
 
 WILDCARD = object()
@@ -49,15 +51,17 @@ def get_key_and_new_value(micro_op, args):
         raise FatalError()
     return key, new_value
 
+
 class ListMicroOpType(MicroOpType):
     def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
         if not isinstance(obj, RDHList):
-            raise MicroOpTypeConflict()
+            raise IncorrectObjectTypeForMicroOp()
         return super(ListMicroOpType, self).check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(obj, micro_op_types)
 
     def check_for_runtime_data_conflict(self, obj):
         if not isinstance(obj, RDHList):
             return True
+
 
 class ListWildcardGetterType(ListMicroOpType):
     def __init__(self, type, key_error, type_error):
@@ -167,7 +171,7 @@ class ListWildcardGetterType(ListMicroOpType):
             return True
 
         if not self.type_error:
-            for value in obj.wrapped.values(): # Leaking RDHList details...
+            for value in obj.wrapped.values():  # Leaking RDHList details...
                 get_manager(value)
                 if not self.type.is_copyable_from(get_type_of_value(value)):
                     return True
@@ -181,6 +185,8 @@ class ListWildcardGetterType(ListMicroOpType):
             self.type_error or other_micro_op_type.type_error
         )
 
+    def __repr__(self):
+        return micro_op_repr("get", "*", self.key_error, self.type, self.type_error)
 
 class ListWildcardGetter(MicroOp):
     def __init__(self, target_manager, type, key_error, type_error):
@@ -286,10 +292,12 @@ class ListGetterType(ListMicroOpType):
                         return True
                 else:
                     prior_micro_op = other_micro_op_types.get(("get", self.key - 1), None)
-                    if not prior_micro_op:
-                        return True
-                    if not self.type_error and not prior_micro_op.type_error and not self.type.is_copyable_from(prior_micro_op.type):
-                        return True
+                    if prior_micro_op:
+                        if not self.type_error and not prior_micro_op.type_error and not self.type.is_copyable_from(prior_micro_op.type):
+                            return True
+                    else:
+                        if not other_micro_op_type.key_error:
+                            return True
             else:
                 other_key, other_type = get_key_and_type(other_micro_op_type)
                 if not self.type.is_copyable_from(other_type):
@@ -299,10 +307,12 @@ class ListGetterType(ListMicroOpType):
             if other_key is not WILDCARD and self.key < other_key:
                 return False
             post_opcode = other_micro_op_types.get(("get", self.key + 1), None)
-            if not post_opcode:
+            if post_opcode:
+                if not self.type_error and not post_opcode.type_error and not self.type.is_copyable_from(post_opcode.type):
+                    return True
+            if not other_micro_op_type.key_error:
                 return True
-            if not self.type_error and not post_opcode.type_error and not self.type.is_copyable_from(post_opcode.type):
-                return True
+
         return False
 
     def raise_on_runtime_micro_op_conflict(self, other_micro_op, args):
@@ -352,6 +362,9 @@ class ListGetterType(ListMicroOpType):
             self.type_error or other_micro_op_type.type_error
         )
 
+    def __repr__(self):
+        return micro_op_repr("get", self.key, self.key_error, self.type, self.type_error)
+
 
 class ListGetter(MicroOp):
     def __init__(self, target_manager, key, type, key_error, type_error):
@@ -399,7 +412,12 @@ class ListWildcardSetterType(ListMicroOpType):
         )
 
     def reify_revconst_types(self, other_micro_op_types):
-        reified_type_to_use = self.type.reify_revconst_types()
+        getter = other_micro_op_types.get(("get-wildcard",), None)
+        type_to_use = self.type
+        if getter:
+            type_to_use = getter.type
+
+        reified_type_to_use = type_to_use.reify_revconst_types()
         if reified_type_to_use != self.type:
             return ListWildcardSetterType(reified_type_to_use, self.key_error, self.type_error)
         return self
@@ -443,6 +461,9 @@ class ListWildcardSetterType(ListMicroOpType):
             self.type_error or other_micro_op_type.type_error
         )
 
+    def __repr__(self):
+        return micro_op_repr("set", "*", self.key_error, self.type, self.type_error)
+
 
 class ListWildcardSetter(MicroOp):
     def __init__(self, target_manager, type, key_error, type_error):
@@ -468,6 +489,7 @@ class ListWildcardSetter(MicroOp):
 
         self.target_manager.bind_key(key)
 
+
 class ListSetterType(ListMicroOpType):
     def __init__(self, key, type, key_error, type_error):
         self.key = key
@@ -486,7 +508,12 @@ class ListSetterType(ListMicroOpType):
         )
 
     def reify_revconst_types(self, other_micro_op_types):
-        reified_type_to_use = self.type.reify_revconst_types()
+        getter = other_micro_op_types.get(("get", self.key), None)
+        type_to_use = self.type
+        if getter:
+            type_to_use = getter.type
+
+        reified_type_to_use = type_to_use.reify_revconst_types()
         if reified_type_to_use != self.type:
             return ListSetterType(self.key, reified_type_to_use, self.key_error, self.type_error)
         return self
@@ -533,6 +560,9 @@ class ListSetterType(ListMicroOpType):
             self.type_error or other_micro_op_type.type_error
         )
 
+    def __repr__(self):
+        return micro_op_repr("set", self.key, self.key_error, self.type, self.type_error)
+
 
 class ListSetter(MicroOp):
     def __init__(self, target_manager, key, type, key_error, type_error):
@@ -575,6 +605,27 @@ class ListWildcardDeletterType(ListMicroOpType):
     def can_be_derived_from(self, other_micro_op_type):
         return not other_micro_op_type.key_error or self.key_error
 
+    def reify_revconst_types(self, other_micro_op_types):
+        # Drop ourselves if any element in the list can not be assigned to it's
+        # immediate previous neighbour, as would be needed after a delete
+        wildcard_getter = other_micro_op_types.get("get-wildcard",)
+        getters = defaultdict(lambda: wildcard_getter, {
+            k[1]: o for k, o in other_micro_op_types.items() if k[0] == "get" and isinstance(k[1], int)
+        })
+
+        if len(getters) == 0:
+            return self
+
+        first_index = 0
+        last_index = max(getters.keys())
+
+        for i in range(first_index, last_index + 1):
+            next = getters[i + 1]
+            prev = getters[i]
+            if next and prev and not prev.type.is_copyable_from(next.type):
+                return
+        return self
+
     def replace_inferred_type(self, other_micro_op_type):
         return self
 
@@ -600,6 +651,9 @@ class ListWildcardDeletterType(ListMicroOpType):
         return ListWildcardDeletterType(
             self.key_error or other_micro_op_type.key_error
         )
+
+    def __repr__(self):
+        return micro_op_repr("delete", "*", self.key_error)
 
 
 class ListWildcardDeletter(MicroOp):
@@ -663,6 +717,9 @@ class ListDeletterType(ListMicroOpType):
     def merge(self, other_micro_op_type):
         return ListDeletter(self.key, self.can_fail or other_micro_op_type.can_fail)
 
+    def __repr__(self):
+        return micro_op_repr("delete", self.key, self.key_error)
+
 
 class ListDeletter(MicroOp):
     def __init__(self, target_manager, key):
@@ -692,6 +749,31 @@ class ListWildcardInsertType(ListMicroOpType):
             and (not other_micro_op_type.type_error or self.type_error)
             and other_micro_op_type.type.is_copyable_from(self.type)
         )
+
+    def reify_revconst_types(self, other_micro_op_types):
+        # Drop ourselves if any element in the list can not be assigned to it's
+        # immediate next neighbour, as would be needed after an insert
+        wildcard_getter = other_micro_op_types.get("get-wildcard",)
+        getters = defaultdict(lambda: wildcard_getter, {
+            k[1]: o for k, o in other_micro_op_types.items() if k[0] == "get" and isinstance(k[1], int)
+        })
+
+        if len(getters) == 0:
+            return self
+
+        for getter in getters.values():
+            if not getter.type.is_copyable_from(self.type):
+                return
+
+        first_index = 0
+        last_index = max(getters.keys())
+
+        for i in range(first_index, last_index + 1):
+            next = getters[i + 1]
+            prev = getters[i]
+            if next and prev and not next.type.is_copyable_from(prev.type):
+                return
+        return self
 
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, ListWildcardInsertType):
@@ -772,6 +854,31 @@ class ListInsertType(ListMicroOpType):
             and other_micro_op_type.type.is_copyable_from(self.type)
         )
 
+    def reify_revconst_types(self, other_micro_op_types):
+        # Drop ourselves if any element in the list can not be assigned to it's
+        # immediate next neighbour, as would be needed after an insert
+        wildcard_getter = other_micro_op_types.get("get-wildcard",)
+        getters = defaultdict(lambda: wildcard_getter, {
+            k[1]: o for k, o in other_micro_op_types.items() if k[0] == "get" and isinstance(k[1], int)
+        })
+
+        if len(getters) == 0:
+            return self
+
+        getter_at_insert_site = getters[self.key]
+        if getter_at_insert_site and not getter_at_insert_site.type.is_copyable_from(self.type):
+            return
+
+        first_index = 0
+        last_index = max(getters.keys())
+
+        for i in range(first_index, last_index + 1):
+            next = getters[i + 1]
+            prev = getters[i]
+            if next and prev and not next.type.is_copyable_from(prev.type):
+                return
+        return self
+
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, ListInsertType):
             if isinstance(self.type, InferredType):
@@ -822,6 +929,9 @@ class ListInsertType(ListMicroOpType):
             self.key_error or other_micro_op_type.key_error, self.type_error or other_micro_op_type.type_error
         )
 
+    def __repr__(self):
+        return micro_op_repr("insert", self.key, self.key_error, self.type, self.type_error)
+
 class ListInsert(MicroOp):
     def __init__(self, target_manager, key, type, key_error, type_error):
         self.target_manager = target_manager
@@ -845,9 +955,11 @@ class ListInsert(MicroOp):
         for after_key in range(self.key, len(self.target_manager.obj)):
             self.target_manager.bind_key(after_key)
 
+def is_list_checker(obj):
+    return isinstance(obj, RDHList)
 
 def RDHListType(element_types, wildcard_type, allow_push=True, allow_wildcard_insert=True, allow_delete=True, is_sparse=False):
-    micro_ops = OrderedDict() #  Ordered so that dependencies from i+1 element on i are preserved
+    micro_ops = OrderedDict()  #  Ordered so that dependencies from i+1 element on i are preserved
 
     for index, element_type in enumerate(element_types):
         const = False
@@ -876,9 +988,11 @@ def RDHListType(element_types, wildcard_type, allow_push=True, allow_wildcard_in
             micro_ops[("insert-wildcard",)] = ListWildcardInsertType(wildcard_type, not is_sparse, False)
             micro_ops[("get", "insert")] = BuiltInFunctionGetterType(ListInsertFunctionType(micro_ops[("insert-wildcard",)], wildcard_type))
 
-    return CompositeType(micro_ops)
+    return CompositeType(micro_ops, is_list_checker)
+
 
 SPARSE_ELEMENT = object()
+
 
 class RDHList(Composite, MutableSequence, object):
     def __init__(self, initial_data, bind=None):

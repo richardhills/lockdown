@@ -5,7 +5,8 @@ from rdhlang5.type_system.composites import InferredType, bind_type_to_value, \
 from rdhlang5.type_system.core_types import merge_types
 from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict, \
     raise_if_safe, InvalidAssignmentType, InvalidDereferenceKey, \
-    InvalidDereferenceType, MissingMicroOp, InvalidAssignmentKey
+    InvalidDereferenceType, MissingMicroOp, InvalidAssignmentKey, \
+    IncorrectObjectTypeForMicroOp
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.micro_ops import MicroOpType, MicroOp, \
     raise_micro_op_conflicts
@@ -53,7 +54,7 @@ def get_key_and_new_value(micro_op, args):
 class DictMicroOpType(MicroOpType):
     def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
         if not isinstance(obj, RDHDict):
-            raise MicroOpTypeConflict()
+            raise IncorrectObjectTypeForMicroOp()
         return super(DictMicroOpType, self).check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(obj, micro_op_types)
 
     def check_for_runtime_data_conflict(self, obj):
@@ -620,6 +621,8 @@ class DictDeletter(MicroOp):
 
         del self.target_manager.obj.wrapped[self.key]
 
+def is_dict_checker(obj):
+    return isinstance(obj, RDHDict)
 
 class RDHDictType(CompositeType):
     def __init__(self, wildcard_type=None):
@@ -630,7 +633,7 @@ class RDHDictType(CompositeType):
             micro_ops[("set-wildcard",)] = DictWildcardSetterType(wildcard_type, True, True)
             micro_ops[("delete-wildcard",)] = DictWildcardDeletterType(True)
 
-        super(RDHDictType, self).__init__(micro_ops)
+        super(RDHDictType, self).__init__(micro_ops, is_dict_checker)
 
 
 class RDHDict(Composite, DictMixin, object):

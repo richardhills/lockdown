@@ -6,11 +6,12 @@ from rdhlang5.type_system.core_types import merge_types, Type, Const, OneOfType,
     AnyType
 from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict, \
     raise_if_safe, InvalidAssignmentType, InvalidDereferenceKey, \
-    InvalidDereferenceType, MissingMicroOp, InvalidInferredType
+    InvalidDereferenceType, MissingMicroOp, InvalidInferredType, \
+    IncorrectObjectTypeForMicroOp
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.micro_ops import MicroOpType, MicroOp, \
     raise_micro_op_conflicts
-from rdhlang5.utils import is_debug, MISSING
+from rdhlang5.utils import is_debug, MISSING, micro_op_repr
 
 
 WILDCARD = object()
@@ -54,7 +55,7 @@ def get_key_and_new_value(micro_op, args):
 class ObjectMicroOpType(MicroOpType):
     def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
         if not isinstance(obj, RDHObject):
-            raise MicroOpTypeConflict()
+            raise IncorrectObjectTypeForMicroOp()
         return super(ObjectMicroOpType, self).check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(obj, micro_op_types)
 
     def check_for_runtime_data_conflict(self, obj):
@@ -184,7 +185,7 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
         )
 
     def __repr__(self):
-        return "get.*.{}".format(self.type.short_str())
+        return micro_op_repr("get", "*", self.key_error, self.type, self.type_error)
 
 
 class ObjectWildcardGetter(MicroOp):
@@ -351,7 +352,7 @@ class ObjectGetterType(ObjectMicroOpType):
         )
 
     def __repr__(self):
-        return "get.{}.{}".format(self.key, self.type)
+        return micro_op_repr("get", self.key, self.key_error, self.type, self.type_error)
 
 class ObjectGetter(MicroOp):
     __slots__ = [ "target_manager", "key", "type", "key_error", "type_error" ]
@@ -456,7 +457,7 @@ class ObjectWildcardSetterType(ObjectMicroOpType):
         )
 
     def __repr__(self):
-        return "set.*.{}".format(self.type)
+        return micro_op_repr("set", "*", self.key_error, self.type, self.type_error)
 
 class ObjectWildcardSetter(MicroOp):
     __slots__ = [ "target_manager", "type", "key_error", "type_error" ]
@@ -572,7 +573,7 @@ class ObjectSetterType(ObjectMicroOpType):
         )
 
     def __repr__(self):
-        return "set.{}.{}".format(self.key, self.type)
+        return micro_op_repr("set", self.key, self.key_error, self.type, self.type_error)
 
 class ObjectSetter(MicroOp):
     __slots__ = [ "target_manager", "key", "type", "key_error", "type_error" ]
@@ -739,6 +740,9 @@ class ObjectDeletter(MicroOp):
 
         del self.target_manager.obj.__dict__[self.key]
 
+def is_object_checker(obj):
+    return isinstance(obj, RDHObject)
+
 def RDHObjectType(properties=None, wildcard_type=None, initial_data=None, **kwargs):
     if not properties:
         properties = {}
@@ -763,7 +767,7 @@ def RDHObjectType(properties=None, wildcard_type=None, initial_data=None, **kwar
         micro_ops[("get-wildcard",)] = ObjectWildcardGetterType(wildcard_type, True, False)
         micro_ops[("set-wildcard",)] = ObjectWildcardSetterType(wildcard_type, True, True)
 
-    return CompositeType(micro_ops, initial_data=initial_data, **kwargs)
+    return CompositeType(micro_ops, is_object_checker, initial_data=initial_data, **kwargs)
 
 class PythonObjectType(CompositeType):
     def __init__(self):
@@ -773,7 +777,7 @@ class PythonObjectType(CompositeType):
         micro_ops[("set-wildcard",)] = ObjectWildcardSetterType(OneOfType([ self, AnyType() ]), False, False)
         micro_ops[("delete-wildcard",)] = ObjectWildcardDeletterType(True)
 
-        super(PythonObjectType, self).__init__(micro_ops)
+        super(PythonObjectType, self).__init__(micro_ops, is_object_checker)
 
 class DefaultDictType(CompositeType):
     def __init__(self, type):
@@ -786,7 +790,7 @@ class DefaultDictType(CompositeType):
         micro_ops[("set-wildcard",)] = ObjectWildcardSetterType(type, False, False)
         micro_ops[("delete-wildcard",)] = ObjectWildcardDeletterType(False)
 
-        super(DefaultDictType, self).__init__(micro_ops)
+        super(DefaultDictType, self).__init__(micro_ops, is_object_checker)
 
 class RDHObject(Composite, object):
     def __init__(self, initial_data=None, default_factory=None, bind=None, instantiator_has_verified_bind=False, debug_reason=None):

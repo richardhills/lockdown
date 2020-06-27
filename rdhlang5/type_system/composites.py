@@ -4,11 +4,12 @@ import weakref
 
 from rdhlang5.type_system.core_types import Type, unwrap_types, AnyType, \
     OneOfType, TopType
-from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict
+from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict, \
+    IncorrectObjectTypeForMicroOp
 from rdhlang5.type_system.managers import get_manager
 from rdhlang5.type_system.micro_ops import MicroOpType, \
     MicroOp, merge_composite_types
-from rdhlang5.utils import is_debug
+from rdhlang5.utils import is_debug, raise_from, capture_raise
 
 
 class InferredType(Type):
@@ -21,7 +22,7 @@ class InferredType(Type):
 composite_type_is_copyable_cache = threading.local()
 
 class CompositeType(Type):
-    def __init__(self, micro_op_types, initial_data=None, is_revconst=False, name=None):
+    def __init__(self, micro_op_types, python_object_type_checker, initial_data=None, is_revconst=False, name=None):
         if not isinstance(micro_op_types, dict):
             raise FatalError()
         for tag in micro_op_types.keys():
@@ -37,6 +38,7 @@ class CompositeType(Type):
         self.initial_data = initial_data
         self.is_revconst = is_revconst
         self.name = name or "unknown"
+        self.python_object_type_checker = python_object_type_checker
 
 #         if is_debug():
 #             for micro_op_type in micro_op_types.values():
@@ -59,7 +61,8 @@ class CompositeType(Type):
             potential_replacement_opcodes[key] = micro_op_type.replace_inferred_type(other_micro_op_type)
 
         return CompositeType(
-            micro_op_types=potential_replacement_opcodes,
+            potential_replacement_opcodes,
+            self.python_object_type_checker,
             initial_data=self.initial_data,
             is_revconst=other.is_revconst,
             name="inferred<{} & {}>".format(self.name, other.name)
@@ -72,10 +75,13 @@ class CompositeType(Type):
         potential_replacement_opcodes = {}
 
         for key, micro_op_type in self.micro_op_types.items():
-            potential_replacement_opcodes[key] = micro_op_type.reify_revconst_types(self.micro_op_types)
+            new_micro_op = micro_op_type.reify_revconst_types(self.micro_op_types)
+            if new_micro_op:
+                potential_replacement_opcodes[key] = new_micro_op
 
         return CompositeType(
-            micro_op_types=potential_replacement_opcodes,
+            potential_replacement_opcodes,
+            self.python_object_type_checker,
             initial_data=self.initial_data,
             is_revconst=False,
             name="reified<{}>".format(self.name)
@@ -83,6 +89,22 @@ class CompositeType(Type):
 
     def get_micro_op_type(self, tag):
         return self.micro_op_types.get(tag, None)
+
+    def check_internal_python_object_type(self, obj):
+        if not self.python_object_type_checker(obj):
+            raise IncorrectObjectTypeForMicroOp()
+
+    def check_for_self_micro_op_conflicts(self):
+        for first in self.micro_op_types.values():
+            for second in self.micro_op_types.values():
+                first_check = first.check_for_new_micro_op_type_conflict(second, self.micro_op_types)
+                second_check = second.check_for_new_micro_op_type_conflict(first, self.micro_op_types)
+                if first_check != second_check:
+                    pass
+                if first_check is True:
+                    first_check = first.check_for_new_micro_op_type_conflict(second, self.micro_op_types)
+                    return True
+        return False
 
     def internal_is_copyable_from(self, other):
         if not isinstance(other, CompositeType):
@@ -92,6 +114,7 @@ class CompositeType(Type):
             for ours in self.micro_op_types.values():
                 for theirs in other.micro_op_types.values():
                     if ours.check_for_new_micro_op_type_conflict(theirs, self.micro_op_types):
+                        ours.check_for_new_micro_op_type_conflict(theirs, self.micro_op_types)
                         return False
 
         for our_tag, our_micro_op in self.micro_op_types.items():
@@ -141,7 +164,7 @@ class CompositeType(Type):
                 cache_started_empty = True
             cache = composite_type_is_copyable_cache._is_copyable_from_cache
 
-            result = results_by_target_id[id(self)][id(other)]
+            result = None# results_by_target_id[id(self)][id(other)]
 
             # Debugging check
 #            if result is False:
@@ -240,19 +263,26 @@ def bind_type_to_value(source_manager, source_type, key, type, value_manager):
         return
 
     something_worked = False
+    error_if_all_fails = None
+
     for sub_type in unwrap_types(type):
         if isinstance(sub_type, CompositeType):
             try:
                 value_manager.add_composite_type(sub_type)
                 source_manager.child_type_references[key][id(source_type)].append(sub_type)
                 something_worked = True
-            except MicroOpTypeConflict as e:
+            except IncorrectObjectTypeForMicroOp:
                 pass
+            except MicroOpTypeConflict as e:
+                error_if_all_fails = capture_raise(MicroOpTypeConflict, e)
         else:
             something_worked = True
 
     if not something_worked:
-        raise MicroOpTypeConflict()
+        if error_if_all_fails:
+            raise error_if_all_fails[0], error_if_all_fails[1], error_if_all_fails[2]
+        else:
+            raise FatalError()
 
 def unbind_type_to_value(source_manager, source_type, key, type, value_manager):
     if not source_manager or not value_manager:
@@ -314,11 +344,14 @@ class CompositeObjectManager(object):
 
         new = self.attached_type_counts.get(type_id, 0) == 0 
 
+        type.check_internal_python_object_type(self.obj)
+
         if new:
             if is_debug() or not caller_has_verified_type:
                 if self.check_for_runtime_data_conflicts(type):
+                    type.check_internal_python_object_type(self.obj)
                     self.check_for_runtime_data_conflicts(type)
-                    raise MicroOpTypeConflict(type)
+                    raise MicroOpTypeConflict(self.obj, type)
 
                 self.check_for_runtime_micro_op_conflicts(type)
 
@@ -327,10 +360,6 @@ class CompositeObjectManager(object):
 
             for tag, micro_op_type in type.micro_op_types.items():
                 micro_op_type.bind(type, None, self)
-
-#        from rdhlang5.type_system.object_types import RDHObject
-#        if isinstance(self.obj, RDHObject) and hasattr(self.obj, "j"):
-#            print "Adding {} {} {} {} {}".format(id(self.obj), self.obj.__dict__, id(type), type.name, self.attached_type_counts[type_id])
 
         self.attached_type_counts[type_id] += 1
 

@@ -526,6 +526,8 @@ def dereference(*vars, **kwargs):
         if isinstance(var, basestring):
             for v in var.split("."):
                 result = dereference_op(result, literal_op(munge_ints(v)), **kwargs)
+        elif isinstance(var, int):
+            result = dereference_op(result, literal_op(var), **kwargs)
         elif isinstance(var, list):
             for v in var:
                 result = dereference_op(result, literal_op(munge_ints(v)), **kwargs)

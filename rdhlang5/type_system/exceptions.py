@@ -14,6 +14,8 @@ class FatalError(Exception):
 class MicroOpTypeConflict(Exception):
     pass
 
+class IncorrectObjectTypeForMicroOp(MicroOpTypeConflict):
+    pass
 
 class MicroOpConflict(Exception):
     pass

@@ -20,11 +20,12 @@ from rdhlang5.type_system.exceptions import FatalError, InvalidDereferenceType, 
     InvalidDereferenceKey, InvalidAssignmentType, InvalidAssignmentKey
 from rdhlang5.type_system.list_types import RDHList, ListGetterType, \
     ListSetterType, ListWildcardGetterType, ListWildcardSetterType, \
-    ListWildcardDeletterType, ListInsertType, ListWildcardInsertType
+    ListWildcardDeletterType, ListInsertType, ListWildcardInsertType,\
+    is_list_checker
 from rdhlang5.type_system.managers import get_type_of_value, get_manager
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType, \
     ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
-    ObjectWildcardSetterType
+    ObjectWildcardSetterType, is_object_checker
 from rdhlang5.utils import MISSING, NO_VALUE, is_debug, one_shot_memoize
 from pydoc import visiblename
 
@@ -232,7 +233,7 @@ class ObjectTemplateOp(Opcode):
         micro_ops[("get-wildcard",)] = ObjectWildcardGetterType(combined_value_types, True, False)
         micro_ops[("set-wildcard",)] = ObjectWildcardSetterType(AnyType(), True, True)
 
-        break_types.add("value", CompositeType(micro_ops, initial_data=initial_data, is_revconst=True))
+        break_types.add("value", CompositeType(micro_ops, is_object_checker, initial_data=initial_data, is_revconst=True))
 
         return break_types.build()
 
@@ -343,7 +344,7 @@ class ListTemplateOp(Opcode):
         micro_ops[("delete-wildcard",)] = ListWildcardDeletterType(True)
         micro_ops[("insert-wildcard",)] = ListWildcardInsertType(AnyType(), True, False)
 
-        break_types.add("value", CompositeType(micro_ops, initial_data=initial_data, is_revconst=True))
+        break_types.add("value", CompositeType(micro_ops, is_list_checker, initial_data=initial_data, is_revconst=True))
 
         return break_types.build()
 

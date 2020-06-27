@@ -49,12 +49,14 @@ class MicroOpType(object):
             first_check = other_micro_op_type.check_for_new_micro_op_type_conflict(self, micro_op_types)
             if is_debug():
                 second_check = self.check_for_new_micro_op_type_conflict(other_micro_op_type, micro_op_types)
+                other_micro_op_type.check_for_new_micro_op_type_conflict(self, micro_op_types)
                 if first_check != second_check:
                     other_micro_op_type.check_for_new_micro_op_type_conflict(self, micro_op_types)
                     self.check_for_new_micro_op_type_conflict(other_micro_op_type, micro_op_types)
-                    raise FatalError()
+                    raise FatalError("Type check conflict between {} and {}".format(self, other_micro_op_type))
             if first_check:
-                raise MicroOpTypeConflict()
+                other_micro_op_type.check_for_new_micro_op_type_conflict(self, micro_op_types)
+                raise MicroOpTypeConflict(self, other_micro_op_type)
 
     @abstractmethod
     def check_for_runtime_data_conflict(self, obj):
@@ -83,15 +85,19 @@ def merge_composite_types(types, initial_data, name=None):
             raise FatalError()
 
     if len(types) == 1:
-        return CompositeType(types[0].micro_op_types, initial_data=initial_data, name=name) 
+        return CompositeType(types[0].micro_op_types, types[0].python_object_type_checker, initial_data=initial_data, name=name) 
 
     result = {}
+    python_object_type_checker = None
     for type in types:
+        if python_object_type_checker and python_object_type_checker != type.python_object_type_checker:
+            raise FatalError()
+        python_object_type_checker = type.python_object_type_checker
         for tag, micro_op_type in type.micro_op_types.items():
             if tag in result:
                 result[tag] = result[tag].merge(micro_op_type)
             else:
                 result[tag] = micro_op_type
 
-    return CompositeType(result, initial_data=initial_data, name=name, is_revconst=len(types) == 0)
+    return CompositeType(result, python_object_type_checker, initial_data=initial_data, name=name, is_revconst=len(types) == 0)
 

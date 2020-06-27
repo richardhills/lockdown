@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+import sys
+
 from log import logger
 from rdhlang5.executor.exceptions import PreparationException
 from rdhlang5.executor.flow_control import BreakTypesFactory, FrameManager
@@ -18,11 +20,12 @@ from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     DEFAULT_DICT_TYPE, READONLY_DEFAULT_OBJECT_TYPE, \
     readonly_rich_composite_type
 from rdhlang5.type_system.dict_types import RDHDict
-from rdhlang5.type_system.exceptions import FatalError, InvalidInferredType
+from rdhlang5.type_system.exceptions import FatalError, InvalidInferredType, \
+    MicroOpTypeConflict
 from rdhlang5.type_system.list_types import RDHList
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType
-from rdhlang5.utils import MISSING, is_debug, bind_runtime_contexts
+from rdhlang5.utils import MISSING, is_debug, bind_runtime_contexts, raise_from
 
 
 def prepare(data, outer_context, flow_manager, immediate_context=None):
@@ -409,18 +412,21 @@ class ClosedFunction(RDHFunction):
         logger.debug("ClosedFunction:argument_check")
 
         with frame_manager.get_next_frame(self) as frame:
-            new_context= frame.step("local_initialization_context", lambda: RDHObject({
-                    "prepare": self.prepare_context,
-                    "outer": self.outer_context,
-                    "argument": argument,
-                    "static": self.static,
-                    "types": self.types_context
-                },
-                    bind=self.local_initialization_context_type if bind_runtime_contexts() else None,
-                    instantiator_has_verified_bind=True,
-                    debug_reason="local-initialization-context"
+            try:
+                new_context= frame.step("local_initialization_context", lambda: RDHObject({
+                        "prepare": self.prepare_context,
+                        "outer": self.outer_context,
+                        "argument": argument,
+                        "static": self.static,
+                        "types": self.types_context
+                    },
+                        bind=self.local_initialization_context_type if bind_runtime_contexts() else None,
+                        instantiator_has_verified_bind=True,
+                        debug_reason="local-initialization-context"
+                    )
                 )
-            )
+            except MicroOpTypeConflict as e:
+                raise_from(FatalError, e)
 
             get_manager(new_context)._context_type = self.local_initialization_context_type
 
@@ -436,19 +442,22 @@ class ClosedFunction(RDHFunction):
                 raise FatalError()
 
             logger.debug( "ClosedFunction:code_context")
-            new_context= frame.step("code_execution_context", lambda: RDHObject({
-                    "prepare": self.prepare_context,
-                    "outer": self.outer_context,
-                    "argument": argument,
-                    "static": self.static,
-                    "local": local,
-                    "types": self.types_context
-                },
-                    bind=self.execution_context_type if bind_runtime_contexts() else None,
-                    instantiator_has_verified_bind=True,
-                    debug_reason="code-execution-context"
+            try:
+                new_context = frame.step("code_execution_context", lambda: RDHObject({
+                        "prepare": self.prepare_context,
+                        "outer": self.outer_context,
+                        "argument": argument,
+                        "static": self.static,
+                        "local": local,
+                        "types": self.types_context
+                    },
+                        bind=self.execution_context_type if bind_runtime_contexts() else None,
+                        instantiator_has_verified_bind=True,
+                        debug_reason="code-execution-context"
+                    )
                 )
-            )
+            except MicroOpTypeConflict as e:
+                raise raise_from(FatalError, e)
 
             # In conjunction with get_context_type, for performance
             get_manager(new_context)._context_type = self.execution_context_type

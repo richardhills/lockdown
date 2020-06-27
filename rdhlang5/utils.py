@@ -2,6 +2,7 @@
 from __future__ import unicode_literals
 
 from functools import wraps
+import sys
 
 from rdhlang5.type_system.exceptions import FatalError
 
@@ -27,6 +28,18 @@ def default(value, marker, default_if_marker):
     if value is marker:
         return default_if_marker
     return value
+
+def raise_from(T, e):
+    raise T, T(e), sys.exc_info()[2]
+
+def capture_raise(T, e):
+    return T, T(e), sys.exc_info()[2]
+
+def micro_op_repr(opname, key, key_error, type=None, type_error=None):
+    if type:
+        return "{}.{}{}.{}{}".format(opname, key, "!" if key_error else "", type.short_str(), "!" if type_error else "")
+    else:
+        return "{}.{}{}".format(opname, key, "!" if key_error else "")
 
 def one_shot_memoize(func):
     @wraps(func)

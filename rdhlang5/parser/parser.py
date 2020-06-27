@@ -122,12 +122,12 @@ class RDHLang5Visitor(langVisitor):
 
         for type, name in initializers:
             local_variable_types[name] = type
-            local_variable_initializers[name] = dereference("outer", "local", "_temp", name)
+            local_variable_initializers[name] = dereference("outer.local._temp", name)
 
         code_block = CodeBlockBuilder(
-                local_variable_type=object_type(local_variable_types),
-                local_initializer=object_template_op(local_variable_initializers)
-            ).chain(code_block, get_debug_info(ctx))
+            local_variable_type=object_type(local_variable_types),
+            local_initializer=object_template_op(local_variable_initializers)
+        ).chain(code_block, get_debug_info(ctx))
 
         code_block = CodeBlockBuilder(
             local_variable_type=inferred_type(),
@@ -135,7 +135,42 @@ class RDHLang5Visitor(langVisitor):
                 "_temp": rvalue
             }),
             code_expressions=[
-                unbound_assignment(name, dereference("local", "_temp", name)) for name in assignments
+                unbound_assignment(name, dereference("local._temp", name)) for name in assignments
+            ]
+        ).chain(code_block, get_debug_info(ctx))
+
+        return code_block
+
+    def visitToListDestructuring(self, ctx):
+        lvalues = [self.visit(l) for l in ctx.assignmentOrInitializationLvalue()]
+        rvalue = self.visit(ctx.expression())
+
+        code_block = ctx.codeBlock()
+        if code_block:
+            code_block = self.visit(code_block)
+
+        assignments = [(i, n) for i, n in enumerate(lvalues) if isinstance(n, basestring)]
+        initializers = [(i, n) for i, n in enumerate(lvalues) if isinstance(n, tuple)]
+
+        local_variable_types = {}
+        local_variable_initializers = {}
+
+        for index, (type, name) in initializers:
+            local_variable_types[name] = type
+            local_variable_initializers[name] = dereference("outer.local._temp", index)
+
+        code_block = CodeBlockBuilder(
+            local_variable_type=object_type(local_variable_types),
+            local_initializer=object_template_op(local_variable_initializers)
+        ).chain(code_block, get_debug_info(ctx))
+
+        code_block = CodeBlockBuilder(
+            local_variable_type=inferred_type(),
+            local_initializer=object_template_op({
+                "_temp": rvalue
+            }),
+            code_expressions=[
+                unbound_assignment(name, dereference("local._temp", index)) for index, name in assignments
             ]
         ).chain(code_block, get_debug_info(ctx))
 
@@ -445,6 +480,7 @@ class RDHLang5Visitor(langVisitor):
     def visitToFunctionExpression(self, ctx):
         return prepare_function_lit(self.visit(ctx.function()))
 
+
 class CodeBlockBuilder(object):
     def __init__(
         self,
@@ -543,7 +579,7 @@ class CodeBlockBuilder(object):
         if self.local_variable_type is not MISSING:
             local_type = self.local_variable_type
         else:
-            local_type = object_type({}) # For future python local variables...
+            local_type = object_type({})  # For future python local variables...
 
         if self.local_initializer is not MISSING:
             local_initializer = self.local_initializer
@@ -569,7 +605,8 @@ class CodeBlockBuilder(object):
         elif output_mode == "expression":
             return invoke_op(prepare_function_lit(function_lit(
                 argument_type, break_types, local_type, local_initializer, combine_opcodes(code_expressions), **debug_info
-            ), **debug_info),  **debug_info)
+            ), **debug_info), **debug_info)
+
 
 def get_debug_info(ctx):
     return {
@@ -579,8 +616,10 @@ def get_debug_info(ctx):
         "end_token": getattr(getattr(ctx, "end", None), "token", "")
     }
 
+
 class ParseError(Exception):
     pass
+
 
 class AlwaysFailErrorListener(ConsoleErrorListener):
     def syntaxError(self, recognizer, offendingSymbol, line, column, msg, e):

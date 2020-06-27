@@ -94,6 +94,15 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#toListDestructuring.
+    def enterToListDestructuring(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#toListDestructuring.
+    def exitToListDestructuring(self, ctx):
+        pass
+
+
     # Enter a parse tree produced by langParser#staticValueDeclaration.
     def enterStaticValueDeclaration(self, ctx):
         pass

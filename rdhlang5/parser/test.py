@@ -402,7 +402,7 @@ class TestFunctionDeclaration(TestCase):
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 2 ** (3 * 3))
 
-class TestDestructuring(TestCase):
+class TestObjectDestructuring(TestCase):
     def test_single_initialization_destructure(self):
         code = parse("""
             function() {
@@ -466,6 +466,77 @@ class TestDestructuring(TestCase):
             function() {
                 int foo = 0;
                 { foo, var bar } = { foo: 12, bar: 30 };
+                return foo + bar;
+            }
+        """)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEquals(result.value, 42)
+
+class TestListDestructuring(TestCase):
+    def test_single_initialization_destructure(self):
+        code = parse("""
+            function() {
+                [ int foo ] = [ 42 ];
+                return foo;
+            }
+        """, debug=True)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEquals(result.value, 42)
+
+    def test_double_initialization_destructure(self):
+        code = parse("""
+            function() {
+                [ int foo, int bar ] = [ 12, 30 ];
+                return foo + bar;
+            }
+        """, debug=True)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEquals(result.value, 42)
+
+    def test_single_assignment_destructure(self):
+        code = parse("""
+            function() {
+                int foo = 0;
+                [ foo ] = [ 12, 30 ];
+                return foo;
+            }
+        """, debug=True)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEquals(result.value, 12)
+
+    def test_double_assignment_destructure(self):
+        code = parse("""
+            function() {
+                int foo = 0, bar = 0;
+                [ foo, bar ] = [ 12, 30 ];
+                return foo + bar;
+            }
+        """, debug=True)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEquals(result.value, 42)
+
+    def test_mixed_destructure(self):
+        code = parse("""
+            function() {
+                int foo = 0;
+                [ foo, int bar ] = [ 12, 30 ];
+                return foo + bar;
+            }
+        """, debug=True)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEquals(result.value, 42)
+
+    def test_inferred_types_in_destructure(self):
+        code = parse("""
+            function() {
+                int foo = 0;
+                [ foo, var bar ] = [ 12, 30 ];
                 return foo + bar;
             }
         """)

@@ -92,6 +92,7 @@ assignmentOrInitializationLvalue
 codeBlock
    : expression symbolInitialization (',' symbolInitialization)* ';' codeBlock? # localVariableDeclaration
    | '{' assignmentOrInitializationLvalue (',' assignmentOrInitializationLvalue)* '}' '=' expression ';' codeBlock? # toObjectDestructuring
+   | '[' assignmentOrInitializationLvalue (',' assignmentOrInitializationLvalue)* ']' '=' expression ';' codeBlock? # toListDestructuring
    | 'static' symbolInitialization ';' codeBlock? # staticValueDeclaration
    | 'typedef' expression SYMBOL ';' codeBlock? # typedef
 /*   | 'import' SYMBOL ';' codeBlock? # importStatement */
