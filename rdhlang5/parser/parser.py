@@ -165,7 +165,11 @@ class RDHLang5Visitor(langVisitor):
         ).chain(code_block, get_debug_info(ctx))
 
         code_block = CodeBlockBuilder(
-            local_variable_type=inferred_type(),
+            local_variable_type=object_type({
+                "_temp": list_type(
+                    [ inferred_type() ] * len(lvalues), None
+                )
+            }),
             local_initializer=object_template_op({
                 "_temp": rvalue
             }),

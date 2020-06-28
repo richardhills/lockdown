@@ -605,27 +605,6 @@ class ListWildcardDeletterType(ListMicroOpType):
     def can_be_derived_from(self, other_micro_op_type):
         return not other_micro_op_type.key_error or self.key_error
 
-    def reify_revconst_types(self, other_micro_op_types):
-        # Drop ourselves if any element in the list can not be assigned to it's
-        # immediate previous neighbour, as would be needed after a delete
-        wildcard_getter = other_micro_op_types.get("get-wildcard",)
-        getters = defaultdict(lambda: wildcard_getter, {
-            k[1]: o for k, o in other_micro_op_types.items() if k[0] == "get" and isinstance(k[1], int)
-        })
-
-        if len(getters) == 0:
-            return self
-
-        first_index = 0
-        last_index = max(getters.keys())
-
-        for i in range(first_index, last_index + 1):
-            next = getters[i + 1]
-            prev = getters[i]
-            if next and prev and not prev.type.is_copyable_from(next.type):
-                return
-        return self
-
     def replace_inferred_type(self, other_micro_op_type):
         return self
 
@@ -750,31 +729,6 @@ class ListWildcardInsertType(ListMicroOpType):
             and other_micro_op_type.type.is_copyable_from(self.type)
         )
 
-    def reify_revconst_types(self, other_micro_op_types):
-        # Drop ourselves if any element in the list can not be assigned to it's
-        # immediate next neighbour, as would be needed after an insert
-        wildcard_getter = other_micro_op_types.get("get-wildcard",)
-        getters = defaultdict(lambda: wildcard_getter, {
-            k[1]: o for k, o in other_micro_op_types.items() if k[0] == "get" and isinstance(k[1], int)
-        })
-
-        if len(getters) == 0:
-            return self
-
-        for getter in getters.values():
-            if not getter.type.is_copyable_from(self.type):
-                return
-
-        first_index = 0
-        last_index = max(getters.keys())
-
-        for i in range(first_index, last_index + 1):
-            next = getters[i + 1]
-            prev = getters[i]
-            if next and prev and not next.type.is_copyable_from(prev.type):
-                return
-        return self
-
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, ListWildcardInsertType):
             if isinstance(self.type, InferredType):
@@ -853,31 +807,6 @@ class ListInsertType(ListMicroOpType):
             and (not other_micro_op_type.type_error or self.type_error)
             and other_micro_op_type.type.is_copyable_from(self.type)
         )
-
-    def reify_revconst_types(self, other_micro_op_types):
-        # Drop ourselves if any element in the list can not be assigned to it's
-        # immediate next neighbour, as would be needed after an insert
-        wildcard_getter = other_micro_op_types.get("get-wildcard",)
-        getters = defaultdict(lambda: wildcard_getter, {
-            k[1]: o for k, o in other_micro_op_types.items() if k[0] == "get" and isinstance(k[1], int)
-        })
-
-        if len(getters) == 0:
-            return self
-
-        getter_at_insert_site = getters[self.key]
-        if getter_at_insert_site and not getter_at_insert_site.type.is_copyable_from(self.type):
-            return
-
-        first_index = 0
-        last_index = max(getters.keys())
-
-        for i in range(first_index, last_index + 1):
-            next = getters[i + 1]
-            prev = getters[i]
-            if next and prev and not next.type.is_copyable_from(prev.type):
-                return
-        return self
 
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, ListInsertType):
