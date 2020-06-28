@@ -77,7 +77,16 @@ WS
    ;
 
 function
-   : 'function' '(' expression? ')' '{' codeBlock '}'
+   : 'function' '(' argumentDestructuring? ')' '{' codeBlock '}'
+   | 'function' '(|' expression '|)' '{' codeBlock '}'
+   ;
+
+argumentDestructurings
+   : argumentDestructuring (',' argumentDestructuring)*
+   ;
+
+argumentDestructuring
+   : expression SYMBOL
    ;
 
 symbolInitialization
@@ -91,12 +100,16 @@ assignmentOrInitializationLvalue
 
 codeBlock
    : expression symbolInitialization (',' symbolInitialization)* ';' codeBlock? # localVariableDeclaration
-   | '{' assignmentOrInitializationLvalue (',' assignmentOrInitializationLvalue)* '}' '=' expression ';' codeBlock? # toObjectDestructuring
-   | '[' assignmentOrInitializationLvalue (',' assignmentOrInitializationLvalue)* ']' '=' expression ';' codeBlock? # toListDestructuring
    | 'static' symbolInitialization ';' codeBlock? # staticValueDeclaration
    | 'typedef' expression SYMBOL ';' codeBlock? # typedef
+   | destructuring # toDestructuring
 /*   | 'import' SYMBOL ';' codeBlock? # importStatement */
    | (expression ';')+ codeBlock? # toExpression
+   ;
+
+destructuring
+   : '{' assignmentOrInitializationLvalue (',' assignmentOrInitializationLvalue)* '}' '=' expression ';' codeBlock? # toObjectDestructuring
+   | '[' assignmentOrInitializationLvalue (',' assignmentOrInitializationLvalue)* ']' '=' expression ';' codeBlock? # toListDestructuring
    ;
 
 expression
@@ -104,7 +117,8 @@ expression
    | NUMBER					# numberExpression
    | objectTemplate			# toObjectTemplate
    | listTemplate			# toListTemplate
-   | expression '(' expression ')' # invocation
+   | expression '(' expression (',' expression)* ')' # invocation
+   | expression '(|' expression '|)'     # singleParameterInvocation
    | expression '(' ')'     # noParameterInvocation
    | '(' expression ')'     # parenthesis
    | SYMBOL					# immediateDereference

@@ -104,7 +104,7 @@ class TestBasicFunction(TestCase):
 
     def test_return_argument(self):
         code = parse("""
-            function(int) { return argument; }
+            function(|int|) { return argument; }
         """)
         result = bootstrap_function(code, argument=42, check_safe_exit=True)
         self.assertEquals(result.caught_break_mode, "value")
@@ -112,7 +112,7 @@ class TestBasicFunction(TestCase):
 
     def test_dereference_argument_parameter(self):
         code = parse("""
-            function(Object { foo: int }) { return foo; }
+            function(|Object { foo: int }|) { return foo; }
         """)
         result = bootstrap_function(code, argument=RDHObject({ "foo": 42 }), check_safe_exit=True)
         self.assertEquals(result.caught_break_mode, "value")
@@ -282,7 +282,7 @@ class TestBasicFunction(TestCase):
         code = parse("""
             function() {
                 List<int> foo = [ 1, 2, 3 ];
-                foo.insert([ 0, 4 ]);
+                foo.insert(0, 4);
                 return foo[0];
             }
         """)
@@ -294,7 +294,7 @@ class TestBasicFunction(TestCase):
         code = parse("""
             function() {
                 List<Object { bar: int }> foo = [ { bar: 2 }, { bar: 3 } ];
-                foo.insert([ 0, { bar: 6 } ]);
+                foo.insert(0, { bar: 6 });
                 return foo[0].bar;
             }
         """)
@@ -306,7 +306,7 @@ class TestBuiltIns(TestCase):
     def test_range(self):
         code = parse("""
             function() {
-                return list(range([ 1, 5 ]));
+                return list(|range(1, 5)|);
             }
         """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True)
@@ -563,7 +563,7 @@ class TestLoops(TestCase):
         code = parse("""
             function() {
                 int result = 0;
-                for(var i from range([ 1, 5 ])) {
+                for(var i from range(1, 5)) {
                     result = result + i;
                 };
                 return result;
@@ -621,7 +621,7 @@ class TestEuler(TestCase):
         code = parse("""
             function() {
                 int result = 0;
-                for(var i from range([ 1, 1000 ])) {
+                for(var i from range(1, 1000)) {
                     if(i % 3 == 0 || i % 5 == 0) {
                         result = result + i;
                     };
@@ -726,7 +726,7 @@ class TestEuler(TestCase):
         code = parse("""
             function() {
                 int sumSquares = 0, sum = 0;
-                for(var i from range([ 1, 101 ])) {
+                for(var i from range(1, 101)) {
                     sumSquares = sumSquares + i * i;
                     sum = sum + i;
                 };

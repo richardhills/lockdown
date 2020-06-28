@@ -35,6 +35,16 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#argumentDestructurings.
+    def visitArgumentDestructurings(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#argumentDestructuring.
+    def visitArgumentDestructuring(self, ctx):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#symbolInitialization.
     def visitSymbolInitialization(self, ctx):
         return self.visitChildren(ctx)
@@ -50,16 +60,6 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by langParser#toObjectDestructuring.
-    def visitToObjectDestructuring(self, ctx):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by langParser#toListDestructuring.
-    def visitToListDestructuring(self, ctx):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by langParser#staticValueDeclaration.
     def visitStaticValueDeclaration(self, ctx):
         return self.visitChildren(ctx)
@@ -70,13 +70,33 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#toDestructuring.
+    def visitToDestructuring(self, ctx):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#toExpression.
     def visitToExpression(self, ctx):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#toObjectDestructuring.
+    def visitToObjectDestructuring(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#toListDestructuring.
+    def visitToListDestructuring(self, ctx):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#mod.
     def visitMod(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#singleParameterInvocation.
+    def visitSingleParameterInvocation(self, ctx):
         return self.visitChildren(ctx)
 
 

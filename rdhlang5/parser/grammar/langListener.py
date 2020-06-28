@@ -58,6 +58,24 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#argumentDestructurings.
+    def enterArgumentDestructurings(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#argumentDestructurings.
+    def exitArgumentDestructurings(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#argumentDestructuring.
+    def enterArgumentDestructuring(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#argumentDestructuring.
+    def exitArgumentDestructuring(self, ctx):
+        pass
+
+
     # Enter a parse tree produced by langParser#symbolInitialization.
     def enterSymbolInitialization(self, ctx):
         pass
@@ -85,24 +103,6 @@ class langListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by langParser#toObjectDestructuring.
-    def enterToObjectDestructuring(self, ctx):
-        pass
-
-    # Exit a parse tree produced by langParser#toObjectDestructuring.
-    def exitToObjectDestructuring(self, ctx):
-        pass
-
-
-    # Enter a parse tree produced by langParser#toListDestructuring.
-    def enterToListDestructuring(self, ctx):
-        pass
-
-    # Exit a parse tree produced by langParser#toListDestructuring.
-    def exitToListDestructuring(self, ctx):
-        pass
-
-
     # Enter a parse tree produced by langParser#staticValueDeclaration.
     def enterStaticValueDeclaration(self, ctx):
         pass
@@ -121,6 +121,15 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#toDestructuring.
+    def enterToDestructuring(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#toDestructuring.
+    def exitToDestructuring(self, ctx):
+        pass
+
+
     # Enter a parse tree produced by langParser#toExpression.
     def enterToExpression(self, ctx):
         pass
@@ -130,12 +139,39 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#toObjectDestructuring.
+    def enterToObjectDestructuring(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#toObjectDestructuring.
+    def exitToObjectDestructuring(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#toListDestructuring.
+    def enterToListDestructuring(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#toListDestructuring.
+    def exitToListDestructuring(self, ctx):
+        pass
+
+
     # Enter a parse tree produced by langParser#mod.
     def enterMod(self, ctx):
         pass
 
     # Exit a parse tree produced by langParser#mod.
     def exitMod(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#singleParameterInvocation.
+    def enterSingleParameterInvocation(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#singleParameterInvocation.
+    def exitSingleParameterInvocation(self, ctx):
         pass
 
 

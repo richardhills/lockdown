@@ -59,18 +59,46 @@ class RDHLang5Visitor(langVisitor):
             return self.visit(ctx.function())
 
     def visitFunction(self, ctx):
-        argument_type = ctx.expression()
+        argument_destructuring = ctx.argumentDestructuring()
+        argument_expression = ctx.expression()
 
-        if argument_type:
-            argument_type = self.visit(argument_type)
+        code_block = self.visit(ctx.codeBlock())
+
+        if argument_destructuring:
+            argument_destructuring = self.visit(argument_destructuring)
+            function_builder = argument_destructuring.chain(code_block, get_debug_info(ctx))
+        elif argument_expression:
+            argument_expression = self.visit(argument_expression)
+            function_builder = CodeBlockBuilder(
+                argument_type_expression=argument_expression
+            ).chain(code_block, get_debug_info(ctx))
         else:
-            argument_type = MISSING
-
-        function_builder = CodeBlockBuilder(
-            argument_type_expression=argument_type
-        ).chain(self.visit(ctx.codeBlock()), get_debug_info(ctx))
+            function_builder = code_block
 
         return function_builder.create("function", get_debug_info(ctx))
+
+    def visitArgumentDestructurings(self, ctx):
+        initializers = [self.visit(l) for l in ctx.argumentDestructuring()]
+
+        argument_types = [ None ] * len(initializers)
+        local_variable_types = {}
+        local_variable_initializers = {}
+
+        for index, (type, name) in enumerate(initializers):
+            argument_types[index] = type
+            local_variable_types[name] = type
+            local_variable_initializers[name] = dereference("argument", index)
+
+        return CodeBlockBuilder(
+            argument_type_expression=argument_types,
+            local_variable_type=object_type(local_variable_types),
+            local_initializer=object_template_op(local_variable_initializers)
+        )
+
+    def visitArgumentDestructuring(self, ctx):
+        symbol = ctx.SYMBOL().getText()
+        type = self.visit(ctx.expression())
+        return (type, symbol)
 
     def visitSymbolInitialization(self, ctx):
         return (
@@ -220,6 +248,11 @@ class RDHLang5Visitor(langVisitor):
         return literal_op(json.loads(ctx.NUMBER().getText()))
 
     def visitInvocation(self, ctx):
+        function = self.visit(ctx.expression()[0])
+        arguments = [self.visit(a) for a in ctx.expression()[1:]]
+        return invoke_op(function, list_template_op(arguments), **get_debug_info(ctx))
+
+    def visitSingleParameterInvocation(self, ctx):
         function, argument = ctx.expression()
         function = self.visit(function)
         argument = self.visit(argument)
