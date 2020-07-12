@@ -69,6 +69,7 @@ class TestJSONParsing(TestCase):
         """)
         self.assertEqual(ast.foo.bar, 42)
 
+
 class TestBasicFunction(TestCase):
     def test_returns_42(self):
         code = parse("""
@@ -176,7 +177,6 @@ class TestBasicFunction(TestCase):
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
-
     def test_mix_of_initialization_and_mutation(self):
         code = parse("""
             function() {
@@ -190,7 +190,6 @@ class TestBasicFunction(TestCase):
         result = bootstrap_function(code, check_safe_exit=True)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
-
 
     def test_mix_of_initialization_and_mutation_on_object(self):
         code = parse("""
@@ -239,7 +238,6 @@ class TestBasicFunction(TestCase):
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 6)
 
-
     def test_mutate_list_of_objects(self):
         code = parse("""
             function() {
@@ -252,7 +250,6 @@ class TestBasicFunction(TestCase):
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 12)
 
-
     def test_mutate_object_in_list(self):
         code = parse("""
             function() {
@@ -264,7 +261,6 @@ class TestBasicFunction(TestCase):
         result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 12)
-
 
     def test_duplicate_object_in_list(self):
         code = parse("""
@@ -302,6 +298,7 @@ class TestBasicFunction(TestCase):
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 6)
 
+
 class TestBuiltIns(TestCase):
     def test_range(self):
         code = parse("""
@@ -317,6 +314,7 @@ class TestBuiltIns(TestCase):
         # The values come out in reverse due to the list function using insert(0, element) repeatedly. Need an append(element) operator
         self.assertEquals(list(result.value), [ 4, 3, 2, 1 ])
 
+
 class TestInferredTypes(TestCase):
     def test_inferred_locals(self):
         code = parse("""
@@ -330,6 +328,7 @@ class TestInferredTypes(TestCase):
         result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
+
 
 class TestFunctionDeclaration(TestCase):
     def test_local_function(self):
@@ -402,6 +401,7 @@ class TestFunctionDeclaration(TestCase):
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 2 ** (3 * 3))
 
+
 class TestObjectDestructuring(TestCase):
     def test_single_initialization_destructure(self):
         code = parse("""
@@ -472,6 +472,7 @@ class TestObjectDestructuring(TestCase):
         result = bootstrap_function(code, check_safe_exit=True)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
+
 
 class TestListDestructuring(TestCase):
     def test_single_initialization_destructure(self):
@@ -544,6 +545,7 @@ class TestListDestructuring(TestCase):
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
+
 class TestLoops(TestCase):
     def test_counter(self):
         code = parse("""
@@ -586,15 +588,16 @@ class TestMisc(TestCase):
         with self.assertRaises(PreparationException):
             bootstrap_function(code)
 
+
 class TestSpeed(TestCase):
     def test_loops(self):
         start = time()
         code = parse("""
             function() {
                 int i = 0, j = 0;
-                while(i < 20) {
+                while(i < 100) {
                     j = 0;
-                    while(j < 20) {
+                    while(j < 100) {
                         int foo = i * j;
                         int bar = i * j;
                         int baz = i * j;
@@ -606,10 +609,35 @@ class TestSpeed(TestCase):
             }
         """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True)
-        self.assertEquals(result.value, 20 * 20)
+        self.assertEquals(result.value, 100 * 100)
         end = time()
         self.assertLess(end - start, 25)
         print end - start
+
+    def test_loop_faster(self):
+        start = time()
+        code = parse("""
+            function() {
+                int i = 0, j = 0;
+                while(i < 100) {
+                    j = 0;
+                    while(j < 100) {
+                        int foo = i * j;
+                        int bar = i * j;
+                        int baz = i * j;
+                        j = j + 1;
+                    };
+                    i = i + 1;
+                };
+                return i * j;
+            }
+        """, debug=True)
+        result = bootstrap_function(code, check_safe_exit=True, transpile=True)
+        self.assertEquals(result.value, 100 * 100)
+        end = time()
+        self.assertLess(end - start, 25)
+        print end - start
+
 
 class TestEuler(TestCase):
     """
@@ -762,9 +790,8 @@ class TestEuler(TestCase):
         result = bootstrap_function(code, check_safe_exit=True)
         self.assertEquals(result.value, 31875000)
 
-
     def test_14(self):
-        return # This test is currently too slow - requires caching of results to speed up
+        return  # This test is currently too slow - requires caching of results to speed up
         code = parse("""
             function() {
                 var testStartingNumber = function(int) {
@@ -795,4 +822,34 @@ class TestEuler(TestCase):
         """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True)
         self.assertEquals(result.value, 837799)
+
+
+class TestTranspilation(TestCase):
+    def test_basic(self):
+        code = parse("""
+            function() {
+                return 42;
+            }
+        """)
+        result = bootstrap_function(code, transpile=True)
+        self.assertEquals(result.value, 42)
+
+    def test_multiplication(self):
+        code = parse("""
+            function() {
+                return 21 * 2;
+            }
+        """)
+        result = bootstrap_function(code, transpile=True)
+        self.assertEquals(result.value, 42)
+
+    def test_comma_op(self):
+        code = parse("""
+            function() {
+                100 + 1;
+                return 21 * 2;
+            }
+        """)
+        result = bootstrap_function(code, transpile=True)
+        self.assertEquals(result.value, 42)
 

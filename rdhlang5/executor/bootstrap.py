@@ -133,7 +133,7 @@ def format_unhandled_break_type(break_type, raw_code):
 {}^
 {}| {}""".format(lines[line - 1], padding, padding, getattr(out_break_type, "name", None) or str(out_break_type))
 
-def bootstrap_function(data, argument=None, context=None, check_safe_exit=False):
+def bootstrap_function(data, argument=None, context=None, check_safe_exit=False, transpile=False):
     if argument is None:
         argument = NO_VALUE
     if context is None:
@@ -170,6 +170,12 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False)
             raise BootstrapException("\n\n".join(error_msgs))
 
         closed_function = open_function.close(context)
+
+#        print closed_function.to_code()
+
+        if transpile:
+            closed_function = closed_function.transpile()
+
         capture_result.attempt_capture_or_raise(*closed_function.invoke(argument, frame_manager))
 
     return capture_result

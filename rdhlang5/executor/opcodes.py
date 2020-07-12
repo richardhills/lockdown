@@ -3,8 +3,13 @@ from __future__ import unicode_literals
 
 from _collections import defaultdict
 from abc import abstractmethod
+import ast
+from pydoc import visiblename
+
+from traitlets.traitlets import HasDescriptors
 
 from log import logger
+from rdhlang5.executor.ast_utils import compile_statement, compile_function, compile_expression
 from rdhlang5.executor.exceptions import PreparationException
 from rdhlang5.executor.flow_control import BreakTypesFactory, BreakException
 from rdhlang5.executor.function_type import OpenFunctionType, ClosedFunctionType
@@ -20,16 +25,13 @@ from rdhlang5.type_system.exceptions import FatalError, InvalidDereferenceType, 
     InvalidDereferenceKey, InvalidAssignmentType, InvalidAssignmentKey
 from rdhlang5.type_system.list_types import RDHList, ListGetterType, \
     ListSetterType, ListWildcardGetterType, ListWildcardSetterType, \
-    ListWildcardDeletterType, ListInsertType, ListWildcardInsertType,\
+    ListWildcardDeletterType, ListInsertType, ListWildcardInsertType, \
     is_list_checker
 from rdhlang5.type_system.managers import get_type_of_value, get_manager
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType, \
     ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
     ObjectWildcardSetterType, is_object_checker
 from rdhlang5.utils import MISSING, NO_VALUE, is_debug, one_shot_memoize
-from pydoc import visiblename
-
-EVALUATE_CAPTURE_TYPES = { "out": AnyType() }
 
 
 def evaluate(expression, context, frame_manager, immediate_context=None):
@@ -145,6 +147,15 @@ class Opcode(object):
     def get_line_and_column(self):
         return getattr(self.data, "line", None), getattr(self.data, "column", None)
 
+    def return_value_jump(self, context, frame_manager, immediate_context=None):
+        return evaluate(self, context, frame_manager, immediate_context)
+
+    def to_ast(self, context_name, dependency_builder):
+        return compile_expression(
+            "{return_value_jump}({context_name}, _frame_manager)",
+            context_name, dependency_builder, return_value_jump=self.return_value_jump
+        )
+
     def to_code(self):
         return str(type(self))
 
@@ -158,6 +169,9 @@ class Nop(Opcode):
     def jump(self, context, frame_manager, immediate_context=None):
         with frame_manager.get_next_frame(self) as frame:
             return frame.value(NO_VALUE)
+
+    def to_ast(self, context_name, dependency_builder):
+        return compile_expression("NoValue", context_name, dependency_builder)
 
     def to_code(self):
         return "nop"
@@ -179,6 +193,13 @@ class LiteralOp(Opcode):
     def jump(self, context, frame_manager, immediate_context=None):
         with frame_manager.get_next_frame(self) as frame:
             return frame.value(self.value)
+
+    def to_ast(self, context_name, dependency_builder):
+        if isinstance(self.value, int):
+            return ast.Num(n=self.value)
+        if isinstance(self.value, basestring):
+            return ast.Str(s=self.value)
+        raise FatalError()
 
     def __str__(self):
         return "LiteralOp<{}>".format(self.value)
@@ -245,6 +266,15 @@ class ObjectTemplateOp(Opcode):
 
             return frame.value(RDHObject(result, debug_reason="object-template"))
 
+    def to_ast(self, context_name, dependency_builder):
+        parameters = {
+            "ast_" + key: opcode.to_ast(context_name, dependency_builder) for key, opcode in self.opcodes.items()
+        }
+        parameter_template = ",".join("\"{}\": {{ast_{}}}".format(key, key) for key in self.opcodes.keys())
+        return compile_expression(
+            "RDHObject({{ " + parameter_template + " }})",
+            context_name, dependency_builder, **parameters
+        )
 
 class DictTemplateOp(Opcode):
     def __init__(self, data, visitor):
@@ -392,6 +422,9 @@ class ContextOp(Opcode):
         with frame_manager.get_next_frame(self) as frame:
             return frame.value(context)
 
+    def to_ast(self, context_name, dependency_builder):
+        return compile_expression(context_name, context_name, dependency_builder)
+
     def __str__(self):
         return "Context"
 
@@ -471,14 +504,14 @@ class DereferenceOp(Opcode):
             try:
                 direct_micro_op_type = self.direct_micro_ops.get(reference, None)
                 if direct_micro_op_type:
-                    if False:# not is_debug():
+                    if False:  # not is_debug():
                         return frame.value(direct_micro_op_type.invoke(manager, True))
                     micro_op = direct_micro_op_type.create(manager)
                     return frame.value(micro_op.invoke(trust_caller=True))
 
                 wildcard_micro_op_type = self.wildcard_micro_ops.get(reference, None)
                 if wildcard_micro_op_type:
-                    if False:#not is_debug():
+                    if False:  # not is_debug():
                         return frame.value(wildcard_micro_op_type.invoke(manager, reference, True))
                     micro_op = wildcard_micro_op_type.create(manager)
                     return frame.value(micro_op.invoke(reference, trust_caller=True))
@@ -498,6 +531,14 @@ class DereferenceOp(Opcode):
                 return frame.exception(self.INVALID_DEREFERENCE(reference=reference))
             except InvalidDereferenceKey:
                 return frame.exception(self.INVALID_DEREFERENCE(reference=reference))
+
+    def to_ast(self, context_name, dependency_builder):
+        return compile_expression(
+            "{of}.__dict__[{reference}]",
+            context_name, dependency_builder,
+            of=self.of.to_ast(context_name, dependency_builder),
+            reference=self.reference.to_ast(context_name, dependency_builder)
+        )
 
     def __str__(self):
         return "{}.{}".format(self.of, self.reference)
@@ -609,8 +650,6 @@ class AssignmentOp(Opcode):
             reference = frame.step("reference", lambda: evaluate(self.reference, context, frame_manager))
             rvalue = frame.step("rvalue", lambda: evaluate(self.rvalue, context, frame_manager))
 
-            #print "{} = {}".format(reference, rvalue)
-
             manager = get_manager(of)
 
             try:
@@ -619,7 +658,7 @@ class AssignmentOp(Opcode):
                     if (is_debug() or self.invalid_rvalue_error) and not direct_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
                         return frame.exception(self.INVALID_RVALUE())
 
-                    if False:#not is_debug():
+                    if False:  # not is_debug():
                         return frame.value(direct_micro_op_type.invoke(manager, rvalue, True))
                     micro_op = direct_micro_op_type.create(manager)
                     return frame.value(micro_op.invoke(rvalue, trust_caller=True))
@@ -629,7 +668,7 @@ class AssignmentOp(Opcode):
                     if (is_debug() or self.invalid_rvalue_error) and not wildcard_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
                         return frame.exception(self.INVALID_RVALUE())
 
-                    if False:#not is_debug():
+                    if False:  # not is_debug():
                         return frame.value(direct_micro_op_type.invoke(manager, rvalue, True))
                     micro_op = wildcard_micro_op_type.create(manager)
                     return frame.value(micro_op.invoke(reference, rvalue, trust_caller=True))
@@ -655,6 +694,15 @@ class AssignmentOp(Opcode):
                 return frame.exception(self.INVALID_ASSIGNMENT())
             except InvalidAssignmentKey:
                 return frame.exception(self.INVALID_ASSIGNMENT())
+
+    def to_ast(self, context_name, dependency_builder):
+        return compile_statement("""
+{of}.__dict__[{reference}] = {rvalue}
+            """, context_name, dependency_builder,
+            of=self.of.to_ast(context_name, dependency_builder),
+            reference=self.reference.to_ast(context_name, dependency_builder),
+            rvalue=self.rvalue.to_ast(context_name, dependency_builder)
+        )
 
     def to_code(self):
         return "{}.{} = {}".format(self.of.to_code(), self.reference.to_code(), self.rvalue.to_code())
@@ -781,7 +829,7 @@ class InsertOp(Opcode):
                 return frame.exception(self.INVALID_ASSIGNMENT())
 
 
-def BinaryOp(name, symbol, func, argument_type, result_type):
+def BinaryOp(name, symbol, func, argument_type, result_type, number_op=None, cmp_op=None):
     class _BinaryOp(Opcode):
         MISSING_OPERANDS = TypeErrorFactory("{}: missing_integers".format(name))
 
@@ -831,6 +879,18 @@ def BinaryOp(name, symbol, func, argument_type, result_type):
 
                 return frame.value(func(get_lvalue, get_rvalue))
 
+        def to_ast(self, context_name, dependency_builder):
+            if number_op:
+                lvalue_ast = self.lvalue.to_ast(context_name, dependency_builder)
+                rvalue_ast = self.rvalue.to_ast(context_name, dependency_builder)
+                return ast.BinOp(left=lvalue_ast, right=rvalue_ast, op=number_op)
+            elif cmp_op:
+                lvalue_ast = self.lvalue.to_ast(context_name, dependency_builder)
+                rvalue_ast = self.rvalue.to_ast(context_name, dependency_builder)
+                return ast.Compare(left=lvalue_ast, ops=[ cmp_op ], comparators=[ rvalue_ast ])
+            else:
+                return Opcode.to_ast(self, context_name, dependency_builder)
+
         def to_code(self):
             return "{} {} {}".format(self.lvalue.to_code(), symbol, self.rvalue.to_code())
 
@@ -876,6 +936,47 @@ class TransformOp(Opcode):
             else:
                 return frame.unwind(self.output, NO_VALUE, None)
         raise FatalError()
+
+    def to_ast(self, context_name, dependency_builder):
+        if self.expression is None:
+            return compile_statement("""
+raise BreakException("{output}", NoValue, None, None)
+                """, context_name, dependency_builder,
+                output=self.output
+            )
+
+        expression_ast = self.expression.to_ast(context_name, dependency_builder)
+
+        if self.input == "value":
+            return compile_statement("""
+raise BreakException("{output}", {expression}, None, None)
+                """, context_name, dependency_builder,
+                output=self.output, expression=expression_ast
+            )
+        elif self.output == "value":
+            try_catcher = compile_statement("""
+def TransformOpTryCatcher{opcode_id}({context_name}, _frame_manager):
+    try:
+        {expression}
+    except BreakException as b:
+        if b.mode == "{input}":
+            return b.value
+        raise
+                """, context_name, dependency_builder,
+                opcode_id=id(self),
+                opcode=self,
+                input=self.input,
+                output=self.output,
+                expression=expression_ast
+            )
+
+            return compile_expression("""
+{try_catcher}({context_name}, _frame_manager)
+                """, context_name, dependency_builder,
+                try_catcher=try_catcher
+            )
+        else:
+            return super(TransformOp, self).to_ast(context_name)
 
     def to_code(self):
         return "transform({} -> {}\n {}\n)".format(self.input, self.output, self.expression.to_code())
@@ -1055,6 +1156,18 @@ class CommaOp(Opcode):
 
             return frame.value(value)
 
+    def to_ast(self, context_name, dependency_builder):
+        asts = [ e.to_ast(context_name, dependency_builder) for e in self.opcodes ]
+        ast_placeholders = { "ast{}".format(i): e_ast for i, e_ast in enumerate(asts) }
+        comma_function = compile_statement(
+            "def CommaOp{opcode_id}({context_name}, _frame_manager):\n\t{" + "}\n\t{".join(ast_placeholders.keys()) + "}",
+            context_name, dependency_builder, opcode_id=id(self), **ast_placeholders
+        )
+        return compile_expression(
+            "{comma_function}({context_name}, _frame_manager)",
+            context_name, dependency_builder, comma_function=comma_function
+        )
+
     def to_code(self):
         return ";\n".join([ o.to_code() for o in self.opcodes ])
 
@@ -1071,6 +1184,16 @@ class LoopOp(Opcode):
         code = self.code
         while 1:
             evaluate(code, context, frame_manager)
+
+    def to_ast(self, context_name, dependency_builder):
+        return compile_statement("""
+while(True):
+    {expression}
+""",
+            context_name,
+            dependency_builder,
+            expression=self.code.to_ast(context_name, dependency_builder)
+        )
 
     def to_code(self):
         return "Loop {{ {} }}".format(self.code.to_code())
@@ -1124,6 +1247,14 @@ class ConditionalOp(Opcode):
 
             return frame.value(result)
 
+    def to_ast(self, context_name, dependency_builder):
+        return compile_expression("""
+{when_true} if {condition} else {when_false}
+            """, context_name, dependency_builder,
+            condition = self.condition.to_ast(context_name, dependency_builder),
+            when_true=self.when_true.to_ast(context_name, dependency_builder),
+            when_false=self.when_false.to_ast(context_name, dependency_builder)
+        )
 
 class PrepareOp(Opcode):
     PREPARATION_ERROR = TypeErrorFactory("PrepareOp: preparation_error")
@@ -1218,6 +1349,14 @@ class CloseOp(Opcode):
 
             return frame.value(open_function.close(outer_context))
 
+    def to_ast(self, context_name, dependency_builder):
+        return compile_expression("""
+{open_function}.close({outer_context})
+            """, context_name, dependency_builder,
+            open_function=self.function.to_ast(context_name, dependency_builder),
+            outer_context=self.outer_context.to_ast(context_name, dependency_builder)
+        )
+
     def to_code(self):
         return "Closed_{}".format(self.function.to_code())
 
@@ -1248,6 +1387,17 @@ class StaticOp(Opcode):
         with frame_manager.get_next_frame(self) as frame:
             self.lazy_initialize(context, frame_manager, immediate_context)
             return frame.unwind(self.mode, self.value, None)
+
+    def to_ast(self, context_name, dependency_builder):
+        if self.mode == "value":
+            return compile_expression(
+                "{static_value}",
+                context_name,
+                dependency_builder,
+                static_value=self.value
+            )
+        else:
+            return super(StaticOp, self).to_ast(context_name, dependency_builder)
 
     def to_code(self):
         if not self.value:
@@ -1313,6 +1463,14 @@ class InvokeOp(Opcode):
 
         raise FatalError()
 
+    def to_ast(self, context_name, dependency_builder):
+        return compile_expression("""
+{function}.invoke({argument}, _frame_manager)
+            """, context_name, dependency_builder,
+            function=self.function.to_ast(context_name, dependency_builder),
+            argument=self.argument.to_ast(context_name, dependency_builder)
+        )
+
     def to_code(self):
         return "invoke({},\n{}\n)".format(self.argument.to_code(), self.function.to_code())
 
@@ -1360,7 +1518,7 @@ class MatchOp(Opcode):
 
             for index, matcher in enumerate(self.matchers):
                 matcher_function = frame.step(index, lambda: evaluate(matcher, context, frame_manager))
-                if matcher_function.argument_type.is_copyable_from(value_type):
+                if matcher_function.get_type().argument_type.is_copyable_from(value_type):
                     return matcher_function.invoke(value, frame_manager)
             else:
                 return frame.exception(self.NO_MATCH())
@@ -1419,17 +1577,47 @@ OPCODES = {
     "object_template": ObjectTemplateOp,
     "dict_template": DictTemplateOp,
     "list_template": ListTemplateOp,
-    "multiplication": BinaryOp("Multiplication", "*", lambda lvalue, rvalue: lvalue() * rvalue(), IntegerType(), IntegerType()),
-    "division": BinaryOp("Division", "/", lambda lvalue, rvalue: lvalue() / rvalue(), IntegerType(), IntegerType()),
-    "addition": BinaryOp("Addition", "+", lambda lvalue, rvalue: lvalue() + rvalue(), IntegerType(), IntegerType()),
-    "subtraction": BinaryOp("Subtraction", "-", lambda lvalue, rvalue: lvalue() - rvalue(), IntegerType(), IntegerType()),
+    "multiplication": BinaryOp(
+        "Multiplication", "*",
+        lambda lvalue, rvalue: lvalue() * rvalue(), IntegerType(), IntegerType(), number_op=ast.Mult()
+    ),
+    "division": BinaryOp(
+        "Division", "/",
+        lambda lvalue, rvalue: lvalue() / rvalue(), IntegerType(), IntegerType(), number_op=ast.Div()
+    ),
+    "addition": BinaryOp(
+        "Addition", "+",
+        lambda lvalue, rvalue: lvalue() + rvalue(), IntegerType(), IntegerType(), number_op=ast.Add()
+    ),
+    "subtraction": BinaryOp(
+        "Subtraction", "-",
+        lambda lvalue, rvalue: lvalue() - rvalue(), IntegerType(), IntegerType(), number_op=ast.Sub()
+    ),
     "mod": BinaryOp("Modulus", "%", lambda lvalue, rvalue: lvalue() % rvalue(), IntegerType(), IntegerType()),
-    "lt": BinaryOp("LessThan", "<", lambda lvalue, rvalue: lvalue() < rvalue(), IntegerType(), BooleanType()),
-    "lte": BinaryOp("LessThanOrEqual", "<=", lambda lvalue, rvalue: lvalue() <= rvalue(), IntegerType(), BooleanType()),
-    "gt": BinaryOp("GreaterThan", ">", lambda lvalue, rvalue: lvalue() > rvalue(), IntegerType(), BooleanType()),
-    "gte": BinaryOp("GreaterThanOrEqual", ">=", lambda lvalue, rvalue: lvalue() >= rvalue(), IntegerType(), BooleanType()),
-    "eq": BinaryOp("Equality", "==", lambda lvalue, rvalue: lvalue() == rvalue(), IntegerType(), BooleanType()),
-    "neq": BinaryOp("Inequality", "!=", lambda lvalue, rvalue: lvalue() != rvalue(), IntegerType(), BooleanType()),
+    "lt": BinaryOp(
+        "LessThan", "<",
+        lambda lvalue, rvalue: lvalue() < rvalue(), IntegerType(), BooleanType(), cmp_op=ast.Lt()
+    ),
+    "lte": BinaryOp(
+        "LessThanOrEqual", "<=",
+        lambda lvalue, rvalue: lvalue() <= rvalue(), IntegerType(), BooleanType(), cmp_op=ast.LtE()
+    ),
+    "gt": BinaryOp(
+        "GreaterThan", ">",
+        lambda lvalue, rvalue: lvalue() > rvalue(), IntegerType(), BooleanType(), cmp_op=ast.Gt()
+    ),
+    "gte": BinaryOp(
+        "GreaterThanOrEqual", ">=",
+        lambda lvalue, rvalue: lvalue() >= rvalue(), IntegerType(), BooleanType(), cmp_op=ast.GtE()
+    ),
+    "eq": BinaryOp(
+        "Equality", "==",
+        lambda lvalue, rvalue: lvalue() == rvalue(), IntegerType(), BooleanType(), cmp_op=ast.Eq()
+    ),
+    "neq": BinaryOp(
+        "Inequality", "!=",
+        lambda lvalue, rvalue: lvalue() != rvalue(), IntegerType(), BooleanType(), cmp_op=ast.NotEq()
+    ),
     "or": BinaryOp("Or", "||", lambda lvalue, rvalue: lvalue() or rvalue(), BooleanType(), BooleanType()),
     "and": BinaryOp("And", "&&", lambda lvalue, rvalue: lvalue() and rvalue(), BooleanType(), BooleanType()),
     "dereference": DereferenceOp,

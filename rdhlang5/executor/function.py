@@ -1,15 +1,23 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+from _ast import AST
+import ast
 import sys
 
+from astor.code_gen import to_source
+
 from log import logger
+from rdhlang5.executor.ast_utils import unwrap_expr, \
+    build_and_compile_ast_function, compile_module, compile_statement, \
+    DependencyBuilder, compile_function, compile_ast_function_def, \
+    get_dependency_key
 from rdhlang5.executor.exceptions import PreparationException
 from rdhlang5.executor.flow_control import BreakTypesFactory, FrameManager
 from rdhlang5.executor.function_type import enrich_break_type, OpenFunctionType, \
     ClosedFunctionType
 from rdhlang5.executor.opcodes import enrich_opcode, get_context_type, evaluate, \
-    get_expression_break_types, flatten_out_types
+    get_expression_break_types, flatten_out_types, TransformOp
 from rdhlang5.executor.raw_code_factories import dynamic_dereference_op, \
     static_op
 from rdhlang5.executor.type_factories import enrich_type
@@ -25,7 +33,8 @@ from rdhlang5.type_system.exceptions import FatalError, InvalidInferredType, \
 from rdhlang5.type_system.list_types import RDHList
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType
-from rdhlang5.utils import MISSING, is_debug, bind_runtime_contexts, raise_from
+from rdhlang5.utils import MISSING, is_debug, bind_runtime_contexts, raise_from, \
+    spread_dict
 
 
 def prepare(data, outer_context, flow_manager, immediate_context=None):
@@ -76,7 +85,7 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
     outer_type = outer_type.reify_revconst_types()
 
     context = RDHObject({
-        "prepare": outer_context, 
+        "prepare": outer_context,
         "static": static,
         "types": RDHObject({
             "outer": outer_type,
@@ -186,11 +195,13 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
 
     return OpenFunction(data, code, outer_context, static, argument_type, outer_type, local_type, local_initializer, final_declared_break_types.build())
 
+
 def get_debug_info_from_opcode(opcode):
     return {
         "column": getattr(opcode, "column", None),
         "line": getattr(opcode, "line", None),
     }
+
 
 class UnboundDereferenceBinder(object):
     def __init__(self, context, search_types=True):
@@ -292,9 +303,10 @@ class UnboundDereferenceBinder(object):
                 get_manager(new_assignment).add_composite_type(DEFAULT_OBJECT_TYPE)
                 return new_assignment
             else:
-                raise FatalError() # TODO, dynamic assignment
+                raise FatalError()  # TODO, dynamic assignment
 
         return expression
+
 
 class RDHFunction(object):
     def get_type(self):
@@ -302,6 +314,7 @@ class RDHFunction(object):
 
     def invoke(self, argument, flow_manager):
         raise NotImplementedError()
+
 
 class OpenFunction(object):
     def __init__(self, data, code, prepare_context, static, argument_type, outer_type, local_type, local_initializer, break_types):
@@ -335,6 +348,8 @@ class OpenFunction(object):
             "types": readonly_rich_composite_type
         }, wildcard_type=AnyType(), name="code-execution-context-type")
 
+        self.compiled_ast = None
+
     def get_type(self):
         return OpenFunctionType(self.argument_type, self.outer_type, self.break_types)
 
@@ -342,21 +357,96 @@ class OpenFunction(object):
         if is_debug() and not self.outer_type.is_copyable_from(get_type_of_value(outer_context)):
             raise FatalError()
 
-        return ClosedFunction(
-            self.data,
-            self.code,
-            self.prepare_context,
-            self.static,
-            self.argument_type,
-            self.outer_type,
-            self.local_type,
-            outer_context,
-            self.local_initializer,
-            self.break_types,
-            self.types_context,
-            self.local_initialization_context_type,
-            self.execution_context_type
+        return ClosedFunction(self, outer_context)
+
+#     def transpile(self):
+#         dependency_builder = DependencyBuilder()
+#         self_ast, context_name = self.to_ast(dependency_builder)
+#         return TranspiledFunction(
+#             self_ast,
+#             dependency_builder,
+#             context_name
+#         )
+
+    def to_ast(self, dependency_builder):
+        context_name = b"context_{}".format(id(self))
+
+        local_initializer_ast = self.local_initializer.to_ast(context_name, dependency_builder)
+        code_ast = self.code.to_ast(context_name, dependency_builder)
+
+        open_function_id = "OpenFunction{}".format(id(self))
+
+        return compile_statement("""
+class {open_function_id}(object):
+    @classmethod
+    def invoke(cls, _argument, _outer_context, _frame_manager):
+        {context_name} = RDHObject({{
+            "prepare": {prepare_context},
+            "outer": _outer_context,
+            "argument": _argument,
+            "static": {static},
+            "types": {types_context}
+        }})
+        _local = {local_initializer}
+        {context_name} = RDHObject({{
+            "prepare": {prepare_context},
+            "outer": _outer_context,
+            "argument": _argument,
+            "static": {static},
+            "types": {types_context},
+            "local": _local
+        }})
+        return ("value", {function_code}, None, None)
+
+    class Closed_{open_function_id}(object):
+        def __init__(self, open_function, outer_context):
+            self.open_function = open_function
+            self.outer_context = outer_context
+
+        def invoke(self, argument, frame_manager):
+            return self.open_function.invoke(argument, self.outer_context, frame_manager)
+
+    @classmethod
+    def close(cls, outer_context):
+        return cls.Closed_{open_function_id}(cls, outer_context)
+""",
+            context_name, dependency_builder,
+            prepare_context=self.prepare_context,
+            static=self.static,
+            types_context=self.types_context,
+            open_function_id=open_function_id,
+            local_initializer=local_initializer_ast,
+            function_code=code_ast
         )
+
+    def transpile(self):
+        dependency_builder = DependencyBuilder()
+
+        our_ast = self.to_ast(dependency_builder)
+        open_function_id = our_ast.name
+
+        combined_ast = [ our_ast ]
+
+        while True:
+            for key, dependency in dependency_builder.dependencies.items():
+                if isinstance(dependency, (OpenFunction, ClosedFunction)):
+                    dependency_builder.replace(key, dependency.to_ast(dependency_builder))
+                    break
+            else:
+                break
+
+        for key, dependency in dependency_builder.dependencies.items():
+            if isinstance(dependency, ast.stmt):
+                combined_ast = combined_ast + [ dependency ]
+
+        dependencies = {
+            key: dependency for key, dependency in dependency_builder.dependencies.items()
+            if not isinstance(dependency, ast.stmt)
+        }
+
+        combined_ast = ast.Module(body=combined_ast)
+
+        return compile_ast_function_def(combined_ast, open_function_id, dependencies)
 
     def to_code(self):
         break_types_code = ";".join(["{}: [{}]".format(mode, ",".join([format_break_type(b) for b in break_types])) for mode, break_types in self.break_types.items()])
@@ -364,33 +454,22 @@ class OpenFunction(object):
             self.argument_type.to_code(), break_types_code, self.outer_type.to_code(), self.local_type.to_code(), self.code.to_code()
         )
 
-class ClosedFunction(RDHFunction):
-    def __init__(self, data, code, prepare_context, static, argument_type, outer_type, local_type, outer_context, local_initializer, break_types, types_context, local_initialization_context_type, execution_context_type):
-        self.data = data
-        self.code = code
-        self.prepare_context = prepare_context
-        self.static = static
-        self.argument_type = argument_type
-        self.outer_type = outer_type
-        self.local_type = local_type
-        self.outer_context = outer_context
-        self.local_initializer = local_initializer
-        self.break_types = break_types
 
-        self.types_context = types_context
-        self.local_initialization_context_type = local_initialization_context_type
-        self.execution_context_type = execution_context_type
+class ClosedFunction(RDHFunction):
+    def __init__(self, open_function, outer_context):
+        self.open_function = open_function
+        self.outer_context = outer_context
 
         self._is_restartable = None
 
     def get_type(self):
         return ClosedFunctionType(
-            self.argument_type, self.break_types
+            self.open_function.argument_type, self.open_function.break_types
         )
 
     @property
     def allowed_break_types(self):
-        return self.break_types
+        return self.open_function.break_types
 
     @property
     def is_restartable(self):
@@ -405,22 +484,27 @@ class ClosedFunction(RDHFunction):
             self._is_restartable = False
         return self._is_restartable
 
+    def transpile(self):
+        open_function_transpile = self.open_function.transpile()
+
+        return open_function_transpile.close(self.outer_context)
+
     def invoke(self, argument, frame_manager):
         logger.debug("ClosedFunction")
-        if is_debug() and not self.argument_type.is_copyable_from(get_type_of_value(argument)):
+        if is_debug() and not self.open_function.argument_type.is_copyable_from(get_type_of_value(argument)):
             raise FatalError()
         logger.debug("ClosedFunction:argument_check")
 
         with frame_manager.get_next_frame(self) as frame:
             try:
-                new_context= frame.step("local_initialization_context", lambda: RDHObject({
-                        "prepare": self.prepare_context,
+                new_context = frame.step("local_initialization_context", lambda: RDHObject({
+                        "prepare": self.open_function.prepare_context,
                         "outer": self.outer_context,
                         "argument": argument,
-                        "static": self.static,
-                        "types": self.types_context
+                        "static": self.open_function.static,
+                        "types": self.open_function.types_context
                     },
-                        bind=self.local_initialization_context_type if bind_runtime_contexts() else None,
+                        bind=self.open_function.local_initialization_context_type if bind_runtime_contexts() else None,
                         instantiator_has_verified_bind=True,
                         debug_reason="local-initialization-context"
                     )
@@ -428,30 +512,30 @@ class ClosedFunction(RDHFunction):
             except MicroOpTypeConflict as e:
                 raise_from(FatalError, e)
 
-            get_manager(new_context)._context_type = self.local_initialization_context_type
+            get_manager(new_context)._context_type = self.open_function.local_initialization_context_type
 
-            logger.debug( "ClosedFunction:local_initializer")
-            local= frame.step("local", lambda: evaluate(self.local_initializer, new_context, frame_manager))
+            logger.debug("ClosedFunction:local_initializer")
+            local = frame.step("local", lambda: evaluate(self.open_function.local_initializer, new_context, frame_manager))
 
             if bind_runtime_contexts():
-                frame.step("remove_local_initialization_context_type", lambda: get_manager(new_context).remove_composite_type(self.local_initialization_context_type))
+                frame.step("remove_local_initialization_context_type", lambda: get_manager(new_context).remove_composite_type(self.open_function.local_initialization_context_type))
 
-            logger.debug( "ClosedFunction:local_check")
-            if is_debug() and not self.local_type.is_copyable_from(get_type_of_value(local)):
-                self.local_type.is_copyable_from(get_type_of_value(local))
+            logger.debug("ClosedFunction:local_check")
+            if is_debug() and not self.open_function.local_type.is_copyable_from(get_type_of_value(local)):
+                self.open_function.local_type.is_copyable_from(get_type_of_value(local))
                 raise FatalError()
 
-            logger.debug( "ClosedFunction:code_context")
+            logger.debug("ClosedFunction:code_context")
             try:
                 new_context = frame.step("code_execution_context", lambda: RDHObject({
-                        "prepare": self.prepare_context,
+                        "prepare": self.open_function.prepare_context,
                         "outer": self.outer_context,
                         "argument": argument,
-                        "static": self.static,
+                        "static": self.open_function.static,
                         "local": local,
-                        "types": self.types_context
+                        "types": self.open_function.types_context
                     },
-                        bind=self.execution_context_type if bind_runtime_contexts() else None,
+                        bind=self.open_function.execution_context_type if bind_runtime_contexts() else None,
                         instantiator_has_verified_bind=True,
                         debug_reason="code-execution-context"
                     )
@@ -460,21 +544,49 @@ class ClosedFunction(RDHFunction):
                 raise raise_from(FatalError, e)
 
             # In conjunction with get_context_type, for performance
-            get_manager(new_context)._context_type = self.execution_context_type
+            get_manager(new_context)._context_type = self.open_function.execution_context_type
 
             logger.debug("ClosedFunction:code_execute")
-            result= frame.step("code", lambda: evaluate(self.code, new_context, frame_manager))
+            result = frame.step("code", lambda: evaluate(self.open_function.code, new_context, frame_manager))
 
             if bind_runtime_contexts():
-                frame.step("remove_code_execution_context_type", lambda: get_manager(new_context).remove_composite_type(self.execution_context_type))
+                frame.step("remove_code_execution_context_type", lambda: get_manager(new_context).remove_composite_type(self.open_function.execution_context_type))
 
             return frame.value(result)
 
     def to_code(self):
-        break_types_code = ";".join(["{}: [{}]".format(mode, ",".join([format_break_type(b) for b in break_types])) for mode, break_types in self.break_types.items()])
+        break_types_code = ";".join(["{}: [{}]".format(mode, ",".join([format_break_type(b) for b in break_types])) for mode, break_types in self.open_function.break_types.items()])
         return "ClosedFunction({} => {}\n{{\n{}\n}}\n)".format(
-            self.argument_type.to_code(), break_types_code, self.code.to_code()
+            self.open_function.argument_type.to_code(), break_types_code, self.open_function.code.to_code()
         )
+
+class WrappedFunction(RDHFunction):
+    def __init__(self, wrapped):
+        self.wrapped = wrapped
+
+    def invoke(self, *args, **kwargs):
+        return self.wrapped(*args, **kwargs)
+
+class TranspiledFunction(RDHFunction):
+    def __init__(self, body, dependency_builder, context_name):
+        function_name = b"ClosedFunction_{}".format(id(self))
+
+        final_thing = body[-1]
+        if isinstance(final_thing, ast.Expr):
+            body[-1] = compile_statement('return ("value", {value}, None, None)', context_name, dependency_builder, value=final_thing.value)
+        elif isinstance(final_thing, ast.expr):
+            body[-1] = compile_statement('return ("value", {value}, None, None)', context_name, dependency_builder, value=final_thing)
+        else:
+            raise FatalError()
+
+        body = [ast.Expr(part) if isinstance(part, ast.expr) else part for part in body]
+
+        self.wrapped_function = build_and_compile_ast_function(
+            function_name, [ b"_argument", b"_frame_manager"], body, dependency_builder.build()
+        )
+
+    def invoke(self, argument, frame_manager):
+        return self.wrapped_function(argument, frame_manager)
 
 class Continuation(RDHFunction):
     __slots__ = [ "frame_manager", "frames", "callback", "restart_type", "break_types" ]
@@ -518,5 +630,4 @@ def format_break_type(break_type):
         return "{ out: {}, in: {} }".format(break_type["out"].to_code(), break_type["in"].to_code())
     else:
         return break_type["out"].to_code()
-
 

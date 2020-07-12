@@ -165,7 +165,7 @@ class TestComma(TestCase):
         self.assertEquals(first_yielder.value, "first")
 
         def second():
-            first_yield_restart_continuation = first_yielder.create_continuation(first, func.break_types)
+            first_yield_restart_continuation = first_yielder.create_continuation(first, func.get_type().break_types)
             first_yield_restart_continuation.invoke(4, frame_manager)
 
         with frame_manager.capture("yield") as second_yielder:
@@ -174,7 +174,7 @@ class TestComma(TestCase):
         self.assertEquals(second_yielder.value, "second")
 
         def third():
-            second_yield_restart_continuation = second_yielder.create_continuation(second, func.break_types)
+            second_yield_restart_continuation = second_yielder.create_continuation(second, func.get_type().break_types)
             second_yield_restart_continuation.invoke(42, frame_manager)
 
         with frame_manager.capture("return") as returner:
@@ -368,7 +368,7 @@ class TestLocals(TestCase):
         self.assertEquals(yielder.value, "hello")
 
         def restart():
-            yielder_restart_continuation = yielder.create_continuation(start, func.break_types)
+            yielder_restart_continuation = yielder.create_continuation(start, func.get_type().break_types)
             yielder_restart_continuation.invoke(32, frame_manager)
 
         with frame_manager.capture("return") as returner:
@@ -397,7 +397,7 @@ class TestLocals(TestCase):
         self.assertEquals(first_yielder.value, "first")
 
         def second():
-            first_restart_continuation = first_yielder.create_continuation(first, func.break_types)
+            first_restart_continuation = first_yielder.create_continuation(first, func.get_type().break_types)
             first_restart_continuation.invoke(40, frame_manager)
 
         with frame_manager.capture("yield") as second_yielder:
@@ -405,7 +405,7 @@ class TestLocals(TestCase):
         self.assertEquals(second_yielder.value, "second")
 
         with frame_manager.capture("return") as returner:
-            second_restart_continuation = second_yielder.create_continuation(first, func.break_types)
+            second_restart_continuation = second_yielder.create_continuation(first, func.get_type().break_types)
             second_restart_continuation.invoke(2, frame_manager)
 
         self.assertEquals(returner.value, 42)
