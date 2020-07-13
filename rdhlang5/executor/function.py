@@ -359,44 +359,48 @@ class OpenFunction(object):
 
         return ClosedFunction(self, outer_context)
 
-#     def transpile(self):
-#         dependency_builder = DependencyBuilder()
-#         self_ast, context_name = self.to_ast(dependency_builder)
-#         return TranspiledFunction(
-#             self_ast,
-#             dependency_builder,
-#             context_name
-#         )
-
     def to_ast(self, dependency_builder):
         context_name = b"context_{}".format(id(self))
 
         local_initializer_ast = self.local_initializer.to_ast(context_name, dependency_builder)
-        code_ast = self.code.to_ast(context_name, dependency_builder)
+
+        return_types = self.break_types.get("value", [])
+        will_ignore_return_value = True
+        for return_type in return_types:
+            if not isinstance(return_type["out"], NoValueType):
+                will_ignore_return_value = False
+
+        code_ast = self.code.to_ast(
+            context_name,
+            dependency_builder,
+            will_ignore_return_value=will_ignore_return_value
+        )
 
         open_function_id = "OpenFunction{}".format(id(self))
 
         return compile_statement("""
 class {open_function_id}(object):
     @classmethod
-    def invoke(cls, _argument, _outer_context, _frame_manager):
+    def invoke(cls, {context_name}_argument, {context_name}_outer_context, _frame_manager):
         {context_name} = RDHObject({{
             "prepare": {prepare_context},
-            "outer": _outer_context,
-            "argument": _argument,
+            "outer": {context_name}_outer_context,
+            "argument": {context_name}_argument,
             "static": {static},
             "types": {types_context}
         }})
-        _local = {local_initializer}
-        {context_name} = RDHObject({{
-            "prepare": {prepare_context},
-            "outer": _outer_context,
-            "argument": _argument,
-            "static": {static},
-            "types": {types_context},
-            "local": _local
-        }})
+        {context_name}.__dict__["local"] = {local_initializer}
+        """ \
+        + (
+            """
+        {function_code}
+        return ("value", NoValue, None, None)
+            """
+            if will_ignore_return_value else 
+            """
         return ("value", {function_code}, None, None)
+            """
+        ) + """
 
     class Closed_{open_function_id}(object):
         def __init__(self, open_function, outer_context):
@@ -415,6 +419,44 @@ class {open_function_id}(object):
             static=self.static,
             types_context=self.types_context,
             open_function_id=open_function_id,
+            local_initializer=local_initializer_ast,
+            function_code=code_ast
+        )
+
+    def to_inline_ast(self, dependency_builder, outer_context_ast, argument_ast):
+        context_name = b"context_{}".format(id(self))
+
+        local_initializer_ast = self.local_initializer.to_ast(context_name, dependency_builder)
+
+        return_types = self.break_types.get("value", [])
+        will_ignore_return_value = True
+        for return_type in return_types:
+            if not isinstance(return_type["out"], NoValueType):
+                will_ignore_return_value = False
+
+        code_ast = self.code.to_ast(
+            context_name,
+            dependency_builder,
+            will_ignore_return_value=will_ignore_return_value
+        )
+
+        return compile_module("""
+{context_name} = RDHObject({{
+    "prepare": {prepare_context},
+    "outer": {outer_context},
+    "argument": {argument},
+    "static": {static},
+    "types": {types_context}
+}})
+{context_name}.__dict__["local"] = {local_initializer}
+{function_code}
+            """,
+            context_name, dependency_builder,
+            prepare_context=self.prepare_context,
+            outer_context=outer_context_ast,
+            argument=argument_ast,
+            static=self.static,
+            types_context=self.types_context,
             local_initializer=local_initializer_ast,
             function_code=code_ast
         )

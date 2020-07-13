@@ -608,11 +608,10 @@ class TestSpeed(TestCase):
                 return i * j;
             }
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True)
+        result = bootstrap_function(code, check_safe_exit=True, measure=True)
         self.assertEquals(result.value, 100 * 100)
         end = time()
         self.assertLess(end - start, 25)
-        print end - start
 
     def test_loop_faster(self):
         start = time()
@@ -632,11 +631,10 @@ class TestSpeed(TestCase):
                 return i * j;
             }
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True, transpile=True)
+        result = bootstrap_function(code, check_safe_exit=True, transpile=True, measure=True)
         self.assertEquals(result.value, 100 * 100)
         end = time()
         self.assertLess(end - start, 25)
-        print end - start
 
 
 class TestEuler(TestCase):

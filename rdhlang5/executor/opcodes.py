@@ -9,7 +9,8 @@ from pydoc import visiblename
 from traitlets.traitlets import HasDescriptors
 
 from log import logger
-from rdhlang5.executor.ast_utils import compile_statement, compile_function, compile_expression
+from rdhlang5.executor.ast_utils import compile_statement, compile_function, compile_expression, \
+    unwrap_modules, wrap_as_statement, compile_module
 from rdhlang5.executor.exceptions import PreparationException
 from rdhlang5.executor.flow_control import BreakTypesFactory, BreakException
 from rdhlang5.executor.function_type import OpenFunctionType, ClosedFunctionType
@@ -150,7 +151,7 @@ class Opcode(object):
     def return_value_jump(self, context, frame_manager, immediate_context=None):
         return evaluate(self, context, frame_manager, immediate_context)
 
-    def to_ast(self, context_name, dependency_builder):
+    def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         return compile_expression(
             "{return_value_jump}({context_name}, _frame_manager)",
             context_name, dependency_builder, return_value_jump=self.return_value_jump
@@ -170,7 +171,7 @@ class Nop(Opcode):
         with frame_manager.get_next_frame(self) as frame:
             return frame.value(NO_VALUE)
 
-    def to_ast(self, context_name, dependency_builder):
+    def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         return compile_expression("NoValue", context_name, dependency_builder)
 
     def to_code(self):
@@ -194,7 +195,7 @@ class LiteralOp(Opcode):
         with frame_manager.get_next_frame(self) as frame:
             return frame.value(self.value)
 
-    def to_ast(self, context_name, dependency_builder):
+    def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         if isinstance(self.value, int):
             return ast.Num(n=self.value)
         if isinstance(self.value, basestring):
@@ -266,7 +267,7 @@ class ObjectTemplateOp(Opcode):
 
             return frame.value(RDHObject(result, debug_reason="object-template"))
 
-    def to_ast(self, context_name, dependency_builder):
+    def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         parameters = {
             "ast_" + key: opcode.to_ast(context_name, dependency_builder) for key, opcode in self.opcodes.items()
         }
@@ -275,6 +276,7 @@ class ObjectTemplateOp(Opcode):
             "RDHObject({{ " + parameter_template + " }})",
             context_name, dependency_builder, **parameters
         )
+
 
 class DictTemplateOp(Opcode):
     def __init__(self, data, visitor):
@@ -422,7 +424,7 @@ class ContextOp(Opcode):
         with frame_manager.get_next_frame(self) as frame:
             return frame.value(context)
 
-    def to_ast(self, context_name, dependency_builder):
+    def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         return compile_expression(context_name, context_name, dependency_builder)
 
     def __str__(self):
@@ -532,7 +534,7 @@ class DereferenceOp(Opcode):
             except InvalidDereferenceKey:
                 return frame.exception(self.INVALID_DEREFERENCE(reference=reference))
 
-    def to_ast(self, context_name, dependency_builder):
+    def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         return compile_expression(
             "{of}.__dict__[{reference}]",
             context_name, dependency_builder,
@@ -695,7 +697,7 @@ class AssignmentOp(Opcode):
             except InvalidAssignmentKey:
                 return frame.exception(self.INVALID_ASSIGNMENT())
 
-    def to_ast(self, context_name, dependency_builder):
+    def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         return compile_statement("""
 {of}.__dict__[{reference}] = {rvalue}
             """, context_name, dependency_builder,
@@ -879,7 +881,7 @@ def BinaryOp(name, symbol, func, argument_type, result_type, number_op=None, cmp
 
                 return frame.value(func(get_lvalue, get_rvalue))
 
-        def to_ast(self, context_name, dependency_builder):
+        def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
             if number_op:
                 lvalue_ast = self.lvalue.to_ast(context_name, dependency_builder)
                 rvalue_ast = self.rvalue.to_ast(context_name, dependency_builder)
@@ -937,7 +939,7 @@ class TransformOp(Opcode):
                 return frame.unwind(self.output, NO_VALUE, None)
         raise FatalError()
 
-    def to_ast(self, context_name, dependency_builder):
+    def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         if self.expression is None:
             return compile_statement("""
 raise BreakException("{output}", NoValue, None, None)
@@ -945,7 +947,11 @@ raise BreakException("{output}", NoValue, None, None)
                 output=self.output
             )
 
-        expression_ast = self.expression.to_ast(context_name, dependency_builder)
+        expression_ast = self.expression.to_ast(
+            context_name,
+            dependency_builder,
+            will_ignore_return_value=will_ignore_return_value and self.input != "value"
+        )
 
         if self.input == "value":
             return compile_statement("""
@@ -954,7 +960,19 @@ raise BreakException("{output}", {expression}, None, None)
                 output=self.output, expression=expression_ast
             )
         elif self.output == "value":
-            try_catcher = compile_statement("""
+            if will_ignore_return_value:
+                return compile_statement("""
+try:
+    {expression}
+except BreakException as b:
+    if b.mode != "{input}":
+        raise
+                    """, context_name, dependency_builder,
+                    input=self.input,
+                    expression=expression_ast
+                )
+            else:
+                try_catcher = compile_statement("""
 def TransformOpTryCatcher{opcode_id}({context_name}, _frame_manager):
     try:
         {expression}
@@ -962,19 +980,17 @@ def TransformOpTryCatcher{opcode_id}({context_name}, _frame_manager):
         if b.mode == "{input}":
             return b.value
         raise
-                """, context_name, dependency_builder,
-                opcode_id=id(self),
-                opcode=self,
-                input=self.input,
-                output=self.output,
-                expression=expression_ast
-            )
+                    """, context_name, dependency_builder,
+                    opcode_id=id(self),
+                    input=self.input,
+                    expression=expression_ast
+                )
 
-            return compile_expression("""
+                return compile_expression("""
 {try_catcher}({context_name}, _frame_manager)
-                """, context_name, dependency_builder,
-                try_catcher=try_catcher
-            )
+                    """, context_name, dependency_builder,
+                    try_catcher=try_catcher
+                )
         else:
             return super(TransformOp, self).to_ast(context_name)
 
@@ -1156,17 +1172,31 @@ class CommaOp(Opcode):
 
             return frame.value(value)
 
-    def to_ast(self, context_name, dependency_builder):
-        asts = [ e.to_ast(context_name, dependency_builder) for e in self.opcodes ]
-        ast_placeholders = { "ast{}".format(i): e_ast for i, e_ast in enumerate(asts) }
-        comma_function = compile_statement(
-            "def CommaOp{opcode_id}({context_name}, _frame_manager):\n\t{" + "}\n\t{".join(ast_placeholders.keys()) + "}",
-            context_name, dependency_builder, opcode_id=id(self), **ast_placeholders
-        )
-        return compile_expression(
-            "{comma_function}({context_name}, _frame_manager)",
-            context_name, dependency_builder, comma_function=comma_function
-        )
+    def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
+        asts = [
+            e.to_ast(context_name, dependency_builder, will_ignore_return_value if i == len(self.opcodes) - 1 else True)
+            for i, e in enumerate(self.opcodes)
+        ]
+        if will_ignore_return_value:
+            asts = unwrap_modules(asts)
+            asts = [wrap_as_statement(a) for a in asts]
+            return ast.Module(body=asts)
+        else:
+            asts = unwrap_modules(asts)
+            asts[-1] = compile_statement(
+                "return {ast}",
+                context_name, dependency_builder, ast=asts[-1]
+            )
+            asts = [wrap_as_statement(a) for a in asts]
+            ast_placeholders = { "ast{}".format(i): e_ast for i, e_ast in enumerate(asts) }
+            comma_function = compile_statement(
+                "def CommaOp{opcode_id}({context_name}, _frame_manager):\n\t{" + "}\n\t{".join(ast_placeholders.keys()) + "}",
+                context_name, dependency_builder, opcode_id=id(self), **ast_placeholders
+            )
+            return compile_expression(
+                "{comma_function}({context_name}, _frame_manager)",
+                context_name, dependency_builder, comma_function=comma_function
+            )
 
     def to_code(self):
         return ";\n".join([ o.to_code() for o in self.opcodes ])
@@ -1185,14 +1215,14 @@ class LoopOp(Opcode):
         while 1:
             evaluate(code, context, frame_manager)
 
-    def to_ast(self, context_name, dependency_builder):
+    def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         return compile_statement("""
 while(True):
     {expression}
 """,
             context_name,
             dependency_builder,
-            expression=self.code.to_ast(context_name, dependency_builder)
+            expression=self.code.to_ast(context_name, dependency_builder, will_ignore_return_value=True)
         )
 
     def to_code(self):
@@ -1247,14 +1277,28 @@ class ConditionalOp(Opcode):
 
             return frame.value(result)
 
-    def to_ast(self, context_name, dependency_builder):
-        return compile_expression("""
+    def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
+        if will_ignore_return_value:
+            return compile_statement("""
+if {condition}:
+    {when_true}
+else:
+    {when_false}
+                """, context_name, dependency_builder,
+                condition=self.condition.to_ast(context_name, dependency_builder),
+                when_true=self.when_true.to_ast(context_name, dependency_builder),
+                when_false=self.when_false.to_ast(context_name, dependency_builder)
+            )
+
+        else:
+            return compile_expression("""
 {when_true} if {condition} else {when_false}
-            """, context_name, dependency_builder,
-            condition = self.condition.to_ast(context_name, dependency_builder),
-            when_true=self.when_true.to_ast(context_name, dependency_builder),
-            when_false=self.when_false.to_ast(context_name, dependency_builder)
-        )
+                """, context_name, dependency_builder,
+                condition=self.condition.to_ast(context_name, dependency_builder),
+                when_true=self.when_true.to_ast(context_name, dependency_builder),
+                when_false=self.when_false.to_ast(context_name, dependency_builder)
+            )
+
 
 class PrepareOp(Opcode):
     PREPARATION_ERROR = TypeErrorFactory("PrepareOp: preparation_error")
@@ -1349,7 +1393,7 @@ class CloseOp(Opcode):
 
             return frame.value(open_function.close(outer_context))
 
-    def to_ast(self, context_name, dependency_builder):
+    def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         return compile_expression("""
 {open_function}.close({outer_context})
             """, context_name, dependency_builder,
@@ -1388,7 +1432,7 @@ class StaticOp(Opcode):
             self.lazy_initialize(context, frame_manager, immediate_context)
             return frame.unwind(self.mode, self.value, None)
 
-    def to_ast(self, context_name, dependency_builder):
+    def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         if self.mode == "value":
             return compile_expression(
                 "{static_value}",
@@ -1463,10 +1507,30 @@ class InvokeOp(Opcode):
 
         raise FatalError()
 
-    def to_ast(self, context_name, dependency_builder):
-        return compile_expression("""
-{function}.invoke({argument}, _frame_manager)
-            """, context_name, dependency_builder,
+    def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
+        from rdhlang5.executor.function import OpenFunction
+        if (isinstance(self.function, CloseOp)
+            and isinstance(self.function.function, StaticOp)
+            and isinstance(self.function.function.value, OpenFunction)
+            and self.function.function.mode == "value"
+        ):
+            if will_ignore_return_value:
+                return self.function.function.value.to_inline_ast(
+                    dependency_builder,
+                    self.function.outer_context.to_ast(context_name, dependency_builder),
+                    self.argument.to_ast(context_name, dependency_builder)
+                )
+            else:
+                return compile_expression(
+                    "{function}.invoke({argument}, {outer_context}, _frame_manager)",
+                    context_name, dependency_builder,
+                    function=self.function.function.value,
+                    outer_context=self.function.outer_context.to_ast(context_name, dependency_builder),
+                    argument=self.argument.to_ast(context_name, dependency_builder)
+                )
+        return compile_expression(
+            "{function}.invoke({argument}, _frame_manager)",
+            context_name, dependency_builder,
             function=self.function.to_ast(context_name, dependency_builder),
             argument=self.argument.to_ast(context_name, dependency_builder)
         )

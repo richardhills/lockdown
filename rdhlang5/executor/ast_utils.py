@@ -19,6 +19,22 @@ def unwrap_expr(node):
         return node
     raise FatalError()
 
+def wrap_as_statement(node):
+    if isinstance(node, ast.stmt):
+        return node
+    if isinstance(node, ast.expr):
+        return ast.Expr(node)
+    raise FatalError()
+
+def unwrap_modules(nodes):
+    resulting_nodes = []
+    for n in nodes:
+        if isinstance(n, ast.Module):
+            resulting_nodes.extend(n.body)
+        else:
+            resulting_nodes.append(n)
+    return resulting_nodes
+
 def compile_module(code, context_name, dependency_builder, **subs):
     string_subs = {}
     ast_subs = {}
@@ -30,7 +46,7 @@ def compile_module(code, context_name, dependency_builder, **subs):
             string_subs[key] = value
         elif isinstance(value, ast.FunctionDef):
             string_subs[key] = dependency_builder.add(value)
-        elif isinstance(value, (ast.stmt, ast.expr)):
+        elif isinstance(value, (ast.stmt, ast.expr, ast.Module)):
             ast_key = "ast_{}".format(id(value))
             string_subs[key] = ast_key
             ast_subs[ast_key] = value
@@ -88,14 +104,15 @@ def build_and_compile_ast_function(name, arguments, body, dependencies):
 def compile_ast_function_def(function_creator_ast, open_function_id, dependencies):
 #    print ast.dump(function_creator_ast)
     ast.fix_missing_locations(function_creator_ast)
-    function_creator = compile(to_source(function_creator_ast), "<string>", "exec")
+
+    print "--- {} ---".format(open_function_id)
+    print to_source(function_creator_ast)
+
+    function_creator = compile(function_creator_ast, "<string>", "exec")
 
     function_creation_context = spread_dict(
         dependencies, default_globals()
     )
-
-#    print "--- {} ---".format(open_function_id)
-#    print to_source(function_creator_ast)
 
     exec(function_creator, function_creation_context, function_creation_context)
 
@@ -146,8 +163,49 @@ class ASTInliner(ast.NodeTransformer):
         self.replacement_ast = replacement_ast
         self.context_name = context_name
         self.dependency_builder = dependency_builder
-        if not isinstance(self.dependency_builder, DependencyBuilder):
-            pass
+#        print "Replacing {} => {}".format(self.name, ast.dump(self.replacement_ast))
+
+    def create_new_statements(self, statements):
+        if not isinstance(self.replacement_ast, ast.Module):
+            return None
+
+        new_body = []
+        is_different = False
+        for child in statements:
+            if isinstance(child, ast.Expr) and isinstance(child.value, ast.Name) and child.value.id == self.name:
+                new_body.extend(self.replacement_ast.body)
+                is_different = True
+            else:
+                new_body.append(child)
+
+        if is_different:
+            return new_body
+
+    def visit_Module(self, node):
+        new_body = self.create_new_statements(node.body)
+        if new_body:
+            return ast.Module(body=new_body or node.body)
+        return self.generic_visit(node)
+
+    def visit_While(self, node):
+        new_body = self.create_new_statements(node.body)
+        new_orelse = self.create_new_statements(node.orelse)
+        if new_body or new_orelse:
+            return ast.While(test=node.test, body=new_body or node.body, orelse=new_orelse or node.orelse)
+        return self.generic_visit(node)
+
+    def visit_If(self, node):
+        new_body = self.create_new_statements(node.body)
+        new_orelse = self.create_new_statements(node.orelse)
+        if new_body:
+            return ast.If(test=node.test, body=new_body or node.body, orelse=new_orelse or node.orelse)
+        return self.generic_visit(node)
+
+    def visit_FunctionDef(self, node):
+        new_body = self.create_new_statements(node.body)
+        if new_body:
+            return ast.FunctionDef(name=node.name, args=node.args, body=new_body, decorator_list=node.decorator_list)
+        return self.generic_visit(node)
 
     def visit_Expr(self, node):
         if isinstance(self.replacement_ast, ast.stmt) and isinstance(node.value, ast.Name) and node.value.id == self.name:

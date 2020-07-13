@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+from time import time
+
 from rdhlang5.executor.flow_control import FrameManager
 from rdhlang5.executor.function import prepare
 from rdhlang5.executor.opcodes import get_context_type
@@ -133,7 +135,7 @@ def format_unhandled_break_type(break_type, raw_code):
 {}^
 {}| {}""".format(lines[line - 1], padding, padding, getattr(out_break_type, "name", None) or str(out_break_type))
 
-def bootstrap_function(data, argument=None, context=None, check_safe_exit=False, transpile=False):
+def bootstrap_function(data, argument=None, context=None, check_safe_exit=False, transpile=False, measure=False):
     if argument is None:
         argument = NO_VALUE
     if context is None:
@@ -176,6 +178,13 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False,
         if transpile:
             closed_function = closed_function.transpile()
 
+        if measure:
+            start = time()
+
         capture_result.attempt_capture_or_raise(*closed_function.invoke(argument, frame_manager))
+
+        if measure:
+            end = time()
+            print end - start
 
     return capture_result
