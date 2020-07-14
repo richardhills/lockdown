@@ -1,5 +1,6 @@
 from collections import OrderedDict
 
+from rdhlang5.executor.ast_utils import compile_statement, compile_expression
 from rdhlang5.type_system.composites import InferredType, bind_type_to_value, \
     unbind_type_to_value, DefaultFactoryType, CompositeType, Composite
 from rdhlang5.type_system.core_types import merge_types, Type, Const, OneOfType, \
@@ -235,10 +236,10 @@ class ObjectGetterType(ObjectMicroOpType):
     def create(self, target_manager):
         return ObjectGetter(target_manager, self.key, self.type, self.key_error, self.type_error)
 
-    def invoke(self, target_manager, trust_caller):
-        if is_debug():
-            raise FatalError()
-        return target_manager.obj.__dict__[self.key]
+#     def invoke(self, target_manager, trust_caller):
+#         if is_debug():
+#             raise FatalError()
+#         return target_manager.obj.__dict__[self.key]
 
     def can_be_derived_from(self, other_micro_op_type):
         return (
@@ -349,6 +350,14 @@ class ObjectGetterType(ObjectMicroOpType):
             merge_types([ self.type, other_micro_op_type.type ], "sub"),
             self.key_error or other_micro_op_type.key_error,
             self.type_error or other_micro_op_type.type_error
+        )
+
+    def to_ast(self, dependency_builder, target):
+        if self.type_error or self.key_error:
+            return super(ObjectGetterType, self).to_ast(dependency_builder, target)
+        return compile_expression(
+            "{target}.__dict__[\"{key}\"]",
+            None, dependency_builder, target=target, key=self.key
         )
 
     def __repr__(self):
@@ -499,15 +508,15 @@ class ObjectSetterType(ObjectMicroOpType):
     def create(self, target_manager):
         return ObjectSetter(target_manager, self.key, self.type, self.key_error, self.type_error)
 
-    def invoke(self, target_manager, new_value, trust_caller):
-        if is_debug():
-            raise FatalError()
-
-        target_manager.unbind_key(self.key)
-
-        target_manager.obj.__dict__[self.key] = new_value
-
-        target_manager.bind_key(self.key)
+#     def invoke(self, target_manager, new_value, trust_caller):
+#         if is_debug():
+#             raise FatalError()
+# 
+#         target_manager.unbind_key(self.key)
+# 
+#         target_manager.obj.__dict__[self.key] = new_value
+# 
+#         target_manager.bind_key(self.key)
 
 
     def can_be_derived_from(self, other_micro_op_type):
@@ -570,6 +579,15 @@ class ObjectSetterType(ObjectMicroOpType):
             merge_types([ self.type, other_micro_op_type.type ], "super"),
             self.key_error or other_micro_op_type.key_error,
             self.type_error or other_micro_op_type.type_error
+        )
+
+    def to_ast(self, dependency_builder, target, new_value):
+        if self.type_error or self.key_error:
+            return super(ObjectGetterType, self).to_ast(dependency_builder, target, new_value)
+        return compile_statement(
+            "{target}.__dict__[\"{key}\"] = {rvalue}",
+            None, dependency_builder,
+            target=target, key=self.key, rvalue=new_value
         )
 
     def __repr__(self):

@@ -535,11 +535,39 @@ class DereferenceOp(Opcode):
                 return frame.exception(self.INVALID_DEREFERENCE(reference=reference))
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
-        return compile_expression(
-            "{of}.__dict__[{reference}]",
-            context_name, dependency_builder,
-            of=self.of.to_ast(context_name, dependency_builder),
-            reference=self.reference.to_ast(context_name, dependency_builder)
+        micro_op_to_compile = None
+        takes_key = None
+
+        if len(self.direct_micro_ops) == 0:
+            if len(self.wildcard_micro_ops) == 0:
+                pass
+            elif len(self.wildcard_micro_ops) == 1:
+                micro_op_to_compile = self.wildcard_micro_ops.values()[0]
+                takes_key = True
+        elif len(self.direct_micro_ops) == 1:
+            micro_op_to_compile = self.direct_micro_ops.values()[0]
+            takes_key = False
+
+        need_interpreted_version = (
+            micro_op_to_compile is None
+            or micro_op_to_compile.key_error
+            or micro_op_to_compile.type_error
+            or self.invalid_dereference_error
+        )
+
+        if need_interpreted_version:
+            return super(DereferenceOp, self).to_ast(context_name, dependency_builder)
+
+        if takes_key:
+            reference_ast = self.reference.to_ast(context_name, dependency_builder)
+            args = (reference_ast)
+        else:
+            args = ()
+
+        return micro_op_to_compile.to_ast(
+            dependency_builder,
+            self.of.to_ast(context_name, dependency_builder),
+            *args
         )
 
     def __str__(self):
@@ -698,13 +726,52 @@ class AssignmentOp(Opcode):
                 return frame.exception(self.INVALID_ASSIGNMENT())
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
-        return compile_statement("""
-{of}.__dict__[{reference}] = {rvalue}
-            """, context_name, dependency_builder,
-            of=self.of.to_ast(context_name, dependency_builder),
-            reference=self.reference.to_ast(context_name, dependency_builder),
-            rvalue=self.rvalue.to_ast(context_name, dependency_builder)
+        micro_op_to_compile = None
+        takes_key = None
+
+        if len(self.direct_micro_ops) == 0:
+            if len(self.wildcard_micro_ops) == 0:
+                pass
+            elif len(self.wildcard_micro_ops) == 1:
+                micro_op_to_compile = self.wildcard_micro_ops.values()[0]
+                takes_key = True
+        elif len(self.direct_micro_ops) == 1:
+            micro_op_to_compile = self.direct_micro_ops.values()[0]
+            takes_key = False
+
+        need_interpreted_version = (
+            micro_op_to_compile is None
+            or micro_op_to_compile.key_error
+            or micro_op_to_compile.type_error
+            or self.invalid_assignment_error
+            or self.invalid_lvalue_error
+            or self.invalid_rvalue_error
         )
+
+        if need_interpreted_version:
+            return super(AssignmentOp, self).to_ast(context_name, dependency_builder)
+
+        rvalue_ast = self.rvalue.to_ast(context_name, dependency_builder)
+
+        if takes_key:
+            reference_ast = self.reference.to_ast(context_name, dependency_builder)
+            args = (reference_ast, rvalue_ast)
+        else:
+            args = (rvalue_ast,)
+
+        return micro_op_to_compile.to_ast(
+            dependency_builder,
+            self.of.to_ast(context_name, dependency_builder),
+            *args
+        )
+
+#         return compile_statement("""
+# {of}.__dict__[{reference}] = {rvalue}
+#             """, context_name, dependency_builder,
+#             of=self.of.to_ast(context_name, dependency_builder),
+#             reference=self.reference.to_ast(context_name, dependency_builder),
+#             rvalue=self.rvalue.to_ast(context_name, dependency_builder)
+#         )
 
     def to_code(self):
         return "{}.{} = {}".format(self.of.to_code(), self.reference.to_code(), self.rvalue.to_code())
@@ -882,16 +949,17 @@ def BinaryOp(name, symbol, func, argument_type, result_type, number_op=None, cmp
                 return frame.value(func(get_lvalue, get_rvalue))
 
         def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
-            if number_op:
-                lvalue_ast = self.lvalue.to_ast(context_name, dependency_builder)
-                rvalue_ast = self.rvalue.to_ast(context_name, dependency_builder)
-                return ast.BinOp(left=lvalue_ast, right=rvalue_ast, op=number_op)
-            elif cmp_op:
-                lvalue_ast = self.lvalue.to_ast(context_name, dependency_builder)
-                rvalue_ast = self.rvalue.to_ast(context_name, dependency_builder)
-                return ast.Compare(left=lvalue_ast, ops=[ cmp_op ], comparators=[ rvalue_ast ])
-            else:
-                return Opcode.to_ast(self, context_name, dependency_builder)
+            if not self.missing_operands_exception:
+                if number_op:
+                    lvalue_ast = self.lvalue.to_ast(context_name, dependency_builder)
+                    rvalue_ast = self.rvalue.to_ast(context_name, dependency_builder)
+                    return ast.BinOp(left=lvalue_ast, right=rvalue_ast, op=number_op)
+                elif cmp_op:
+                    lvalue_ast = self.lvalue.to_ast(context_name, dependency_builder)
+                    rvalue_ast = self.rvalue.to_ast(context_name, dependency_builder)
+                    return ast.Compare(left=lvalue_ast, ops=[ cmp_op ], comparators=[ rvalue_ast ])
+
+            return Opcode.to_ast(self, context_name, dependency_builder)
 
         def to_code(self):
             return "{} {} {}".format(self.lvalue.to_code(), symbol, self.rvalue.to_code())
@@ -1522,14 +1590,14 @@ class InvokeOp(Opcode):
                 )
             else:
                 return compile_expression(
-                    "{function}.invoke({argument}, {outer_context}, _frame_manager)",
+                    "{function}.invoke({argument}, {outer_context}, _frame_manager)[1]",
                     context_name, dependency_builder,
                     function=self.function.function.value,
                     outer_context=self.function.outer_context.to_ast(context_name, dependency_builder),
                     argument=self.argument.to_ast(context_name, dependency_builder)
                 )
         return compile_expression(
-            "{function}.invoke({argument}, _frame_manager)",
+            "{function}.invoke({argument}, _frame_manager)[1]",
             context_name, dependency_builder,
             function=self.function.to_ast(context_name, dependency_builder),
             argument=self.argument.to_ast(context_name, dependency_builder)

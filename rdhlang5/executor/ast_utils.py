@@ -3,9 +3,7 @@ from types import FunctionType, MethodType
 
 from astor.code_gen import to_source
 
-from rdhlang5.executor.flow_control import BreakException
 from rdhlang5.type_system.exceptions import FatalError
-from rdhlang5.type_system.object_types import RDHObject
 from rdhlang5.utils import spread_dict, NO_VALUE
 
 
@@ -119,11 +117,15 @@ def compile_ast_function_def(function_creator_ast, open_function_id, dependencie
     return function_creation_context[open_function_id]
 
 def default_globals():
+    from rdhlang5.executor.flow_control import BreakException
+    from rdhlang5.type_system.managers import get_manager
+    from rdhlang5.type_system.object_types import RDHObject
     return {
         "__builtins": None,
         "RDHObject": RDHObject,
         "BreakException": BreakException,
-        "NoValue": NO_VALUE
+        "NoValue": NO_VALUE,
+        "get_manager": get_manager
     }
 
 def get_dependency_key(dependency):

@@ -391,7 +391,7 @@ class {open_function_id}(object):
         }})
         {context_name}.__dict__["local"] = {local_initializer}
         """ \
-        + (
+        +(
             """
         {function_code}
         return ("value", NoValue, None, None)
@@ -471,7 +471,7 @@ class {open_function_id}(object):
 
         while True:
             for key, dependency in dependency_builder.dependencies.items():
-                if isinstance(dependency, (OpenFunction, ClosedFunction)):
+                if isinstance(dependency, OpenFunction):
                     dependency_builder.replace(key, dependency.to_ast(dependency_builder))
                     break
             else:
@@ -602,12 +602,14 @@ class ClosedFunction(RDHFunction):
             self.open_function.argument_type.to_code(), break_types_code, self.open_function.code.to_code()
         )
 
+
 class WrappedFunction(RDHFunction):
     def __init__(self, wrapped):
         self.wrapped = wrapped
 
     def invoke(self, *args, **kwargs):
         return self.wrapped(*args, **kwargs)
+
 
 class TranspiledFunction(RDHFunction):
     def __init__(self, body, dependency_builder, context_name):
@@ -629,6 +631,7 @@ class TranspiledFunction(RDHFunction):
 
     def invoke(self, argument, frame_manager):
         return self.wrapped_function(argument, frame_manager)
+
 
 class Continuation(RDHFunction):
     __slots__ = [ "frame_manager", "frames", "callback", "restart_type", "break_types" ]

@@ -1,5 +1,6 @@
 from abc import abstractmethod
 
+from rdhlang5.executor.ast_utils import compile_expression
 from rdhlang5.type_system.core_types import Type
 from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict
 from rdhlang5.utils import is_debug
@@ -19,8 +20,8 @@ class MicroOpType(object):
     def create(self, target_manager):
         raise NotImplementedError(self)
 
-    def invoke(self, *args):
-        raise NotImplementedError(self)
+    def invoke(self, target_manager, *args):
+        return self.create(target_manager).invoke(*args)
 
     @abstractmethod
     def can_be_derived_from(self, other_micro_op_type):
@@ -66,6 +67,15 @@ class MicroOpType(object):
     def check_for_new_micro_op_type_conflict(self, other_micro_op_type, other_micro_op_types):
         raise NotImplementedError(self)
 
+    def to_ast(self, dependency_builder, target, *args):
+        args_parameters = { "arg{}".format(i): a for i, a in enumerate(args) }
+        args_string = ", {" + "},{".join(args_parameters.keys()) + "}" if len(args_parameters) > 0 else ""
+
+        return compile_expression(
+            "{invoke}(get_manager({target})" + args_string + ")",
+            None, dependency_builder,
+            invoke=self.invoke, target=target, **args_parameters
+        )
 
 class MicroOp(object):
     def invoke(self, *args, **kwargs):
