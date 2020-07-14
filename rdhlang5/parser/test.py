@@ -682,7 +682,6 @@ class TestEuler(TestCase):
         self.assertEquals(result.value, 233168)
 
     def test_2(self):
-        return
         code = parse("""
             function() {
                 int i = 1, j = 2, result = 0;
@@ -701,7 +700,6 @@ class TestEuler(TestCase):
         self.assertEquals(result.value, 4613732)
 
     def test_3(self):
-        return
         code = parse("""
             function() {
                 int test = 2, result = 600851475143;
