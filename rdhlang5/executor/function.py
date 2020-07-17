@@ -13,7 +13,8 @@ from rdhlang5.executor.ast_utils import unwrap_expr, \
     DependencyBuilder, compile_function, compile_ast_function_def, \
     get_dependency_key
 from rdhlang5.executor.exceptions import PreparationException
-from rdhlang5.executor.flow_control import BreakTypesFactory, FrameManager
+from rdhlang5.executor.flow_control import BreakTypesFactory, FrameManager,\
+    is_restartable
 from rdhlang5.executor.function_type import enrich_break_type, OpenFunctionType, \
     ClosedFunctionType
 from rdhlang5.executor.opcodes import enrich_opcode, get_context_type, evaluate, \
@@ -360,6 +361,8 @@ class OpenFunction(object):
         return ClosedFunction(self, outer_context)
 
     def to_ast(self, dependency_builder):
+        if is_restartable(self):
+            return None
         context_name = b"context_{}".format(id(self))
 
         local_initializer_ast = self.local_initializer.to_ast(context_name, dependency_builder)
@@ -424,6 +427,8 @@ class {open_function_id}(object):
         )
 
     def to_inline_ast(self, dependency_builder, outer_context_ast, argument_ast):
+        if is_restartable(self):
+            return None
         context_name = b"context_{}".format(id(self))
 
         local_initializer_ast = self.local_initializer.to_ast(context_name, dependency_builder)
@@ -472,7 +477,9 @@ class {open_function_id}(object):
         while True:
             for key, dependency in dependency_builder.dependencies.items():
                 if isinstance(dependency, OpenFunction):
-                    dependency_builder.replace(key, dependency.to_ast(dependency_builder))
+                    open_function_ast = dependency.to_ast(dependency_builder)
+                    if open_function_ast:
+                        dependency_builder.replace(key, open_function_ast)
                     break
             else:
                 break
@@ -502,29 +509,14 @@ class ClosedFunction(RDHFunction):
         self.open_function = open_function
         self.outer_context = outer_context
 
-        self._is_restartable = None
-
     def get_type(self):
         return ClosedFunctionType(
             self.open_function.argument_type, self.open_function.break_types
         )
 
     @property
-    def allowed_break_types(self):
+    def break_types(self):
         return self.open_function.break_types
-
-    @property
-    def is_restartable(self):
-        if self._is_restartable is None:
-            if not self.allowed_break_types:
-                return True
-            for break_types in self.allowed_break_types.values():
-                for break_type in break_types:
-                    if "in" in break_type:
-                        self._is_restartable = True
-                        return True
-            self._is_restartable = False
-        return self._is_restartable
 
     def transpile(self):
         open_function_transpile = self.open_function.transpile()
@@ -656,10 +648,6 @@ class Continuation(RDHFunction):
 
     def get_type(self):
         return ClosedFunctionType(self.restart_type, self.break_types)
-
-    @property
-    def allowed_break_types(self):
-        return self.break_types
 
     def invoke(self, restart_value, frame_manager):
         if not self.restart_type.is_copyable_from(get_type_of_value(restart_value)):

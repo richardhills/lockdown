@@ -12,7 +12,8 @@ from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict, \
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.micro_ops import MicroOpType, MicroOp, \
     raise_micro_op_conflicts
-from rdhlang5.utils import is_debug, MISSING, micro_op_repr
+from rdhlang5.utils import is_debug, MISSING, micro_op_repr, \
+    bind_runtime_contexts
 
 
 WILDCARD = object()
@@ -353,7 +354,7 @@ class ObjectGetterType(ObjectMicroOpType):
         )
 
     def to_ast(self, dependency_builder, target):
-        if self.type_error or self.key_error:
+        if bind_runtime_contexts() or self.type_error or self.key_error:
             return super(ObjectGetterType, self).to_ast(dependency_builder, target)
         return compile_expression(
             "{target}.__dict__[\"{key}\"]",
@@ -582,7 +583,7 @@ class ObjectSetterType(ObjectMicroOpType):
         )
 
     def to_ast(self, dependency_builder, target, new_value):
-        if self.type_error or self.key_error:
+        if bind_runtime_contexts() or self.type_error or self.key_error:
             return super(ObjectGetterType, self).to_ast(dependency_builder, target, new_value)
         return compile_statement(
             "{target}.__dict__[\"{key}\"] = {rvalue}",

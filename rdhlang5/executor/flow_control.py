@@ -26,8 +26,8 @@ class BreakException(Exception):
         return result
 
 class BreakTypesFactory(object):
-    def __init__(self, opcode):
-        self.opcode = opcode
+    def __init__(self, target):
+        self.target = target
         self.result = defaultdict(list)
 
     def add(self, mode, out_type, in_type=None, opcode=None):
@@ -53,8 +53,10 @@ class BreakTypesFactory(object):
 
     def build(self):
         result = dict(self.result)
-        if self.opcode:
-            self.opcode.allowed_break_types = result
+        if self.target:
+            if getattr(self.target, "break_types", None) is not None:
+                raise FatalError()
+            self.target.break_types = result
         return result
 
 class Capturer(object):
@@ -101,6 +103,19 @@ class Capturer(object):
             return self.attempt_capture(exc_value.mode, exc_value.value, exc_value.restart_type)
         return False
 
+def is_restartable(thing):
+    if hasattr(thing, "_is_restartable"):
+        return thing._is_restartable
+    if thing.break_types is None:
+        return True
+    for break_types in thing.break_types.values():
+        for break_type in break_types:
+            if "in" in break_type:
+                thing._is_restartable = True
+                return True
+    thing._is_restartable = False
+    return False
+
 class FrameManager(object):
     __slots__ = [ "frames", "index", "mode" ]
 
@@ -109,19 +124,19 @@ class FrameManager(object):
         self.index = 0
         self.mode = "wind"
 
-    def get_next_frame(self, opcode):
+    def get_next_frame(self, thing):
         if self.fully_wound():
-            if not is_debug() and not opcode.is_restartable:
+            if not is_debug() and not is_restartable(thing):
                 return PASS_THROUGH_FRAME
 
             if self.mode != "wind":
                 raise FatalError()
-            return Frame(self, opcode)
+            return Frame(self, thing)
         else:
             if self.mode not in ("shift", "reset"):
                 raise FatalError()
             old_frame = self.frames[self.index]
-            if old_frame.opcode is not opcode:
+            if old_frame.target is not thing:
                 raise FatalError()
             return old_frame
 
@@ -185,18 +200,18 @@ class PassThroughFrame(object):
 PASS_THROUGH_FRAME = PassThroughFrame()
 
 class Frame(object):
-    __slots__ = [ "manager", "opcode", "locals", "restart_value" ]
+    __slots__ = [ "manager", "target", "locals", "restart_value" ]
 
-    def __init__(self, manager, opcode, initial_locals=None):
+    def __init__(self, manager, target, initial_locals=None):
         self.manager = manager
-        self.opcode = opcode
+        self.target = target
         self.locals = initial_locals or {}
         self.restart_value = MISSING
 
     def clone(self):
         return Frame(
             self.manager,
-            self.opcode,
+            self.target,
             initial_locals=dict(self.locals)
         )
 
@@ -205,8 +220,8 @@ class Frame(object):
             self.manager.mode = "shift"
 
         if not is_debug() and restart_type is None:
-            return mode, value, self.opcode, None
-        raise BreakException(mode, value, self.opcode, restart_type)
+            return mode, value, self.target, None
+        raise BreakException(mode, value, self.target, restart_type)
 
     def value(self, value):
         return self.unwind("value", value, None)
@@ -254,14 +269,14 @@ class Frame(object):
         if isinstance(exc_value, FatalError):
             return
 
-        if is_debug() and isinstance(exc_value, BreakException) and self.opcode.allowed_break_types:
-            allowed_break_types = self.opcode.allowed_break_types.get(exc_value.mode, MISSING)
+        if is_debug() and isinstance(exc_value, BreakException) and self.target.break_types:
+            break_types = self.target.break_types.get(exc_value.mode, MISSING)
             type_of_value = get_type_of_value(exc_value.value)
 
-            if allowed_break_types is MISSING:
-                raise FatalError("Can not unwind {} with type {}, opcode {} allowed {}".format(exc_value.mode, type_of_value, self.opcode, allowed_break_types))
+            if break_types is MISSING:
+                raise FatalError("Can not unwind {} with type {}, target {} allowed {}".format(exc_value.mode, type_of_value, self.target, break_types))
 
-            for allowed_break_type in allowed_break_types:
+            for allowed_break_type in break_types:
                 allowed_out = allowed_break_type["out"]
                 allowed_in = allowed_break_type.get("in", None)
 
@@ -273,7 +288,7 @@ class Frame(object):
                 if out_is_compatible and in_is_compatible:
                     break
             else:
-                raise FatalError("Can not unwind {} with type {}, opcode{}, allowed {}".format(exc_value.mode, type_of_value, self.opcode, allowed_break_types))
+                raise FatalError("Can not unwind {} with type {}, target {}, allowed {}".format(exc_value.mode, type_of_value, self.target, break_types))
 
         exc_type_allows_restart = exc_value and isinstance(exc_value, BreakException) and exc_value.restart_type is not None
 

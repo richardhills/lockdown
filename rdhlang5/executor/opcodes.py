@@ -119,8 +119,7 @@ class TypeErrorFactory(object):
 class Opcode(object):
     def __init__(self, data, visitor):
         self.data = data
-        self.allowed_break_types = None
-        self._is_restartable = None
+        self.break_types = None
 
 #    __metaclass__ = ABCMeta
 
@@ -131,19 +130,6 @@ class Opcode(object):
     @abstractmethod
     def jump(self, context, frame_manager, immediate_context=None):
         raise NotImplementedError()
-
-    @property
-    def is_restartable(self):
-        if self._is_restartable is None:
-            if not self.allowed_break_types:
-                return True
-            for break_types in self.allowed_break_types.values():
-                for break_type in break_types:
-                    if "in" in break_type:
-                        self._is_restartable = True
-                        return True
-            self._is_restartable = False
-        return self._is_restartable
 
     def get_line_and_column(self):
         return getattr(self.data, "line", None), getattr(self.data, "column", None)
@@ -1582,20 +1568,24 @@ class InvokeOp(Opcode):
             and isinstance(self.function.function.value, OpenFunction)
             and self.function.function.mode == "value"
         ):
+            open_function = self.function.function.value
             if will_ignore_return_value:
-                return self.function.function.value.to_inline_ast(
+                # to_inline_ast can return None if it's not possible to inline the open function
+                inline_ast = open_function.to_inline_ast(
                     dependency_builder,
                     self.function.outer_context.to_ast(context_name, dependency_builder),
                     self.argument.to_ast(context_name, dependency_builder)
                 )
-            else:
-                return compile_expression(
-                    "{function}.invoke({argument}, {outer_context}, _frame_manager)[1]",
-                    context_name, dependency_builder,
-                    function=self.function.function.value,
-                    outer_context=self.function.outer_context.to_ast(context_name, dependency_builder),
-                    argument=self.argument.to_ast(context_name, dependency_builder)
-                )
+                if inline_ast:
+                    return inline_ast
+
+            return compile_expression(
+                "{function}.invoke({argument}, {outer_context}, _frame_manager)[1]",
+                context_name, dependency_builder,
+                function=open_function,
+                outer_context=self.function.outer_context.to_ast(context_name, dependency_builder),
+                argument=self.argument.to_ast(context_name, dependency_builder)
+            )
         return compile_expression(
             "{function}.invoke({argument}, _frame_manager)[1]",
             context_name, dependency_builder,
