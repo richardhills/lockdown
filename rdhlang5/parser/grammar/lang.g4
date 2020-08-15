@@ -32,7 +32,6 @@ value
    | function // Where our language extends json...
    ;
 
-
 STRING
    : '"' (ESC | SAFECODEPOINT)* '"'
    ;
@@ -77,8 +76,8 @@ WS
    ;
 
 function
-   : 'function' '(' argumentDestructuring? ')' '{' codeBlock '}'
-   | 'function' '(|' expression '|)' '{' codeBlock '}'
+   : 'function' SYMBOL? '(' argumentDestructurings? ')' '{' codeBlock '}'
+   | 'function' SYMBOL? '(|' expression '|)' '{' codeBlock '}'
    ;
 
 argumentDestructurings
@@ -102,6 +101,7 @@ codeBlock
    : expression symbolInitialization (',' symbolInitialization)* ';' codeBlock? # localVariableDeclaration
    | 'static' symbolInitialization ';' codeBlock? # staticValueDeclaration
    | 'typedef' expression SYMBOL ';' codeBlock? # typedef
+   | function ';' codeBlock? # toFunctionStatement
    | destructuring # toDestructuring
 /*   | 'import' SYMBOL ';' codeBlock? # importStatement */
    | (expression ';')+ codeBlock? # toExpression
@@ -121,6 +121,7 @@ expression
    | expression '(|' expression '|)'     # singleParameterInvocation
    | expression '(' ')'     # noParameterInvocation
    | '(' expression ')'     # parenthesis
+   | expression 'is' expression # is
    | SYMBOL					# immediateDereference
    | expression '.' SYMBOL  # staticDereference
    | expression '[' expression ']' # dynamicDereference
@@ -140,7 +141,9 @@ expression
    | SYMBOL '=' expression  # immediateAssignment
    | expression '.' SYMBOL '=' expression  # staticAssignment
    | expression '[' expression ']' '=' expression # dynamicAssignment
+   | expression '?' expression ':' expression #ternary
    | 'return' expression    # returnStatement
+   | 'continue' expression  # continueStatement
    | 'break'			    # breakStatement
    | ifStatement			# toIfStatement
    | whileLoop				# toWhileLoop
@@ -148,6 +151,7 @@ expression
    | objectType				# toObjectType
    | listType				# toListType
    | tupleType				# toTupleType
+   | functionType			# toFunctionType
    | function				# toFunctionExpression
    ;
 
@@ -157,6 +161,7 @@ objectTemplate
 
 objectPropertyPair
    : SYMBOL ':' expression
+   | '[' expression ']' ':' expression
    ;
 
 objectType
@@ -177,6 +182,10 @@ tupleType
 
 listType
    : 'List' '<' expression '>'
+   ;
+
+functionType
+   : 'Function' '<' expression '=>' expression '>'
    ;
 
 ifStatement

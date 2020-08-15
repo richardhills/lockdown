@@ -28,15 +28,15 @@ class TestMicroOpMerging(TestCase):
         second = ObjectGetterType("foo", UnitType(5), False, False)
 
         combined = first.merge(second)
-        self.assertTrue(isinstance(combined.type, UnitType))
-        self.assertEqual(combined.type.value, 5)
+        self.assertTrue(isinstance(combined.value_type, UnitType))
+        self.assertEqual(combined.value_type.value, 5)
 
     def test_merge_sets(self):
         first = ObjectSetterType("foo", IntegerType(), False, False)
         second = ObjectSetterType("foo", UnitType(5), False, False)
 
         combined = first.merge(second)
-        self.assertTrue(isinstance(combined.type, IntegerType))
+        self.assertTrue(isinstance(combined.value_type, IntegerType))
 
 
 class TestBasicObject(TestCase):
@@ -239,7 +239,7 @@ class TestRevConstType(TestCase):
 
         rev_const_type = rev_const_type.reify_revconst_types()
 
-        self.assertTrue(isinstance(rev_const_type.micro_op_types[("get", "foo")].type, StringType))
+        self.assertTrue(isinstance(rev_const_type.micro_op_types[("get", "foo")].value_type, StringType))
 
         self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type.reify_revconst_types()))
 
@@ -989,7 +989,7 @@ class TestInferredTypes(TestCase):
         foo = foo.replace_inferred_types(RDHObjectType({
             "bar": IntegerType()
         }))
-        self.assertIsInstance(foo.micro_op_types[("get", "bar")].type, IntegerType)
+        self.assertIsInstance(foo.micro_op_types[("get", "bar")].value_type, IntegerType)
 
     def test_basic_ignored(self):
         foo = RDHObjectType({
@@ -998,7 +998,7 @@ class TestInferredTypes(TestCase):
         foo = foo.replace_inferred_types(RDHObjectType({
             "bar": IntegerType()
         }))
-        self.assertIsInstance(foo.micro_op_types[("get", "bar")].type, StringType)
+        self.assertIsInstance(foo.micro_op_types[("get", "bar")].value_type, StringType)
 
     def test_basic_ignored2(self):
         foo = RDHObjectType({
@@ -1008,7 +1008,7 @@ class TestInferredTypes(TestCase):
             "bar": IntegerType(),
             "bam": StringType()
         }))
-        self.assertIsInstance(foo.micro_op_types[("get", "bar")].type, IntegerType)
+        self.assertIsInstance(foo.micro_op_types[("get", "bar")].value_type, IntegerType)
 
     def test_dangling_error(self):
         foo = RDHObjectType({
@@ -1030,7 +1030,7 @@ class TestInferredTypes(TestCase):
                 "bam": IntegerType()
             })
         }))
-        self.assertIsInstance(foo.micro_op_types[("get", "bar")].type.micro_op_types[("get", "bam")].type, IntegerType)
+        self.assertIsInstance(foo.micro_op_types[("get", "bar")].value_type.micro_op_types[("get", "bam")].value_type, IntegerType)
 
     def test_composite_types_inferred(self):
         foo = RDHObjectType({
@@ -1041,7 +1041,7 @@ class TestInferredTypes(TestCase):
                 "bam": IntegerType()
             })
         }))
-        self.assertIsInstance(foo.micro_op_types[("get", "bar")].type.micro_op_types[("get", "bam")].type, IntegerType)
+        self.assertIsInstance(foo.micro_op_types[("get", "bar")].value_type.micro_op_types[("get", "bam")].value_type, IntegerType)
 
 
 class TestOneOfTypes(TestCase):

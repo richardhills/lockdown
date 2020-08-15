@@ -16,7 +16,7 @@ def is_opcode(data):
 
 def check_is_opcode(data):
     if not is_opcode(data):
-        raise FatalError
+        raise FatalError()
 
 
 def type_lit(name):
@@ -88,21 +88,27 @@ def infer_all():
 
 def function_lit(*args, **kwargs):
     if len(args) == 1:
+        extra_statics = {}
         code, = args
         argument_type = local_type = no_value_type()
         break_types = infer_all()
         local_initializer = nop()
     elif len(args) == 2:
+        extra_statics = {}
         argument_type, code = args
         local_type = no_value_type()
         break_types = infer_all()
         local_initializer = nop()
     elif len(args) == 3:
+        extra_statics = {}
         argument_type, break_types, code = args
         local_type = no_value_type()
         local_initializer = nop()
     elif len(args) == 5:
+        extra_statics = {}
         argument_type, break_types, local_type, local_initializer, code = args
+    elif len(args) == 6:
+        extra_statics, argument_type, break_types, local_type, local_initializer, code = args
     else:
         raise FatalError()
 
@@ -112,12 +118,12 @@ def function_lit(*args, **kwargs):
     if not isinstance(break_types, dict):
         raise FatalError()
 
-    static = {
+    static = spread_dict({
         "argument": argument_type,
         "local": local_type,
         "outer": inferred_type(),
         "break_types": object_template_op(break_types)
-    }
+    }, extra_statics)
 
     func = spread_dict({
         "code": code,
@@ -137,9 +143,10 @@ def literal_op(value):
 
 def object_template_op(values, debug_reason="code", **kwargs):
     for k, v in values.items():
-        if not isinstance(k, basestring):
-            raise FatalError()
         check_is_opcode(v)
+        if isinstance(k, basestring):
+            values[literal_op(k)] = v
+            del values[k]
     return RDHObject(spread_dict({
         "opcode": "object_template",
         "opcodes": RDHDict(values, debug_reason=debug_reason)
@@ -313,16 +320,25 @@ def try_catch_op(try_opcode, catch_function, finally_opcode=None):
         finally_opcode
     )
 
-
 def throw_op(code):
     return transform_op("value", "exception", code)
 
+def continue_op(code):
+    return transform_op("value", "continue", code)
 
 def context_op(**kwargs):
     return RDHObject(spread_dict({
         "opcode": "context",
     }, **kwargs), debug_reason="code")
 
+def is_op(expression, type, **kwargs):
+    check_is_opcode(expression)
+    check_is_opcode(type)
+    return RDHObject(spread_dict({
+        "opcode": "is",
+        "expression": expression,
+        "type": type
+    }, **kwargs), debug_reason="code")
 
 def dereference_op(of, reference, **kwargs):
     check_is_opcode(of)

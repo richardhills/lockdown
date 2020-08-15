@@ -258,7 +258,7 @@ def type_cleared(type_weakref):
 class Composite(object):
     pass
 
-def bind_type_to_value(source_manager, source_type, key, type, value_manager):
+def bind_type_to_manager(source_manager, source_type, key, rel_type, type, value_manager):
     if not source_manager or not value_manager:
         return
 
@@ -269,7 +269,12 @@ def bind_type_to_value(source_manager, source_type, key, type, value_manager):
         if isinstance(sub_type, CompositeType):
             try:
                 value_manager.add_composite_type(sub_type)
-                source_manager.child_type_references[key][id(source_type)].append(sub_type)
+                if rel_type == "value":
+                    source_manager.child_value_type_references[key][id(source_type)].append(sub_type)
+                elif rel_type == "key":
+                    source_manager.child_key_type_references[key][id(source_type)].append(sub_type)
+                else:
+                    raise FatalError()
                 something_worked = True
             except IncorrectObjectTypeForMicroOp:
                 pass
@@ -284,13 +289,22 @@ def bind_type_to_value(source_manager, source_type, key, type, value_manager):
         else:
             raise FatalError()
 
-def unbind_type_to_value(source_manager, source_type, key, type, value_manager):
+def unbind_type_to_manager(source_manager, source_type, key, rel_type, value_manager):
     if not source_manager or not value_manager:
         return
 
-    for sub_type in source_manager.child_type_references[key][id(source_type)]:
+    references = None
+    if rel_type == "value":
+        references = source_manager.child_value_type_references
+    elif rel_type == "key":
+        references = source_manager.child_key_type_references
+    else:
+        raise FatalError()
+
+    for sub_type in references[key][id(source_type)]:
         value_manager.remove_composite_type(sub_type)
-    source_manager.child_type_references[key][id(source_type)] = []
+
+    references[key][id(source_type)] = []
 
 
 class CompositeObjectManager(object):
@@ -298,7 +312,8 @@ class CompositeObjectManager(object):
         self.obj = obj
         self.attached_types = {}
         self.attached_type_counts = defaultdict(int)
-        self.child_type_references = defaultdict(lambda: defaultdict(list))
+        self.child_key_type_references = defaultdict(lambda: defaultdict(list))
+        self.child_value_type_references = defaultdict(lambda: defaultdict(list))
 
         self.cached_effective_composite_type = None
 

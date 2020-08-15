@@ -82,3 +82,4 @@ def set_bind_runtime_contexts(bind):
 
 NO_VALUE = InternalMarker("NO_VALUE")
 MISSING = InternalMarker("MISSING")
+NOTHING = InternalMarker("NOTHING")

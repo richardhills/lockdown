@@ -70,6 +70,11 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#toFunctionStatement.
+    def visitToFunctionStatement(self, ctx):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#toDestructuring.
     def visitToDestructuring(self, ctx):
         return self.visitChildren(ctx)
@@ -107,6 +112,11 @@ class langVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by langParser#lt.
     def visitLt(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#toFunctionType.
+    def visitToFunctionType(self, ctx):
         return self.visitChildren(ctx)
 
 
@@ -220,6 +230,11 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#is.
+    def visitIs(self, ctx):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#eq.
     def visitEq(self, ctx):
         return self.visitChildren(ctx)
@@ -255,6 +270,11 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#continueStatement.
+    def visitContinueStatement(self, ctx):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#toListTemplate.
     def visitToListTemplate(self, ctx):
         return self.visitChildren(ctx)
@@ -262,6 +282,11 @@ class langVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by langParser#staticAssignment.
     def visitStaticAssignment(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#ternary.
+    def visitTernary(self, ctx):
         return self.visitChildren(ctx)
 
 
@@ -302,6 +327,11 @@ class langVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by langParser#listType.
     def visitListType(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#functionType.
+    def visitFunctionType(self, ctx):
         return self.visitChildren(ctx)
 
 

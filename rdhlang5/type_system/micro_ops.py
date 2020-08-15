@@ -20,8 +20,8 @@ class MicroOpType(object):
     def create(self, target_manager):
         raise NotImplementedError(self)
 
-    def invoke(self, target_manager, *args):
-        return self.create(target_manager).invoke(*args)
+    def invoke(self, target_manager, *args, **kwargs):
+        return self.create(target_manager).invoke(*args, **kwargs)
 
     @abstractmethod
     def can_be_derived_from(self, other_micro_op_type):

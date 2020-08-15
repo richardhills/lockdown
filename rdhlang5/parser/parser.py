@@ -14,11 +14,13 @@ from rdhlang5.executor.raw_code_factories import function_lit, nop, comma_op, \
     no_value_type, combine_opcodes, invoke_op, assignment_op, \
     unbound_assignment, list_template_op, list_type, context_op, \
     loop_op, condition_op, binary_integer_op, equality_op, dereference, \
-    local_function, reset_op, inferred_type, prepare_function_lit, transform
+    local_function, reset_op, inferred_type, prepare_function_lit, transform, \
+    continue_op, check_is_opcode, is_op, function_type, dict_template_op
 from rdhlang5.parser.grammar.langLexer import langLexer
 from rdhlang5.parser.grammar.langParser import langParser
 from rdhlang5.parser.grammar.langVisitor import langVisitor
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE
+from rdhlang5.type_system.dict_types import RDHDict
 from rdhlang5.type_system.exceptions import FatalError
 from rdhlang5.type_system.managers import get_manager
 from rdhlang5.type_system.object_types import RDHObject
@@ -56,10 +58,10 @@ class RDHLang5Visitor(langVisitor):
         if ctx.getText() == "null":
             return None
         if ctx.function():
-            return self.visit(ctx.function())
+            return self.visit(ctx.function())[1]
 
     def visitFunction(self, ctx):
-        argument_destructuring = ctx.argumentDestructuring()
+        argument_destructuring = ctx.argumentDestructurings()
         argument_expression = ctx.expression()
 
         code_block = self.visit(ctx.codeBlock())
@@ -75,7 +77,12 @@ class RDHLang5Visitor(langVisitor):
         else:
             function_builder = code_block
 
-        return function_builder.create("function", get_debug_info(ctx))
+        function_name = None
+        function_name_symbol = ctx.SYMBOL()
+        if function_name_symbol:
+            function_name = function_name_symbol.getText()
+
+        return function_name, function_builder.create("function", get_debug_info(ctx))
 
     def visitArgumentDestructurings(self, ctx):
         initializers = [self.visit(l) for l in ctx.argumentDestructuring()]
@@ -90,7 +97,7 @@ class RDHLang5Visitor(langVisitor):
             local_variable_initializers[name] = dereference("argument", index)
 
         return CodeBlockBuilder(
-            argument_type_expression=argument_types,
+            argument_type_expression=list_type(argument_types, None),
             local_variable_type=object_type(local_variable_types),
             local_initializer=object_template_op(local_variable_initializers)
         )
@@ -214,7 +221,7 @@ class RDHLang5Visitor(langVisitor):
         name, value = self.visit(ctx.symbolInitialization())
 
         return CodeBlockBuilder(
-            extra_statics={ name: value }
+            extra_statics={ literal_op(name): value }
         ).chain(remaining_code, get_debug_info(ctx))
 
     def visitTypedef(self, ctx):
@@ -224,7 +231,15 @@ class RDHLang5Visitor(langVisitor):
         name = ctx.SYMBOL().getText()
 
         return CodeBlockBuilder(
-            extra_statics={ name: value },
+            extra_statics={ literal_op(name): value },
+        ).chain(remaining_code, get_debug_info(ctx))
+
+    def visitToFunctionStatement(self, ctx):
+        remaining_code = self.visit(ctx.codeBlock())
+
+        name, function = self.visit(ctx.function())
+        return CodeBlockBuilder(
+            extra_statics={ literal_op(name): prepare_function_lit(function) }
         ).chain(remaining_code, get_debug_info(ctx))
 
     def visitToExpression(self, ctx):
@@ -261,28 +276,15 @@ class RDHLang5Visitor(langVisitor):
     def visitNoParameterInvocation(self, ctx):
         return invoke_op(self.visit(ctx.expression()), **get_debug_info(ctx))
 
-    def visitImmediateAssignment(self, ctx):
-        return unbound_assignment(
-            ctx.SYMBOL().getText(),
-            self.visit(ctx.expression())
-        )
+    def visitParenthesis(self, ctx):
+        return self.visit(ctx.expression())
 
-    def visitStaticAssignment(self, ctx):
-        of, rvalue = ctx.expression()
-        of = self.visit(of)
-        rvalue = self.visit(rvalue)
-        reference = ctx.SYMBOL().getText()
-        return assignment_op(
-            of, literal_op(reference), rvalue
-        )
-
-    def visitDynamicAssignment(self, ctx):
-        of, reference, rvalue = ctx.expression()
-        of = self.visit(of)
-        reference = self.visit(reference)
-        rvalue = self.visit(rvalue)
-        return assignment_op(
-            of, reference, rvalue
+    def visitIs(self, ctx):
+        expression, type = ctx.expression()
+        expression = self.visit(expression)
+        type = self.visit(type)
+        return is_op(
+            expression, type
         )
 
     def visitImmediateDereference(self, ctx):
@@ -299,9 +301,6 @@ class RDHLang5Visitor(langVisitor):
         of = self.visit(of)
         reference = self.visit(reference)
         return dereference_op(of, reference)
-
-    def visitParenthesis(self, ctx):
-        return self.visit(ctx.expression())
 
     def visitMultiplication(self, ctx):
         lvalue, rvalue = ctx.expression()
@@ -389,11 +388,47 @@ class RDHLang5Visitor(langVisitor):
         rvalue = self.visit(rvalue)
         return binary_integer_op("and", lvalue, rvalue)
 
+    def visitImmediateAssignment(self, ctx):
+        return unbound_assignment(
+            ctx.SYMBOL().getText(),
+            self.visit(ctx.expression())
+        )
+
+    def visitStaticAssignment(self, ctx):
+        of, rvalue = ctx.expression()
+        of = self.visit(of)
+        rvalue = self.visit(rvalue)
+        reference = ctx.SYMBOL().getText()
+        return assignment_op(
+            of, literal_op(reference), rvalue
+        )
+
+    def visitDynamicAssignment(self, ctx):
+        of, reference, rvalue = ctx.expression()
+        of = self.visit(of)
+        reference = self.visit(reference)
+        rvalue = self.visit(rvalue)
+        return assignment_op(
+            of, reference, rvalue
+        )
+
+    def visitTernary(self, ctx):
+        condition, when_true, when_false = ctx.expression()
+
+        return condition_op(
+            self.visit(condition),
+            self.visit(when_true),
+            self.visit(when_false)
+        )
+
     def visitReturnStatement(self, ctx):
         expression = self.visit(ctx.expression())
         return transform_op(
             "value", "return", expression
         )
+
+    def visitContinueStatement(self, ctx):
+        return continue_op(self.visit(ctx.expression()))
 
     def visitBreakStatement(self, ctx):
         return transform_op("break")
@@ -484,12 +519,16 @@ class RDHLang5Visitor(langVisitor):
     def visitObjectTemplate(self, ctx):
         result = {}
         for pair in ctx.objectPropertyPair():
-            name, type = self.visit(pair)
-            result[name] = type
+            key, value = self.visit(pair)
+            result[key] = value
         return object_template_op(result)
 
     def visitObjectPropertyPair(self, ctx):
-        return [ ctx.SYMBOL().getText(), self.visit(ctx.expression()) ] 
+        if ctx.SYMBOL():
+            return [ literal_op(ctx.SYMBOL().getText()), self.visit(ctx.expression()[0]) ] 
+        else:
+            key, value = ctx.expression()
+            return [ self.visit(key), self.visit(value) ]
 
     def visitObjectType(self, ctx):
         result = {}
@@ -514,8 +553,20 @@ class RDHLang5Visitor(langVisitor):
         type = self.visit(ctx.expression())
         return list_type([], type)
 
+    def visitFunctionType(self, ctx):
+        argument_type, return_type = ctx.expression()
+        argument_type = self.visit(argument_type)
+        return_type = self.visit(return_type)
+
+        argument_type = list_type([ argument_type ], None)
+
+        return function_type(argument_type, {
+            "value": list_template_op([ dict_template_op({ "out": return_type }) ])
+        })
+
     def visitToFunctionExpression(self, ctx):
-        return prepare_function_lit(self.visit(ctx.function()))
+        _, function = self.visit(ctx.function())
+        return prepare_function_lit(function)
 
 
 class CodeBlockBuilder(object):
@@ -528,6 +579,8 @@ class CodeBlockBuilder(object):
         argument_type_expression=MISSING,
         breaks_types=MISSING
     ):
+        if argument_type_expression is not MISSING:
+            check_is_opcode(argument_type_expression)
         self.code_expressions = code_expressions
         self.local_variable_type = local_variable_type
         self.local_initializer = local_initializer
@@ -606,8 +659,6 @@ class CodeBlockBuilder(object):
         if not self.requires_function() and output_mode == "expression":
             return combine_opcodes(code_expressions)
 
-        statics = {}
-
         if self.argument_type_expression is not MISSING:
             argument_type = self.argument_type_expression
         else:
@@ -629,19 +680,20 @@ class CodeBlockBuilder(object):
             break_types = infer_all()
 
         if self.extra_statics is not MISSING:
-            raise ValueError()
-            statics = spread_dict(self.extra_statics, statics)
+            extra_statics = self.extra_statics
+        else:
+            extra_statics = {}
 
         if output_mode == "function":
             code = transform_op(
                 "return", "value", combine_opcodes(code_expressions), **debug_info
             )
             return function_lit(
-                argument_type, break_types, local_type, local_initializer, code, **debug_info
+                extra_statics, argument_type, break_types, local_type, local_initializer, code, **debug_info
             )
         elif output_mode == "expression":
             return invoke_op(prepare_function_lit(function_lit(
-                argument_type, break_types, local_type, local_initializer, combine_opcodes(code_expressions), **debug_info
+                extra_statics, argument_type, break_types, local_type, local_initializer, combine_opcodes(code_expressions), **debug_info
             ), **debug_info), **debug_info)
 
 

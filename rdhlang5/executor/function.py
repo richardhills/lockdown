@@ -13,14 +13,14 @@ from rdhlang5.executor.ast_utils import unwrap_expr, \
     DependencyBuilder, compile_function, compile_ast_function_def, \
     get_dependency_key
 from rdhlang5.executor.exceptions import PreparationException
-from rdhlang5.executor.flow_control import BreakTypesFactory, FrameManager,\
+from rdhlang5.executor.flow_control import BreakTypesFactory, FrameManager, \
     is_restartable
 from rdhlang5.executor.function_type import enrich_break_type, OpenFunctionType, \
     ClosedFunctionType
 from rdhlang5.executor.opcodes import enrich_opcode, get_context_type, evaluate, \
     get_expression_break_types, flatten_out_types, TransformOp
 from rdhlang5.executor.raw_code_factories import dynamic_dereference_op, \
-    static_op
+    static_op, match_op, prepared_function, inferred_type
 from rdhlang5.executor.type_factories import enrich_type
 from rdhlang5.type_system.composites import CompositeType
 from rdhlang5.type_system.core_types import Type, NoValueType, IntegerType, \
@@ -30,7 +30,7 @@ from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     readonly_rich_composite_type
 from rdhlang5.type_system.dict_types import RDHDict
 from rdhlang5.type_system.exceptions import FatalError, InvalidInferredType, \
-    MicroOpTypeConflict
+    MicroOpTypeConflict, IncorrectObjectTypeForMicroOp
 from rdhlang5.type_system.list_types import RDHList
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType
@@ -39,6 +39,8 @@ from rdhlang5.utils import MISSING, is_debug, bind_runtime_contexts, raise_from,
 
 
 def prepare(data, outer_context, flow_manager, immediate_context=None):
+    if not isinstance(data, RDHObject):
+        raise FatalError()
     get_manager(data).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
 
     if not hasattr(data, "code"):
@@ -51,7 +53,10 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
     }, bind=READONLY_DEFAULT_OBJECT_TYPE, debug_reason="static-prepare-context")
 
     static = evaluate(
-        enrich_opcode(data.static, UnboundDereferenceBinder(context)),
+        enrich_opcode(
+            data.static,
+            combine(type_conditional_converter, UnboundDereferenceBinder(context))
+        ),
         context, flow_manager
     )
 
@@ -84,13 +89,15 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
 
     argument_type = argument_type.reify_revconst_types()
     outer_type = outer_type.reify_revconst_types()
+    local_type = enrich_type(static.local)
 
     context = RDHObject({
         "prepare": outer_context,
         "static": static,
         "types": RDHObject({
             "outer": outer_type,
-            "argument": argument_type
+            "argument": argument_type,
+            "local": local_type
         }, debug_reason="local-prepare-context")
     },
         bind=READONLY_DEFAULT_OBJECT_TYPE,
@@ -100,11 +107,14 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
 
     get_manager(context)._context_type = RDHObjectType({
         "outer": outer_type,
-        "argument": argument_type
+        "argument": argument_type,
+        "local": local_type
     }, wildcard_type=AnyType(), name="local-prepare-context-type")
 
-    local_type = enrich_type(static.local)
-    local_initializer = enrich_opcode(data.local_initializer, UnboundDereferenceBinder(context))
+    local_initializer = enrich_opcode(
+        data.local_initializer,
+        combine(type_conditional_converter, UnboundDereferenceBinder(context))
+    )
     actual_local_type, local_other_break_types = get_expression_break_types(local_initializer, context, flow_manager)
 
     get_manager(context).remove_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
@@ -116,17 +126,15 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
 
     try:
         local_type = local_type.replace_inferred_types(actual_local_type)
-    except InvalidInferredType():
+    except InvalidInferredType:
+        local_type = local_type.replace_inferred_types(actual_local_type)
         raise PreparationException("Invalid local inferred type")
 
     local_type = local_type.reify_revconst_types()
 
-    if isinstance(local_type, IntegerType):
-        pass
-
     if not local_type.is_copyable_from(actual_local_type):
         local_type.is_copyable_from(actual_local_type)
-        raise PreparationException("Invalid local type")
+        raise PreparationException("Invalid local type: {} != {}".format(local_type, actual_local_type))
 
     actual_break_types_factory.merge(local_other_break_types)
 
@@ -156,7 +164,10 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
         "local": local_type
     }, wildcard_type=AnyType(), name="code-prepare-context-type")
 
-    code = enrich_opcode(data.code, UnboundDereferenceBinder(context))
+    code = enrich_opcode(
+        data.code,
+        combine(type_conditional_converter, UnboundDereferenceBinder(context))
+    )
 
     code_break_types = code.get_break_types(context, flow_manager)
 
@@ -217,7 +228,7 @@ class UnboundDereferenceBinder(object):
         area_getter = context_type.micro_op_types.get(("get", area), None)
         if not area_getter:
             return None
-        area_type = area_getter.type
+        area_type = area_getter.value_type
         if not isinstance(area_type, CompositeType):
             return None
         getter = area_type.micro_op_types.get(("get", reference), None)
@@ -237,7 +248,7 @@ class UnboundDereferenceBinder(object):
 
         outer_getter = context_type.micro_op_types.get(("get", "outer"), None)
         if outer_getter:
-            outer_search = self.search_context_type_for_reference(reference, outer_getter.type, prepend_context + [ "outer" ], debug_info)
+            outer_search = self.search_context_type_for_reference(reference, outer_getter.value_type, prepend_context + [ "outer" ], debug_info)
             if outer_search:
                 return outer_search
 
@@ -282,6 +293,8 @@ class UnboundDereferenceBinder(object):
 
         if getattr(expression, "opcode", None) == "unbound_dereference":
             reference = expression.reference
+            if reference == "testNumber":
+                pass
             bound_countext_op, is_static = self.search_for_reference(reference, debug_info)
 
             if bound_countext_op:
@@ -308,6 +321,36 @@ class UnboundDereferenceBinder(object):
 
         return expression
 
+
+def type_conditional_converter(expression):
+    is_conditional = expression.opcode == "conditional"
+    if not is_conditional:
+        return expression
+    condition_is_type_check = expression.condition.opcode == "is"
+    if not condition_is_type_check:
+        return expression
+
+    new_match = match_op(
+        expression.condition.expression, [
+            prepared_function(
+                expression.condition.type,
+                expression.when_true
+            ),
+            prepared_function(
+                inferred_type(),
+                expression.when_false
+            )
+        ]
+    )
+    get_manager(new_match).add_composite_type(DEFAULT_OBJECT_TYPE)
+    return new_match
+
+def combine(*funcs):
+    def wrapped(expression):
+        for func in funcs:
+            expression = func(expression)
+        return expression
+    return wrapped
 
 class RDHFunction(object):
     def get_type(self):

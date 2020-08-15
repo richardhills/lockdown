@@ -121,6 +121,15 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#toFunctionStatement.
+    def enterToFunctionStatement(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#toFunctionStatement.
+    def exitToFunctionStatement(self, ctx):
+        pass
+
+
     # Enter a parse tree produced by langParser#toDestructuring.
     def enterToDestructuring(self, ctx):
         pass
@@ -190,6 +199,15 @@ class langListener(ParseTreeListener):
 
     # Exit a parse tree produced by langParser#lt.
     def exitLt(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#toFunctionType.
+    def enterToFunctionType(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#toFunctionType.
+    def exitToFunctionType(self, ctx):
         pass
 
 
@@ -391,6 +409,15 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#is.
+    def enterIs(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#is.
+    def exitIs(self, ctx):
+        pass
+
+
     # Enter a parse tree produced by langParser#eq.
     def enterEq(self, ctx):
         pass
@@ -454,6 +481,15 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#continueStatement.
+    def enterContinueStatement(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#continueStatement.
+    def exitContinueStatement(self, ctx):
+        pass
+
+
     # Enter a parse tree produced by langParser#toListTemplate.
     def enterToListTemplate(self, ctx):
         pass
@@ -469,6 +505,15 @@ class langListener(ParseTreeListener):
 
     # Exit a parse tree produced by langParser#staticAssignment.
     def exitStaticAssignment(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#ternary.
+    def enterTernary(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#ternary.
+    def exitTernary(self, ctx):
         pass
 
 
@@ -541,6 +586,15 @@ class langListener(ParseTreeListener):
 
     # Exit a parse tree produced by langParser#listType.
     def exitListType(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#functionType.
+    def enterFunctionType(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#functionType.
+    def exitFunctionType(self, ctx):
         pass
 
 

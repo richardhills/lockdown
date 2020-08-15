@@ -787,33 +787,20 @@ class TestEuler(TestCase):
         self.assertEquals(result.value, 31875000)
 
     def test_14(self):
-        return  # This test is currently too slow - requires caching of results to speed up
         code = parse("""
             function() {
-                var testStartingNumber = function(int) {
-                    int current = argument;
-                    int count = 1;
-                    while(current != 1) {
-                        if(current % 2 == 0) {
-                            current = current / 2;
-                        } else {
-                            current = 3 * current + 1;
-                        };
-                        count = count + 1;
+                var cachedResults = { [ 1 ]: 1 };
+
+                Function<int => int> testNumber = function(int number) {
+                    var cachedResult = cachedResults.get(number);
+                    if(cachedResult is int) {
+                        return cachedResult;
                     };
-                    return count;
+                    return cachedResults[number] = testNumber(number % 2 ? number / 2 : number * 3 + 1) + 1;
                 };
-                int longestChain = 0, startingNumberWithLongestChain = 0;
-                int test = 1;
-                while(test < 1000000) {
-                    int newChainLength = testStartingNumber(test);
-                    if(newChainLength > longestChain) {
-                        longestChain = newChainLength;
-                        startingNumberWithLongestChain = test;
-                    };
-                    test = test + 1;
-                };
-                return startingNumberWithLongestChain;
+
+                var results = for(var test from range(1, 1000000)) { continue testNumber(test); };
+                return max(results);
             }
         """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True)

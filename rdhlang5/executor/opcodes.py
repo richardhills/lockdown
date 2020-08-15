@@ -15,6 +15,8 @@ from rdhlang5.executor.exceptions import PreparationException
 from rdhlang5.executor.flow_control import BreakTypesFactory, BreakException
 from rdhlang5.executor.function_type import OpenFunctionType, ClosedFunctionType
 from rdhlang5.executor.type_factories import enrich_type
+from rdhlang5.type_system.builtins import BuiltInFunctionGetterType, \
+    ListInsertFunctionType, ObjectGetFunctionType
 from rdhlang5.type_system.composites import CompositeType
 from rdhlang5.type_system.core_types import AnyType, Type, merge_types, Const, \
     UnitType, NoValueType, AllowedValuesNotAvailable, unwrap_types, IntegerType, \
@@ -27,7 +29,7 @@ from rdhlang5.type_system.exceptions import FatalError, InvalidDereferenceType, 
 from rdhlang5.type_system.list_types import RDHList, ListGetterType, \
     ListSetterType, ListWildcardGetterType, ListWildcardSetterType, \
     ListWildcardDeletterType, ListInsertType, ListWildcardInsertType, \
-    is_list_checker
+    is_list_checker, RDHListType
 from rdhlang5.type_system.managers import get_type_of_value, get_manager
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType, \
     ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
@@ -196,9 +198,14 @@ class LiteralOp(Opcode):
 
 
 class ObjectTemplateOp(Opcode):
+    NO_VALUE_ASSIGNMENT = TypeErrorFactory("ObjectTemplateOp: no_value_assignment")
+
     def __init__(self, data, visitor):
         super(ObjectTemplateOp, self).__init__(data, visitor)
-        self.opcodes = { key: enrich_opcode(opcode, visitor) for key, opcode in data.opcodes.items() }
+        self.opcodes = {
+            enrich_opcode(key, visitor): enrich_opcode(opcode, visitor)
+            for key, opcode in data.opcodes.items()
+        }
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
@@ -208,38 +215,61 @@ class ObjectTemplateOp(Opcode):
 
         all_value_types = []
 
-        for key, opcode in self.opcodes.items():
-            value_type, other_break_types = get_expression_break_types(opcode, context, frame_manager)
-            break_types.merge(other_break_types)
+        for key_opcode, value_opcode in self.opcodes.items():
+            key_type, other_key_break_types = get_expression_break_types(key_opcode, context, frame_manager)
+            break_types.merge(other_key_break_types)
 
-            if value_type is MISSING:
+            value_type, other_value_break_types = get_expression_break_types(value_opcode, context, frame_manager)
+            break_types.merge(other_value_break_types)
+
+            if key_type is MISSING or value_type is MISSING:
                 continue
 
-            value_type = flatten_out_types(value_type)
-            all_value_types.append(value_type)
-
-            micro_ops[("get", key)] = ObjectGetterType(key, value_type, False, False)
-            micro_ops[("set", key)] = ObjectSetterType(key, AnyType(), False, False)
-
-            initial_value = MISSING
-
-            if isinstance(value_type, CompositeType) and value_type.initial_data:
-                initial_value = value_type.initial_data
+            key_type = flatten_out_types(key_type)
+            key = None
 
             try:
-                allowed_values = value_type.get_allowed_values()
-                if len(allowed_values) == 1:
-                    initial_value = allowed_values[0]
+                allowed_keys = key_type.get_allowed_values()
+                if len(allowed_keys) == 1:
+                    key = allowed_keys[0]
             except AllowedValuesNotAvailable:
                 pass
 
-            if initial_value is not MISSING:
-                initial_data[key] = initial_value
+            if key is None:
+                continue
+
+            value_type = flatten_out_types(value_type)
+
+            if isinstance(value_type, NoValueType):
+                break_types.add("exception", self.NO_VALUE_ASSIGNMENT.get_type())
+            else:
+                all_value_types.append(value_type)
+                micro_ops[("get", key)] = ObjectGetterType(key, value_type, False, False)
+                micro_ops[("set", key)] = ObjectSetterType(key, AnyType(), False, False)
+
+                initial_value = MISSING
+
+                if isinstance(value_type, CompositeType) and value_type.initial_data:
+                    initial_value = value_type.initial_data
+
+                try:
+                    allowed_values = value_type.get_allowed_values()
+                    if len(allowed_values) == 1:
+                        initial_value = allowed_values[0]
+                except AllowedValuesNotAvailable:
+                    pass
+
+                if initial_value is not MISSING:
+                    initial_data[key] = initial_value
+
+        if len(all_value_types) == 0:
+            all_value_types.append(AnyType())
 
         combined_value_types = merge_types(all_value_types, "exact")
 
-        micro_ops[("get-wildcard",)] = ObjectWildcardGetterType(combined_value_types, True, False)
-        micro_ops[("set-wildcard",)] = ObjectWildcardSetterType(AnyType(), True, True)
+        micro_ops[("get-wildcard",)] = ObjectWildcardGetterType(AnyType(), combined_value_types, True, False)
+        micro_ops[("set-wildcard",)] = ObjectWildcardSetterType(AnyType(), AnyType(), True, True)
+        micro_ops[("get", "get")] = BuiltInFunctionGetterType(ObjectGetFunctionType(micro_ops[("get-wildcard",)]))
 
         break_types.add("value", CompositeType(micro_ops, is_object_checker, initial_data=initial_data, is_revconst=True))
 
@@ -248,16 +278,25 @@ class ObjectTemplateOp(Opcode):
     def jump(self, context, frame_manager, immediate_context=None):
         with frame_manager.get_next_frame(self) as frame:
             result = {}
-            for key, opcode in self.opcodes.items():
-                result[key] = frame.step(key, lambda: evaluate(opcode, context, frame_manager))
+            for index, (key_opcode, value_opcode) in enumerate(self.opcodes.items()):
+                key = frame.step("key-{}".format(index), lambda: evaluate(key_opcode, context, frame_manager))
+                result[key] = frame.step("value-{}".format(index), lambda: evaluate(value_opcode, context, frame_manager))
+                if result[key] is NO_VALUE:
+                    frame.exception(self.NO_VALUE_ASSIGNMENT())
 
             return frame.value(RDHObject(result, debug_reason="object-template"))
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
-        parameters = {
-            "ast_" + key: opcode.to_ast(context_name, dependency_builder) for key, opcode in self.opcodes.items()
-        }
-        parameter_template = ",".join("\"{}\": {{ast_{}}}".format(key, key) for key in self.opcodes.keys())
+        parameters = {}
+        parameters.update({
+            "key_ast{}".format(id(key)): key.to_ast(context_name, dependency_builder)
+            for key, opcode in self.opcodes.items()
+        })
+        parameters.update({
+            "value_ast{}".format(id(key)): opcode.to_ast(context_name, dependency_builder)
+            for key, opcode in self.opcodes.items()
+        })
+        parameter_template = ",".join("{{key_ast{}}}: {{value_ast{}}}".format(id(key), id(key)) for key in self.opcodes.keys())
         return compile_expression(
             "RDHObject({{ " + parameter_template + " }})",
             context_name, dependency_builder, **parameters
@@ -361,6 +400,7 @@ class ListTemplateOp(Opcode):
         micro_ops[("insert", 0)] = ListInsertType(AnyType(), 0, False, False)
         micro_ops[("delete-wildcard",)] = ListWildcardDeletterType(True)
         micro_ops[("insert-wildcard",)] = ListWildcardInsertType(AnyType(), True, False)
+        micro_ops[("get", "insert")] = BuiltInFunctionGetterType(ListInsertFunctionType(micro_ops[("insert-wildcard",)], combined_value_types))
 
         break_types.add("value", CompositeType(micro_ops, is_list_checker, initial_data=initial_data, is_revconst=True))
 
@@ -460,7 +500,7 @@ class DereferenceOp(Opcode):
                                         self.wildcard_micro_ops[reference] = micro_op
 
                                 if micro_op:
-                                    break_types.add("value", micro_op.type)
+                                    break_types.add("value", micro_op.value_type)
                                     if micro_op.type_error or micro_op.key_error:
                                         invalid_dereferences.add(reference)
                                 else:
@@ -564,7 +604,7 @@ class DereferenceOp(Opcode):
 
 
 class DynamicDereferenceOp(Opcode):
-    INVALID_DEREFERENCE = TypeErrorFactory("DynamicDereferenceOp: invalid_dereference")
+    INVALID_DEREFERENCE = TypeErrorFactory("DynamicDereferenceOp: invalid_dereference {reference}")
 
     def __init__(self, data, visitor):
         super(DynamicDereferenceOp, self).__init__(data, visitor)
@@ -595,10 +635,9 @@ class AssignmentOp(Opcode):
         self.of = enrich_opcode(data.of, visitor)
         self.reference = enrich_opcode(data.reference, visitor)
         self.rvalue = enrich_opcode(data.rvalue, visitor)
-        self.direct_micro_ops = {}
-        self.wildcard_micro_ops = {}
+        self.micro_ops = {}
+        self.wildcard_micro_op = None
 
-    @one_shot_memoize
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
 
@@ -621,33 +660,40 @@ class AssignmentOp(Opcode):
 
         if reference_types is not MISSING and of_types is not MISSING and rvalue_type is not MISSING:
             for reference_type in unwrap_types(reference_types):
-                try:
-                    for reference in reference_type.get_allowed_values():    
-                        for of_type in unwrap_types(of_types):
+                for of_type in unwrap_types(of_types):
+                    try:
+                        possible_references = reference_type.get_allowed_values()
+                    except AllowedValuesNotAvailable:
+                        possible_references = None
+
+                    if possible_references is not None:
+                        for reference in possible_references:    
                             micro_op = None
                             if isinstance(of_type, CompositeType) and reference is not None:
                                 micro_op = of_type.get_micro_op_type(("set", reference))
                                 if micro_op:
-                                    self.direct_micro_ops[reference] = micro_op
+                                    self.micro_ops[reference] = True, micro_op
 
                                 if not micro_op:
                                     micro_op = of_type.get_micro_op_type(("set-wildcard",))
                                     if micro_op:
-                                        self.wildcard_micro_ops[reference] = micro_op
+                                        self.micro_ops[reference] = False, micro_op
 
                             if micro_op:
-                                if not micro_op.type.is_copyable_from(rvalue_type):
-                                    micro_op.type.is_copyable_from(rvalue_type)
+                                if not micro_op.value_type.is_copyable_from(rvalue_type):
+                                    micro_op.value_type.is_copyable_from(rvalue_type)
                                     self.invalid_rvalue_error = True
-
-                                break_types.add("value", NoValueType())
 
                                 if micro_op.type_error or micro_op.key_error:
                                     self.invalid_assignment_error = True
+
+                                break_types.add("value", micro_op.value_type)
                             else:
                                 self.invalid_lvalue_error = True
-                except AllowedValuesNotAvailable:
-                    self.invalid_lvalue_error = True
+                    else:
+                        self.wildcard_micro_op = of_type.get_micro_op_type(("set-wildcard",))
+                        if not self.wildcard_micro_op or self.wildcard_micro_op.key_error or self.wildcard_micro_op.type_error:
+                            self.invalid_lvalue_error = True
         else:
             self.invalid_assignment_error = self.invalid_rvalue_error = self.invalid_lvalue_error = True
 
@@ -669,41 +715,15 @@ class AssignmentOp(Opcode):
             manager = get_manager(of)
 
             try:
-                direct_micro_op_type = self.direct_micro_ops.get(reference, None)
-                if direct_micro_op_type:
-                    if (is_debug() or self.invalid_rvalue_error) and not direct_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
+                direct, micro_op_type = self.micro_ops.get(reference, (False, self.wildcard_micro_op))
+                if micro_op_type:
+                    if (is_debug() or self.invalid_rvalue_error) and not micro_op_type.value_type.is_copyable_from(get_type_of_value(rvalue)):
                         return frame.exception(self.INVALID_RVALUE())
 
-                    if False:  # not is_debug():
-                        return frame.value(direct_micro_op_type.invoke(manager, rvalue, True))
-                    micro_op = direct_micro_op_type.create(manager)
-                    return frame.value(micro_op.invoke(rvalue, trust_caller=True))
-
-                wildcard_micro_op_type = self.wildcard_micro_ops.get(reference, None)
-                if wildcard_micro_op_type:
-                    if (is_debug() or self.invalid_rvalue_error) and not wildcard_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
-                        return frame.exception(self.INVALID_RVALUE())
-
-                    if False:  # not is_debug():
-                        return frame.value(direct_micro_op_type.invoke(manager, rvalue, True))
-                    micro_op = wildcard_micro_op_type.create(manager)
-                    return frame.value(micro_op.invoke(reference, rvalue, trust_caller=True))
- 
-#                 direct_micro_op_type = manager.get_micro_op_type(("set", reference))
-#                 if direct_micro_op_type:
-#                     if (is_debug() or self.invalid_rvalue_error) and not direct_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
-#                         return frame.exception(self.INVALID_RVALUE())
-# 
-#                     micro_op = direct_micro_op_type.create(manager)
-#                     return frame.value(micro_op.invoke(rvalue, trust_caller=True))
-# 
-#                 wildcard_micro_op_type = manager.get_micro_op_type(("set-wildcard",))
-#                 if wildcard_micro_op_type:
-#                     if (is_debug() or self.invalid_rvalue_error) and not wildcard_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
-#                         return frame.exception(self.INVALID_RVALUE())
-# 
-#                     micro_op = wildcard_micro_op_type.create(manager)
-#                     return frame.value(micro_op.invoke(reference, rvalue, trust_caller=True))
+                    if direct:
+                        return frame.value(micro_op_type.invoke(manager, rvalue, trust_caller=True))
+                    else:
+                        return frame.value(micro_op_type.invoke(manager, reference, rvalue, trust_caller=True))
 
                 return frame.exception(self.INVALID_LVALUE())
             except InvalidAssignmentType:
@@ -715,15 +735,10 @@ class AssignmentOp(Opcode):
         micro_op_to_compile = None
         takes_key = None
 
-        if len(self.direct_micro_ops) == 0:
-            if len(self.wildcard_micro_ops) == 0:
-                pass
-            elif len(self.wildcard_micro_ops) == 1:
-                micro_op_to_compile = self.wildcard_micro_ops.values()[0]
-                takes_key = True
-        elif len(self.direct_micro_ops) == 1:
-            micro_op_to_compile = self.direct_micro_ops.values()[0]
-            takes_key = False
+        for direct, micro_op in self.micro_ops.items():
+            if direct:
+                micro_op_to_compile = micro_op
+                takes_key = not direct
 
         need_interpreted_version = (
             micro_op_to_compile is None
@@ -815,7 +830,7 @@ class InsertOp(Opcode):
                                         self.wildcard_micro_ops[reference] = micro_op
 
                             if micro_op:
-                                if not micro_op.type.is_copyable_from(rvalue_type):
+                                if not micro_op.value_type.is_copyable_from(rvalue_type):
                                     self.invalid_rvalue_error = True
 
                                 break_types.add("value", NoValueType())
@@ -847,7 +862,7 @@ class InsertOp(Opcode):
             try:
                 direct_micro_op_type = self.direct_micro_ops.get(reference, None)
                 if direct_micro_op_type:
-                    if self.invalid_rvalue_error and not direct_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
+                    if self.invalid_rvalue_error and not direct_micro_op_type.value_type.is_copyable_from(get_type_of_value(rvalue)):
                         return frame.exception(self.INVALID_RVALUE())
 
                     micro_op = direct_micro_op_type.create(manager)
@@ -855,7 +870,7 @@ class InsertOp(Opcode):
 
                 wildcard_micro_op_type = self.wildcard_micro_ops.get(reference, None)
                 if wildcard_micro_op_type:
-                    if self.invalid_rvalue_error and not wildcard_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
+                    if self.invalid_rvalue_error and not wildcard_micro_op_type.value_type.is_copyable_from(get_type_of_value(rvalue)):
                         return frame.exception(self.INVALID_RVALUE())
 
                     micro_op = wildcard_micro_op_type.create(manager)
@@ -863,7 +878,7 @@ class InsertOp(Opcode):
 
 #                 direct_micro_op_type = manager.get_micro_op_type(("insert", reference))
 #                 if direct_micro_op_type:
-#                     if self.invalid_rvalue_error and not direct_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
+#                     if self.invalid_rvalue_error and not direct_micro_op_type.value_type.is_copyable_from(get_type_of_value(rvalue)):
 #                         return frame.exception(self.INVALID_RVALUE())
 # 
 #                     micro_op = direct_micro_op_type.create(manager)
@@ -871,7 +886,7 @@ class InsertOp(Opcode):
 # 
 #                 wildcard_micro_op_type = manager.get_micro_op_type(("insert-wildcard",))
 #                 if wildcard_micro_op_type:
-#                     if self.invalid_rvalue_error and not wildcard_micro_op_type.type.is_copyable_from(get_type_of_value(rvalue)):
+#                     if self.invalid_rvalue_error and not wildcard_micro_op_type.value_type.is_copyable_from(get_type_of_value(rvalue)):
 #                         return frame.exception(self.INVALID_RVALUE())
 # 
 #                     micro_op = wildcard_micro_op_type.create(manager)
@@ -974,8 +989,10 @@ class TransformOp(Opcode):
 
         if self.expression:
             expression_break_types = dict(self.expression.get_break_types(context, frame_manager))
+            if self.output not in expression_break_types:
+                expression_break_types[self.output] = []
             if self.input in expression_break_types:
-                expression_break_types[self.output] = expression_break_types.pop(self.input)
+                expression_break_types[self.output].extend(expression_break_types.pop(self.input))
             break_types.merge(expression_break_types)
         else:
             break_types.add(self.output, NoValueType())
@@ -1261,13 +1278,27 @@ class LoopOp(Opcode):
         self.code = enrich_opcode(data.code, visitor)
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
         _, other_break_types = get_expression_break_types(self.code, context, frame_manager)
-        return other_break_types
+        continue_value_type = other_break_types.pop("continue", MISSING)
+
+        if continue_value_type is not MISSING:
+            break_types.add("value", RDHListType([], continue_value_type))
+
+        break_types.merge(other_break_types)
+        return break_types.build()
 
     def jump(self, context, frame_manager, immediate_context=None):
         code = self.code
-        while 1:
-            evaluate(code, context, frame_manager)
+        results = []
+
+        while True:
+            with frame_manager.capture("continue") as capturer:
+                evaluate(code, context, frame_manager)
+            if capturer.value is not MISSING:
+                results.append(capturer.value)
+
+        return frame_manager.value(results)
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         return compile_statement("""
@@ -1355,8 +1386,6 @@ else:
 
 
 class PrepareOp(Opcode):
-    PREPARATION_ERROR = TypeErrorFactory("PrepareOp: preparation_error")
-
     def __init__(self, data, visitor):
         super(PrepareOp, self).__init__(data, visitor)
         self.code = enrich_opcode(data.code, visitor)
@@ -1372,8 +1401,6 @@ class PrepareOp(Opcode):
                 "value", AnyType()
             )
 
-        break_types.add("exception", self.PREPARATION_ERROR.get_type(), opcode=self)
-
         return break_types.build()
 
     def jump(self, context, frame_manager, immediate_context=None):
@@ -1385,10 +1412,7 @@ class PrepareOp(Opcode):
             immediate_context = immediate_context or {}
             immediate_context["suggested_outer_type"] = get_context_type(context)
 
-            try:
-                function = prepare(function_data, context, frame_manager, immediate_context)
-            except PreparationException as e:
-                return frame.exception(self.PREPARATION_ERROR())
+            function = prepare(function_data, context, frame_manager, immediate_context)
 
             return frame.value(function)
 
@@ -1402,6 +1426,8 @@ class CloseOp(Opcode):
         self.function = enrich_opcode(data.function, visitor)
         self.outer_context = enrich_opcode(data.outer_context, visitor)
 
+        self.outer_context_type_error = True
+
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
 
@@ -1413,8 +1439,6 @@ class CloseOp(Opcode):
         outer_context_type, outer_context_break_types = get_expression_break_types(self.outer_context, context, frame_manager)
         outer_context_type = flatten_out_types(outer_context_type)
         break_types.merge(outer_context_break_types)
-
-        self.outer_context_type_error = True
 
         if function_type is not MISSING and outer_context_type is not MISSING:
             if isinstance(function_type, OpenFunctionType):
@@ -1498,7 +1522,7 @@ class StaticOp(Opcode):
             return super(StaticOp, self).to_ast(context_name, dependency_builder)
 
     def to_code(self):
-        if not self.value:
+        if not self.valObjectGetFunctionTypeue:
             raise FatalError()
         return self.value.to_code()
 

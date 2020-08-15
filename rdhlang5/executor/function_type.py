@@ -78,3 +78,6 @@ class ClosedFunctionType(Type):
             are_break_types_a_subset(self, other)
             return False
         return True
+
+    def __repr__(self):
+        return "ClosedFunctionType<{} => {}>".format(self.argument_type, self.break_types)
