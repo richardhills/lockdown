@@ -789,7 +789,7 @@ class TestEuler(TestCase):
     def test_14(self):
         code = parse("""
             function() {
-                var cachedResults = { [ 1 ]: 1 };
+                Dictionary<int, int> cachedResults = { [ 1 ]: 1 };
 
                 Function<int => int> testNumber = function(int number) {
                     var cachedResult = cachedResults.get(number);

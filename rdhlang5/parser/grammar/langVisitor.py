@@ -140,6 +140,11 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#toDictionaryType.
+    def visitToDictionaryType(self, ctx):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#staticDereference.
     def visitStaticDereference(self, ctx):
         return self.visitChildren(ctx)
@@ -327,6 +332,11 @@ class langVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by langParser#listType.
     def visitListType(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#dictionaryType.
+    def visitDictionaryType(self, ctx):
         return self.visitChildren(ctx)
 
 

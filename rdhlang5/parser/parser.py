@@ -553,6 +553,17 @@ class RDHLang5Visitor(langVisitor):
         type = self.visit(ctx.expression())
         return list_type([], type)
 
+    def visitDictionaryType(self, ctx):
+        key_type, value_type = ctx.expression()
+        key_type = self.visit(key_type)
+        value_type = self.visit(value_type)
+
+        return object_type(
+            {},
+            wildcard_key_type=key_type,
+            wildcard_value_type=value_type
+        )
+
     def visitFunctionType(self, ctx):
         argument_type, return_type = ctx.expression()
         argument_type = self.visit(argument_type)

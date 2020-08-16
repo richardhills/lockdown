@@ -786,9 +786,11 @@ class ObjectDeletter(MicroOp):
 def is_object_checker(obj):
     return isinstance(obj, RDHObject)
 
-def RDHObjectType(properties=None, wildcard_type=None, initial_data=None, **kwargs):
+def RDHObjectType(properties=None, wildcard_key_type=None, wildcard_value_type=None, initial_data=None, **kwargs):
     if not properties:
         properties = {}
+    if not wildcard_key_type:
+        wildcard_key_type = StringType()
     micro_ops = OrderedDict({})
 
     for name, type in properties.items():
@@ -807,9 +809,9 @@ def RDHObjectType(properties=None, wildcard_type=None, initial_data=None, **kwar
             if not const:
                 micro_ops[("set", name)] = ObjectSetterType(name, type, False, False)
 
-    if wildcard_type:
-        micro_ops[("get-wildcard",)] = ObjectWildcardGetterType(StringType(), wildcard_type, True, False)
-        micro_ops[("set-wildcard",)] = ObjectWildcardSetterType(StringType(), wildcard_type, True, True)
+    if wildcard_value_type:
+        micro_ops[("get-wildcard",)] = ObjectWildcardGetterType(wildcard_key_type, wildcard_value_type, True, False)
+        micro_ops[("set-wildcard",)] = ObjectWildcardSetterType(wildcard_key_type, wildcard_value_type, True, True)
 
         micro_ops[("get", "get")] = BuiltInFunctionGetterType(ObjectGetFunctionType(micro_ops[("get-wildcard",)]))
 

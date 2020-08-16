@@ -247,6 +247,15 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#toDictionaryType.
+    def enterToDictionaryType(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#toDictionaryType.
+    def exitToDictionaryType(self, ctx):
+        pass
+
+
     # Enter a parse tree produced by langParser#staticDereference.
     def enterStaticDereference(self, ctx):
         pass
@@ -586,6 +595,15 @@ class langListener(ParseTreeListener):
 
     # Exit a parse tree produced by langParser#listType.
     def exitListType(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#dictionaryType.
+    def enterDictionaryType(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#dictionaryType.
+    def exitDictionaryType(self, ctx):
         pass
 
 

@@ -716,16 +716,21 @@ class AssignmentOp(Opcode):
 
             try:
                 direct, micro_op_type = self.micro_ops.get(reference, (False, self.wildcard_micro_op))
-                if micro_op_type:
-                    if (is_debug() or self.invalid_rvalue_error) and not micro_op_type.value_type.is_copyable_from(get_type_of_value(rvalue)):
-                        return frame.exception(self.INVALID_RVALUE())
 
-                    if direct:
-                        return frame.value(micro_op_type.invoke(manager, rvalue, trust_caller=True))
-                    else:
-                        return frame.value(micro_op_type.invoke(manager, reference, rvalue, trust_caller=True))
+                if not micro_op_type:
+                    micro_op_type = self.wildcard_micro_op
+                    direct = False
 
-                return frame.exception(self.INVALID_LVALUE())
+                if not micro_op_type:
+                    return frame.exception(self.INVALID_LVALUE())
+
+                if (is_debug() or self.invalid_rvalue_error) and not micro_op_type.value_type.is_copyable_from(get_type_of_value(rvalue)):
+                    return frame.exception(self.INVALID_RVALUE())
+
+                if direct:
+                    return frame.value(micro_op_type.invoke(manager, rvalue, trust_caller=True))
+                else:
+                    return frame.value(micro_op_type.invoke(manager, reference, rvalue, trust_caller=True))
             except InvalidAssignmentType:
                 return frame.exception(self.INVALID_ASSIGNMENT())
             except InvalidAssignmentKey:
@@ -735,10 +740,13 @@ class AssignmentOp(Opcode):
         micro_op_to_compile = None
         takes_key = None
 
-        for direct, micro_op in self.micro_ops.items():
+        for direct, micro_op in self.micro_ops.values():
             if direct:
                 micro_op_to_compile = micro_op
                 takes_key = not direct
+
+        if isinstance(micro_op_to_compile, tuple):
+            pass
 
         need_interpreted_version = (
             micro_op_to_compile is None

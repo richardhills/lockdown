@@ -75,7 +75,7 @@ class TestDereference(TestCase):
         }, bind=RDHObjectType({
             "local": IntegerType(),
             "types": DEFAULT_OBJECT_TYPE
-        }, wildcard_type=rich_composite_type))
+        }, wildcard_value_type=rich_composite_type))
 
         result = bootstrap_function(func, context=context, check_safe_exit=True)
 

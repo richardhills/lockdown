@@ -109,7 +109,7 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
         "outer": outer_type,
         "argument": argument_type,
         "local": local_type
-    }, wildcard_type=AnyType(), name="local-prepare-context-type")
+    }, wildcard_value_type=AnyType(), name="local-prepare-context-type")
 
     local_initializer = enrich_opcode(
         data.local_initializer,
@@ -162,7 +162,7 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
         "outer": outer_type,
         "argument": argument_type,
         "local": local_type
-    }, wildcard_type=AnyType(), name="code-prepare-context-type")
+    }, wildcard_value_type=AnyType(), name="code-prepare-context-type")
 
     code = enrich_opcode(
         data.code,
@@ -381,7 +381,7 @@ class OpenFunction(object):
             "outer": self.outer_type,
             "argument": self.argument_type,
             "types": readonly_rich_composite_type
-        }, wildcard_type=AnyType(), name="local-initialization-context-type")
+        }, wildcard_value_type=AnyType(), name="local-initialization-context-type")
 
         self.execution_context_type = RDHObjectType({
             "prepare": readonly_rich_composite_type,
@@ -390,7 +390,7 @@ class OpenFunction(object):
             "static": readonly_rich_composite_type,
             "local": self.local_type,
             "types": readonly_rich_composite_type
-        }, wildcard_type=AnyType(), name="code-execution-context-type")
+        }, wildcard_value_type=AnyType(), name="code-execution-context-type")
 
         self.compiled_ast = None
 

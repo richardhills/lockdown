@@ -39,11 +39,15 @@ def one_of_type(types):
     }, debug_reason="type-literal")
 
 
-def object_type(properties):
-    return object_template_op({
+def object_type(properties, wildcard_value_type=None, wildcard_key_type=None):
+    type = {
         "type": literal_op("Object"),
-        "properties": object_template_op(properties)
-    }, debug_reason="type-literal")
+        "properties": object_template_op(properties),
+    }
+    if wildcard_value_type:
+        type["wildcard_value_type"] = wildcard_value_type
+        type["wildcard_key_type"] = wildcard_key_type
+    return object_template_op(type, debug_reason="type-literal")
 
 def list_type(entry_types, wildcard_type):
     type = {

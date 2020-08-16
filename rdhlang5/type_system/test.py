@@ -721,7 +721,7 @@ class TestMisc(TestCase):
         }, bind=RDHObjectType({
             "local": RDHListType([ IntegerType(), IntegerType() ], None),
             "types": DEFAULT_OBJECT_TYPE
-        }, wildcard_type=rich_composite_type))
+        }, wildcard_value_type=rich_composite_type))
 
     def test_misc2(self):
         # Came up writing test_misc1
@@ -729,7 +729,7 @@ class TestMisc(TestCase):
             "local": RDHList([ 39, 3 ])
         }, bind=RDHObjectType({
             "local": RDHListType([ IntegerType(), IntegerType() ], None)
-        }, wildcard_type=rich_composite_type))
+        }, wildcard_value_type=rich_composite_type))
 
 
 class TestRDHListType(TestCase):

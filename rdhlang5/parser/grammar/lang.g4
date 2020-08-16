@@ -150,6 +150,7 @@ expression
    | forLoop				# toForLoop
    | objectType				# toObjectType
    | listType				# toListType
+   | dictionaryType			# toDictionaryType
    | tupleType				# toTupleType
    | functionType			# toFunctionType
    | function				# toFunctionExpression
@@ -182,6 +183,10 @@ tupleType
 
 listType
    : 'List' '<' expression '>'
+   ;
+
+dictionaryType
+   : 'Dictionary' '<' expression ',' expression '>'
    ;
 
 functionType
