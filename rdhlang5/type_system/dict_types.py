@@ -2,7 +2,7 @@ from UserDict import DictMixin
 
 from rdhlang5.type_system.composites import InferredType, bind_type_to_manager, \
     unbind_type_to_manager, CompositeType, Composite
-from rdhlang5.type_system.core_types import merge_types
+from rdhlang5.type_system.core_types import merge_types, Type
 from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict, \
     raise_if_safe, InvalidAssignmentType, InvalidDereferenceKey, \
     InvalidDereferenceType, MissingMicroOp, InvalidAssignmentKey, \
@@ -64,8 +64,8 @@ class DictMicroOpType(MicroOpType):
 
 class DictWildcardGetterType(DictMicroOpType):
     def __init__(self, key_type, value_type, key_error, type_error):
-        if isinstance(type, dict) or isinstance(type, RDHDict):
-            pass
+        if not isinstance(key_type, Type) or not isinstance(value_type, Type):
+            raise FatalError()
         self.key_type = key_type
         self.value_type = value_type
         self.key_error = key_error
@@ -353,8 +353,9 @@ class DictGetter(MicroOp):
 
 
 class DictWildcardSetterType(DictMicroOpType):
-    def __init__(self, type, key_error, type_error):
-        self.value_type = type
+    def __init__(self, key_type, value_type, key_error, type_error):
+        self.key_type = key_type
+        self.value_type = value_type
         self.key_error = key_error
         self.type_error = type_error
 
@@ -408,9 +409,9 @@ class DictWildcardSetterType(DictMicroOpType):
 
 
 class DictWildcardSetter(MicroOp):
-    def __init__(self, target_manager, type, key_error, type_error):
+    def __init__(self, target_manager, value_type, key_error, type_error):
         self.target_manager = target_manager
-        self.value_type = type
+        self.value_type = value_type
         self.key_error = key_error
         self.type_error = type_error
 

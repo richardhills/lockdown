@@ -792,14 +792,14 @@ class TestEuler(TestCase):
                 Dictionary<int, int> cachedResults = { [ 1 ]: 1 };
 
                 Function<int => int> testNumber = function(int number) {
-                    var cachedResult = cachedResults.get(number);
+                    int cachedResult = get(cachedResults, number);
                     if(cachedResult is int) {
                         return cachedResult;
                     };
                     return cachedResults[number] = testNumber(number % 2 ? number / 2 : number * 3 + 1) + 1;
                 };
 
-                var results = for(var test from range(1, 1000000)) { continue testNumber(test); };
+                List<int> results = for(var test from range(1, 1000000)) { continue testNumber(test); };
                 return max(results);
             }
         """, debug=True)

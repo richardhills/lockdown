@@ -131,6 +131,7 @@ class CompositeType(Type):
                     if other.initial_data is None:
                         return False
                     if our_micro_op.check_for_runtime_data_conflict(other.initial_data):
+                        our_micro_op.check_for_runtime_data_conflict(other.initial_data)
                         return False
             else:
                 no_initial_data_to_make_safe = not other.initial_data or our_micro_op.check_for_runtime_data_conflict(other.initial_data)

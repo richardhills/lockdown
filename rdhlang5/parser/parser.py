@@ -15,7 +15,8 @@ from rdhlang5.executor.raw_code_factories import function_lit, nop, comma_op, \
     unbound_assignment, list_template_op, list_type, context_op, \
     loop_op, condition_op, binary_integer_op, equality_op, dereference, \
     local_function, reset_op, inferred_type, prepare_function_lit, transform, \
-    continue_op, check_is_opcode, is_op, function_type, dict_template_op
+    continue_op, check_is_opcode, is_op, function_type, dict_template_op, \
+    composite_type
 from rdhlang5.parser.grammar.langLexer import langLexer
 from rdhlang5.parser.grammar.langParser import langParser
 from rdhlang5.parser.grammar.langVisitor import langVisitor
@@ -558,11 +559,27 @@ class RDHLang5Visitor(langVisitor):
         key_type = self.visit(key_type)
         value_type = self.visit(value_type)
 
-        return object_type(
-            {},
-            wildcard_key_type=key_type,
-            wildcard_value_type=value_type
-        )
+        return composite_type([
+            object_template_op({
+                "opcode": literal_op("get-wildcard"),
+                "key_type": key_type,
+                "value_type": value_type,
+                "key_error": literal_op(True),
+                "type_error": literal_op(False),
+            }),
+            object_template_op({
+                "opcode": literal_op("set-wildcard"),
+                "key_type": key_type,
+                "value_type": value_type,
+                "key_error": literal_op(False),
+                "type_error": literal_op(False),
+            }),
+            object_template_op({
+                "opcode": literal_op("delete-wildcard"),
+                "key_type": key_type,
+                "key_error": literal_op(True),
+            }),
+        ], "object")
 
     def visitFunctionType(self, ctx):
         argument_type, return_type = ctx.expression()

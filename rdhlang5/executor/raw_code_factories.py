@@ -58,6 +58,12 @@ def list_type(entry_types, wildcard_type):
         type["wildcard_type"] = wildcard_type
     return object_template_op(type, debug_reason="type-literal")
 
+def composite_type(properties, python_type):
+    return object_template_op({
+        "type": literal_op("Composite"),
+        "python_type": literal_op(python_type),
+        "properties": list_template_op(properties)
+    })
 
 def function_type(argument_type, break_types):
     if not isinstance(break_types, dict):

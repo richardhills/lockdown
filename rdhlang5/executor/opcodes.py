@@ -271,7 +271,15 @@ class ObjectTemplateOp(Opcode):
         micro_ops[("set-wildcard",)] = ObjectWildcardSetterType(AnyType(), AnyType(), True, True)
         micro_ops[("get", "get")] = BuiltInFunctionGetterType(ObjectGetFunctionType(micro_ops[("get-wildcard",)]))
 
-        break_types.add("value", CompositeType(micro_ops, is_object_checker, initial_data=initial_data, is_revconst=True))
+        break_types.add(
+            "value", 
+            CompositeType(
+                micro_ops,
+                is_object_checker,
+                initial_data=RDHObject(initial_data),
+                is_revconst=True
+            )
+        )
 
         return break_types.build()
 

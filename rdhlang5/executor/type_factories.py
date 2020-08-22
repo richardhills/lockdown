@@ -1,17 +1,26 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+from collections import OrderedDict
+
 from rdhlang5.executor.exceptions import PreparationException
 from rdhlang5.executor.function_type import enrich_break_type, \
     ClosedFunctionType
-from rdhlang5.type_system.composites import InferredType
+from rdhlang5.type_system.composites import InferredType, CompositeType
 from rdhlang5.type_system.core_types import UnitType, OneOfType, Const, AnyType, \
     IntegerType, BooleanType, NoValueType, StringType
 from rdhlang5.type_system.default_composite_types import DEFAULT_DICT_TYPE
-from rdhlang5.type_system.dict_types import RDHDict
+from rdhlang5.type_system.dict_types import RDHDict, DictGetterType, \
+    DictSetterType, DictDeletterType, DictWildcardGetterType, \
+    DictWildcardSetterType, DictWildcardDeletterType, is_dict_checker
 from rdhlang5.type_system.exceptions import FatalError
-from rdhlang5.type_system.list_types import RDHListType, RDHList
-from rdhlang5.type_system.object_types import RDHObjectType, RDHObject
+from rdhlang5.type_system.list_types import RDHListType, RDHList, ListGetterType, \
+    ListSetterType, ListDeletterType, ListWildcardGetterType, \
+    ListWildcardSetterType, ListWildcardDeletterType, is_list_checker
+from rdhlang5.type_system.object_types import RDHObjectType, RDHObject, \
+    ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
+    ObjectWildcardSetterType, ObjectDeletterType, ObjectWildcardDeletterType, \
+    is_object_checker
 
 
 def build_closed_function_type(data):
@@ -76,10 +85,60 @@ def build_list_type(data):
         wildcard_type
     )
 
+OPCODE_TYPE_FACTORIES = {
+    "object": {
+        "get": ObjectGetterType,
+        "set": ObjectSetterType,
+        "delete": ObjectDeletterType,
+        "get-wildcard": lambda property: ObjectWildcardGetterType(enrich_type(property.key_type), enrich_type(property.value_type), property.key_error, property.type_error),
+        "set-wildcard": lambda property: ObjectWildcardSetterType(enrich_type(property.key_type), enrich_type(property.value_type), property.key_error, property.type_error),
+        "delete-wildcard": lambda property: ObjectWildcardDeletterType(property.key_error),
+    },
+    "dict": {
+        "get": DictGetterType,
+        "set": DictSetterType,
+        "delete": DictDeletterType,
+        "get-wildcard": lambda property: DictWildcardGetterType(enrich_type(property.key_type), enrich_type(property.value_type), property.key_error, property.type_error),
+        "set-wildcard": lambda property: DictWildcardSetterType(enrich_type(property.key_type), enrich_type(property.value_type), property.key_error, property.type_error),
+        "delete-wildcard": lambda property: DictWildcardDeletterType(property.key_error),
+    },
+    "list": {
+        "get": ListGetterType,
+        "set": ListSetterType,
+        "delete": ListDeletterType,
+        "get-wildcard": ListWildcardGetterType,
+        "set-wildcard": ListWildcardSetterType,
+        "delete-wildcard": ListWildcardDeletterType,
+    }
+}
+
+OBJECT_TYPE_CHECKERS = {
+    "object": is_object_checker,
+    "list": is_list_checker,
+    "dict": is_dict_checker
+}
+
+def build_composite_type(data):    
+    micro_ops = OrderedDict({})
+
+    python_type_name = data.python_type
+    opcode_type_factory = OPCODE_TYPE_FACTORIES[python_type_name]
+    python_object_type_checker = OBJECT_TYPE_CHECKERS[python_type_name]
+
+    for property in data.properties:
+        if hasattr(property, "name"):
+            tag = ( property.name, property.opcode )
+        else:
+            tag = ( property.opcode, )
+        micro_ops[tag] = opcode_type_factory[property.opcode](property)
+
+    return CompositeType(micro_ops, python_object_type_checker)
+
 TYPES = {
     "Any": lambda data: AnyType(),
     "Object": build_object_type,
     "List": build_list_type,
+    "Composite": build_composite_type,
     "Function": build_closed_function_type,
     "OneOf": build_one_of_type,
     "Integer": lambda data: IntegerType(),

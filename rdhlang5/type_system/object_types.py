@@ -658,13 +658,6 @@ class ObjectWildcardDeletterType(ObjectMicroOpType):
         return ObjectWildcardDeletter(target_manager, self.key_error)
 
     def replace_inferred_type(self, other_micro_op_type):
-        if not isinstance(other_micro_op_type, ObjectWildcardDeletter):
-            if isinstance(self.value_type, InferredType):
-                raise InvalidInferredType()
-            return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type)
-        if new_type is not self.value_type:
-            return ObjectWildcardDeletter(new_type, key_error=self.key_error, type_error=self.type_error)
         return self
 
     def can_be_derived_from(self, other_micro_op_type):
