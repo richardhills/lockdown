@@ -275,7 +275,7 @@ class ObjectGetterType(ObjectMicroOpType):
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, ObjectGetterType):
             if isinstance(self.value_type, InferredType):
-                raise InvalidInferredType()
+                raise InvalidInferredType(self.key)
             return self
         new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type)
         if new_type is not self.value_type:

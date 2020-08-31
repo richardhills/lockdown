@@ -9,4 +9,5 @@
 3. Remove automatic reification, and instead has some default substitute for var that gives good, sensible object values that can be reified downt to from broad object intantiations
 
 4. Decide how PreparationError should be propagated - really have to find a way to generate good, sensible preparation error messages from nested functions that aren't about the fact that the PreparationError isn't handled - no one cares.
- 
+
+5. Drop the built in .methods on list and object types. These don't fit with structural typing.

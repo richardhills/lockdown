@@ -76,8 +76,8 @@ WS
    ;
 
 function
-   : 'function' SYMBOL? '(' argumentDestructurings? ')' '{' codeBlock '}'
-   | 'function' SYMBOL? '(|' expression '|)' '{' codeBlock '}'
+   : 'function' SYMBOL? '(' argumentDestructurings? ')' ('=>' return_type=expression)? '{' codeBlock '}'
+   | 'function' SYMBOL? '(|' raw_argument=expression '|)' ('=>' return_type=expression)? '{' codeBlock '}'
    ;
 
 argumentDestructurings
@@ -124,7 +124,7 @@ expression
    | expression 'is' expression # is
    | SYMBOL					# immediateDereference
    | expression '.' SYMBOL  # staticDereference
-   | expression '[' expression ']' # dynamicDereference
+   | expression '[' expression ']' safe='?'? # dynamicDereference
    | expression '*' expression # multiplication
    | expression '/' expression # division
    | expression '+' expression # addition
@@ -162,6 +162,7 @@ objectTemplate
 
 objectPropertyPair
    : SYMBOL ':' expression
+   | NUMBER ':' expression
    | '[' expression ']' ':' expression
    ;
 
@@ -186,7 +187,7 @@ listType
    ;
 
 dictionaryType
-   : 'Dictionary' '<' expression ',' expression '>'
+   : 'Dictionary' '<' expression ':' expression '>'
    ;
 
 functionType

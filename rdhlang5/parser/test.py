@@ -789,14 +789,18 @@ class TestEuler(TestCase):
     def test_14(self):
         code = parse("""
             function() {
-                Dictionary<int, int> cachedResults = { [ 1 ]: 1 };
+                Dictionary<int : int> cachedResults = { 1: 1 };
 
-                Function<int => int> testNumber = function(int number) {
-                    int cachedResult = get(cachedResults, number);
+                Function<int => int> testNumber = function(|int|) => int {
+                    var number = argument;
+                    var cachedResult = cachedResults[number]?;
+
                     if(cachedResult is int) {
                         return cachedResult;
                     };
-                    return cachedResults[number] = testNumber(number % 2 ? number / 2 : number * 3 + 1) + 1;
+                    var calcedResult = testNumber(number % 2 ? number / 2 : number * 3 + 1) + 1;
+                    cachedResults[number] = calcedResult;
+                    return calcedResult;
                 };
 
                 List<int> results = for(var test from range(1, 1000000)) { continue testNumber(test); };

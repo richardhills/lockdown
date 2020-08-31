@@ -350,13 +350,14 @@ def is_op(expression, type, **kwargs):
         "type": type
     }, **kwargs), debug_reason="code")
 
-def dereference_op(of, reference, **kwargs):
+def dereference_op(of, reference, safe, **kwargs):
     check_is_opcode(of)
     check_is_opcode(reference)
     return RDHObject(spread_dict({
         "opcode": "dereference",
         "of": of,
-        "reference": reference
+        "reference": reference,
+        "safe": safe
     }, **kwargs), debug_reason="code")
 
 def dynamic_dereference_op(reference, **kwargs):
@@ -551,12 +552,12 @@ def dereference(*vars, **kwargs):
     for var in vars:
         if isinstance(var, basestring):
             for v in var.split("."):
-                result = dereference_op(result, literal_op(munge_ints(v)), **kwargs)
+                result = dereference_op(result, literal_op(munge_ints(v)), True, **kwargs)
         elif isinstance(var, int):
-            result = dereference_op(result, literal_op(var), **kwargs)
+            result = dereference_op(result, literal_op(var), True, **kwargs)
         elif isinstance(var, list):
             for v in var:
-                result = dereference_op(result, literal_op(munge_ints(v)), **kwargs)
+                result = dereference_op(result, literal_op(munge_ints(v)), True, **kwargs)
         else:
             raise FatalError(var)
 
