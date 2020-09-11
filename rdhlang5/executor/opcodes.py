@@ -1297,6 +1297,7 @@ class LoopOp(Opcode):
         continue_value_type = other_break_types.pop("continue", MISSING)
 
         if continue_value_type is not MISSING:
+            continue_value_type = flatten_out_types(continue_value_type)
             break_types.add("value", RDHListType([], continue_value_type))
 
         break_types.merge(other_break_types)

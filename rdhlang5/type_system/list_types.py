@@ -7,7 +7,7 @@ from rdhlang5.type_system.builtins import BuiltInFunctionGetterType, \
 from rdhlang5.type_system.composites import InferredType, bind_type_to_manager, \
     unbind_type_to_manager, CompositeType, Composite
 from rdhlang5.type_system.core_types import merge_types, Const, NoValueType, \
-    IntegerType
+    IntegerType, Type
 from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict, \
     raise_if_safe, InvalidAssignmentType, InvalidDereferenceKey, \
     InvalidDereferenceType, InvalidAssignmentKey, MissingMicroOp, \
@@ -67,10 +67,10 @@ class ListMicroOpType(MicroOpType):
 
 
 class ListWildcardGetterType(ListMicroOpType):
-    def __init__(self, type, key_error, type_error):
+    def __init__(self, value_type, key_error, type_error):
         if isinstance(type, NoValueType):
             raise FatalError()
-        self.value_type = type
+        self.value_type = value_type
         self.key_error = key_error
         self.type_error = type_error
 
@@ -908,6 +908,9 @@ def RDHListType(element_types, wildcard_type, allow_push=True, allow_wildcard_in
         if isinstance(wildcard_type, Const):
             const = True
             wildcard_type = wildcard_type.wrapped
+
+        if not isinstance(wildcard_type, Type):
+            raise ValueError()
 
         micro_ops[("get-wildcard",)] = ListWildcardGetterType(wildcard_type, True, False)
         if not const:

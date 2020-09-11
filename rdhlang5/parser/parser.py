@@ -79,7 +79,7 @@ class RDHLang5Visitor(langVisitor):
         if ctx.return_type:
             return_type = self.visit(ctx.return_type)
             function_builder.set_breaks_types({
-                "return": list_template_op([dict_template_op({ "out": return_type })])
+                "value": list_template_op([dict_template_op({ "out": return_type })])
             })
 
         function_name = None
@@ -309,8 +309,8 @@ class RDHLang5Visitor(langVisitor):
         of, reference = ctx.expression()
         of = self.visit(of)
         reference = self.visit(reference)
-        safe = bool(ctx.safe)
-        return dereference_op(of, reference, safe)
+        unsafe = bool(ctx.unsafe)
+        return dereference_op(of, reference, not unsafe)
 
     def visitMultiplication(self, ctx):
         lvalue, rvalue = ctx.expression()

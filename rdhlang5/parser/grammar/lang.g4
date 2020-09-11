@@ -124,7 +124,7 @@ expression
    | expression 'is' expression # is
    | SYMBOL					# immediateDereference
    | expression '.' SYMBOL  # staticDereference
-   | expression '[' expression ']' safe='?'? # dynamicDereference
+   | expression '[' expression ']' unsafe='?'? # dynamicDereference
    | expression '*' expression # multiplication
    | expression '/' expression # division
    | expression '+' expression # addition

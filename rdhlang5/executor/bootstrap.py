@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+import json
+from json.encoder import JSONEncoder
 from time import time
 
 from rdhlang5.executor.flow_control import FrameManager
@@ -14,6 +16,8 @@ from rdhlang5.executor.raw_code_factories import inferred_type, function_lit, \
     assignment_op, dict_template_op, addition_op, reset_op, shift_op, \
     transform
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE
+from rdhlang5.type_system.dict_types import RDHDict
+from rdhlang5.type_system.list_types import RDHList
 from rdhlang5.type_system.managers import get_manager
 from rdhlang5.type_system.object_types import RDHObject
 from rdhlang5.utils import NO_VALUE
@@ -43,7 +47,8 @@ def get_default_global_context():
                     prepared_function(
                         transform_op("return", "value",
                             loop_op(
-                                condition_op(binary_integer_op("lt", dereference("outer.local"), dereference("outer.argument.1")),
+                                condition_op(
+                                    binary_integer_op("lt", dereference("outer.local"), dereference("outer.argument.1")),
                                     comma_op(
                                         shift_op(dereference("outer.local"), no_value_type()),
                                         assignment_op(dereference("outer"), literal_op("local"), addition_op(dereference("outer.local"), literal_op(1)))
@@ -146,6 +151,16 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False,
     frame_manager = FrameManager()
 
     with frame_manager.capture() as capture_result:
+        class RDHObjectEncoder(JSONEncoder):
+            def default(self, o):
+                if isinstance(o, RDHObject):
+                    return o.__dict__
+                if isinstance(o, RDHList):
+                    return list(o)
+                if isinstance(o, RDHDict):
+                    return dict(o.wrapped)
+                return None
+        #print RDHObjectEncoder().encode(data)
         open_function = prepare(
             data,
             context,

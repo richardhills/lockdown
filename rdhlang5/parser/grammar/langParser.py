@@ -2233,7 +2233,7 @@ class langParser ( Parser ):
 
         def __init__(self, parser, ctx): # actually a langParser.ExpressionContext)
             super(langParser.DynamicDereferenceContext, self).__init__(parser)
-            self.safe = None # Token
+            self.unsafe = None # Token
             self.copyFrom(ctx)
 
         def expression(self, i=None):
@@ -3242,7 +3242,7 @@ class langParser ( Parser ):
                         la_ = self._interp.adaptivePredict(self._input,28,self._ctx)
                         if la_ == 1:
                             self.state = 345
-                            localctx.safe = self.match(langParser.T__21)
+                            localctx.unsafe = self.match(langParser.T__21)
 
 
                         pass
