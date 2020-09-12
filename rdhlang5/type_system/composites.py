@@ -21,6 +21,29 @@ class InferredType(Type):
 
 composite_type_is_copyable_cache = threading.local()
 
+class IsNotCopyable(object):
+    def __bool__(self):
+        return False
+    def __nonzero__(self):
+        return False
+
+class IsNotCompositeType(IsNotCopyable):
+    pass
+
+class ConflictingMicroOpTypes(IsNotCopyable):
+    pass
+
+class NoInitialData(IsNotCopyable):
+    pass
+
+class RuntimeInitialDataConflict(IsNotCopyable):
+    def __init__(self, binding_micro_op, initial_data):
+        self.binding_micro_op = binding_micro_op
+        self.initial_data = initial_data
+
+    def __repr__(self):
+        return "RuntimeInitialDataConflict<{}, {}>".format(self.binding_micro_op, self.initial_data)
+
 class CompositeType(Type):
     def __init__(self, micro_op_types, python_object_type_checker, initial_data=None, is_revconst=False, name=None):
         if not isinstance(micro_op_types, dict):
@@ -103,43 +126,35 @@ class CompositeType(Type):
                     pass
                 if first_check is True:
                     first_check = first.check_for_new_micro_op_type_conflict(second, self.micro_op_types)
-                    return True
+                    return first_check
         return False
 
     def internal_is_copyable_from(self, other):
         if not isinstance(other, CompositeType):
-            return False
+            return IsNotCompositeType()
 
         if not other.is_revconst:
             for ours in self.micro_op_types.values():
                 for theirs in other.micro_op_types.values():
                     if ours.check_for_new_micro_op_type_conflict(theirs, self.micro_op_types):
                         ours.check_for_new_micro_op_type_conflict(theirs, self.micro_op_types)
-                        return False
+                        return ConflictingMicroOpTypes()
 
         for our_tag, our_micro_op in self.micro_op_types.items():
             their_micro_op = other.micro_op_types.get(our_tag, None)
 
-            if True:
-                only_safe_with_initial_data = False
-                if their_micro_op is None:
-                    only_safe_with_initial_data = True
-                if their_micro_op and not our_micro_op.can_be_derived_from(their_micro_op):
-                    only_safe_with_initial_data = True
+            only_safe_with_initial_data = False
+            if their_micro_op is None:
+                only_safe_with_initial_data = True
+            if their_micro_op and not our_micro_op.can_be_derived_from(their_micro_op):
+                only_safe_with_initial_data = True
 
-                if only_safe_with_initial_data:
-                    if other.initial_data is None:
-                        return False
-                    if our_micro_op.check_for_runtime_data_conflict(other.initial_data):
-                        our_micro_op.check_for_runtime_data_conflict(other.initial_data)
-                        return False
-            else:
-                no_initial_data_to_make_safe = not other.initial_data or our_micro_op.check_for_runtime_data_conflict(other.initial_data)
-                if no_initial_data_to_make_safe:
-                    if their_micro_op is None:
-                        return False
-                    if not our_micro_op.can_be_derived_from(their_micro_op):
-                        return False
+            if only_safe_with_initial_data:
+                if other.initial_data is None:
+                    return NoInitialData()
+                if our_micro_op.check_for_runtime_data_conflict(other.initial_data):
+                    our_micro_op.check_for_runtime_data_conflict(other.initial_data)
+                    return RuntimeInitialDataConflict(our_micro_op, other.initial_data)
 
         return True
 
@@ -153,7 +168,7 @@ class CompositeType(Type):
             return other.is_copyable_to(self)
 
         if not isinstance(other, CompositeType):
-            return False
+            return IsNotCompositeType()
 
         if self.micro_op_types is other.micro_op_types:
             return True

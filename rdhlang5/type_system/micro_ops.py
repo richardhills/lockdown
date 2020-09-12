@@ -47,6 +47,8 @@ class MicroOpType(object):
 
     def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
         for other_micro_op_type in micro_op_types.values():
+            if not other_micro_op_type:
+                pass
             first_check = other_micro_op_type.check_for_new_micro_op_type_conflict(self, micro_op_types)
             if is_debug():
                 second_check = self.check_for_new_micro_op_type_conflict(other_micro_op_type, micro_op_types)

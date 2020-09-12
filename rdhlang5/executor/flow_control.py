@@ -276,6 +276,8 @@ class Frame(object):
             if break_types is MISSING:
                 raise FatalError("Can not unwind {} with type {}, target {} allowed {}".format(exc_value.mode, type_of_value, self.target, break_types))
 
+            failures = []
+
             for allowed_break_type in break_types:
                 allowed_out = allowed_break_type["out"]
                 allowed_in = allowed_break_type.get("in", None)
@@ -285,10 +287,13 @@ class Frame(object):
                     exc_value.restart_type is not None and exc_value.restart_type.is_copyable_from(allowed_in)
                 )
 
+                if not out_is_compatible:
+                    failures.append(out_is_compatible)
+
                 if out_is_compatible and in_is_compatible:
                     break
             else:
-                raise FatalError("Can not unwind {} with type {}, target {}, allowed {}".format(exc_value.mode, type_of_value, self.target, break_types))
+                raise FatalError("Can not unwind {} {} with type {}, target {}, allowed {}".format(failures, exc_value.mode, type_of_value, self.target, break_types))
 
         exc_type_allows_restart = exc_value and isinstance(exc_value, BreakException) and exc_value.restart_type is not None
 
@@ -299,7 +304,7 @@ class Frame(object):
             self.manager.pop_frame()
         else:
             if is_debug() and exc_type_allows_restart:
-                if self.manager.mode not in ("shift"):
+                if self.manager.mode not in ("shift",):
                     raise FatalError()
 
         self.manager.index -= 1

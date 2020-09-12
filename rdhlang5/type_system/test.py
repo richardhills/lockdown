@@ -16,7 +16,7 @@ from rdhlang5.type_system.object_types import ObjectGetterType, ObjectSetterType
 from rdhlang5.utils import set_debug
 
 
-class TestObject(object):
+class TestObject(RDHObject):
     def __init__(self, initial_data):
         for key, value in initial_data.items():
             self.__dict__[key] = value

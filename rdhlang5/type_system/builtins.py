@@ -26,7 +26,7 @@ class BuiltInFunctionGetterType(MicroOpType):
         return True
 
     def merge(self, other_micro_op_type):
-        pass
+        return self
 
     def unbind(self, source_type, key, target):
         pass

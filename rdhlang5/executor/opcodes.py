@@ -272,7 +272,7 @@ class ObjectTemplateOp(Opcode):
         micro_ops[("get", "get")] = BuiltInFunctionGetterType(ObjectGetFunctionType(micro_ops[("get-wildcard",)]))
 
         break_types.add(
-            "value", 
+            "value",
             CompositeType(
                 micro_ops,
                 is_object_checker,
@@ -503,25 +503,31 @@ class DereferenceOp(Opcode):
                     possible_references = None
                 for of_type in unwrap_types(of_types):
                     if possible_references is None:
-                        self.wildcard_micro_op = of_type.get_micro_op_type(("get-wildcard",))
-                        if not self.wildcard_micro_op or self.wildcard_micro_op.key_error or self.wildcard_micro_op.type_error:
+                        if not isinstance(of_type, CompositeType):
                             invalid_unknown_dereference = True
+                        else:
+                            self.wildcard_micro_op = of_type.get_micro_op_type(("get-wildcard",))
+                            if not self.wildcard_micro_op or self.wildcard_micro_op.key_error or self.wildcard_micro_op.type_error:
+                                invalid_unknown_dereference = True
                     else:
                         for reference in possible_references:
-                            micro_op = of_type.get_micro_op_type(("get", reference))
-                            if micro_op:
-                                self.micro_ops[reference] = True, micro_op
-                            if micro_op is None:
-                                micro_op = of_type.get_micro_op_type(("get-wildcard",))
-                                if micro_op:
-                                    self.micro_ops[reference] = False, micro_op
-
-                            if micro_op:
-                                break_types.add("value", micro_op.value_type)
-                                if micro_op.type_error or micro_op.key_error:
-                                    invalid_dereferences.add(reference)
-                            else:
+                            if not isinstance(of_type, CompositeType):
                                 invalid_dereferences.add(reference)
+                            else:
+                                micro_op = of_type.get_micro_op_type(("get", reference))
+                                if micro_op:
+                                    self.micro_ops[reference] = True, micro_op
+                                if micro_op is None:
+                                    micro_op = of_type.get_micro_op_type(("get-wildcard",))
+                                    if micro_op:
+                                        self.micro_ops[reference] = False, micro_op
+
+                                if micro_op:
+                                    break_types.add("value", micro_op.value_type)
+                                    if micro_op.type_error or micro_op.key_error:
+                                        invalid_dereferences.add(reference)
+                                else:
+                                    invalid_dereferences.add(reference)
 
         self.invalid_dereference_error = len(list(invalid_dereferences)) > 0 or invalid_unknown_dereference
 
@@ -557,7 +563,7 @@ class DereferenceOp(Opcode):
                     direct, micro_op_type = True, manager.get_micro_op_type(("get", reference))
 
                 if not micro_op_type:
-                    direct, micro_op_type = False, manager.get_micro_op_type(("get-wildcard", ))
+                    direct, micro_op_type = False, manager.get_micro_op_type(("get-wildcard",))
 
                 if not micro_op_type:                    
                     return frame.unwind(exception_break_mode, self.INVALID_DEREFERENCE(reference=reference), None)
@@ -573,17 +579,16 @@ class DereferenceOp(Opcode):
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         micro_op_to_compile = None
-        takes_key = None
+        direct = None
 
-        if len(self.direct_micro_ops) == 0:
-            if len(self.wildcard_micro_ops) == 0:
-                pass
-            elif len(self.wildcard_micro_ops) == 1:
-                micro_op_to_compile = self.wildcard_micro_ops.values()[0]
-                takes_key = True
-        elif len(self.direct_micro_ops) == 1:
-            micro_op_to_compile = self.direct_micro_ops.values()[0]
-            takes_key = False
+        if self.wildcard_micro_op:
+            micro_op_to_compile = self.wildcard_micro_op
+            direct = False
+        if not micro_op_to_compile:
+            direct_micro_ops = [m for d, m in self.micro_ops.values() if d]
+            if len(direct_micro_ops) == 1:
+                micro_op_to_compile = direct_micro_ops[0]
+                direct = True
 
         need_interpreted_version = (
             micro_op_to_compile is None
@@ -595,9 +600,9 @@ class DereferenceOp(Opcode):
         if need_interpreted_version:
             return super(DereferenceOp, self).to_ast(context_name, dependency_builder)
 
-        if takes_key:
+        if not direct:
             reference_ast = self.reference.to_ast(context_name, dependency_builder)
-            args = (reference_ast)
+            args = (reference_ast,)
         else:
             args = ()
 
@@ -701,7 +706,7 @@ class AssignmentOp(Opcode):
                                 if micro_op.type_error or micro_op.key_error:
                                     self.invalid_assignment_error = True
 
-                                break_types.add("value", micro_op.value_type)
+                                break_types.add("value", NoValueType())
                             else:
                                 self.invalid_lvalue_error = True
         else:
@@ -744,15 +749,16 @@ class AssignmentOp(Opcode):
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         micro_op_to_compile = None
-        takes_key = None
+        direct = None
 
-        for direct, micro_op in self.micro_ops.values():
-            if direct:
-                micro_op_to_compile = micro_op
-                takes_key = not direct
-
-        if isinstance(micro_op_to_compile, tuple):
-            pass
+        if self.wildcard_micro_op:
+            micro_op_to_compile = self.wildcard_micro_op
+            direct = False
+        if not micro_op_to_compile:
+            direct_micro_ops = [m for d, m in self.micro_ops.values() if d]
+            if len(direct_micro_ops) == 1:
+                micro_op_to_compile = direct_micro_ops[0]
+                direct = True
 
         need_interpreted_version = (
             micro_op_to_compile is None
@@ -768,7 +774,7 @@ class AssignmentOp(Opcode):
 
         rvalue_ast = self.rvalue.to_ast(context_name, dependency_builder)
 
-        if takes_key:
+        if not direct:
             reference_ast = self.reference.to_ast(context_name, dependency_builder)
             args = (reference_ast, rvalue_ast)
         else:

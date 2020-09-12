@@ -97,7 +97,7 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
         "types": RDHObject({
             "outer": outer_type,
             "argument": argument_type,
-            "local": local_type
+#            "local": local_type
         }, debug_reason="local-prepare-context")
     },
         bind=READONLY_DEFAULT_OBJECT_TYPE,
@@ -105,10 +105,11 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
         debug_reason="local-prepare-context"
     )
 
+# optimization to avoid generating context_type lazily
     get_manager(context)._context_type = RDHObjectType({
         "outer": outer_type,
         "argument": argument_type,
-        "local": local_type
+#        "local": local_type
     }, wildcard_value_type=AnyType(), name="local-prepare-context-type")
 
     local_initializer = enrich_opcode(
