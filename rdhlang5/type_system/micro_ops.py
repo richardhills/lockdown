@@ -93,7 +93,7 @@ def merge_composite_types(types, initial_data, name=None):
     from rdhlang5.type_system.composites import CompositeType
 
     for t in types:
-        if not isinstance(t, Type):
+        if not isinstance(t, CompositeType):
             raise FatalError()
 
     if len(types) == 1:

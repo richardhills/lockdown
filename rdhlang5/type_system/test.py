@@ -50,8 +50,7 @@ class TestBasicObject(TestCase):
     def test_add_micro_op_object(self):
         class Foo(TestObject):
             pass
-        obj = Foo({})
-        obj.foo = "hello"
+        obj = Foo({ "foo": "hello" })
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", StringType(), False, False)
         }, is_object_checker))

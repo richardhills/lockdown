@@ -38,7 +38,7 @@ from rdhlang5.utils import MISSING, is_debug, bind_runtime_contexts, raise_from,
     spread_dict
 
 
-def prepare(data, outer_context, flow_manager, immediate_context=None):
+def prepare(data, outer_context, frame_manager, immediate_context=None):
     if not isinstance(data, RDHObject):
         raise FatalError()
     get_manager(data).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
@@ -57,7 +57,7 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
             data.static,
             combine(type_conditional_converter, UnboundDereferenceBinder(context))
         ),
-        context, flow_manager
+        context, frame_manager
     )
 
     get_manager(static).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
@@ -106,17 +106,28 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
     )
 
 # optimization to avoid generating context_type lazily
-    get_manager(context)._context_type = RDHObjectType({
-        "outer": outer_type,
-        "argument": argument_type,
-#        "local": local_type
-    }, wildcard_value_type=AnyType(), name="local-prepare-context-type")
+#    get_manager(context)._context_type = RDHObjectType({
+#        "outer": outer_type,
+#        "argument": argument_type,
+##        "local": local_type
+#    }, wildcard_value_type=AnyType(), name="local-prepare-context-type")
 
     local_initializer = enrich_opcode(
         data.local_initializer,
         combine(type_conditional_converter, UnboundDereferenceBinder(context))
     )
-    actual_local_type, local_other_break_types = get_expression_break_types(local_initializer, context, flow_manager)
+    actual_local_type, local_other_break_types = get_expression_break_types(
+        local_initializer,
+        context,
+        frame_manager,
+        immediate_context={
+            "context_type": RDHObjectType({
+                "outer": outer_type,
+                "argument": argument_type,
+                "local": local_type
+            }, wildcard_value_type=AnyType(), name="local-prepare-context-type")
+        }
+    )
 
     get_manager(context).remove_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
 
@@ -170,7 +181,7 @@ def prepare(data, outer_context, flow_manager, immediate_context=None):
         combine(type_conditional_converter, UnboundDereferenceBinder(context))
     )
 
-    code_break_types = code.get_break_types(context, flow_manager)
+    code_break_types = code.get_break_types(context, frame_manager)
 
     get_manager(context).remove_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
 
@@ -357,7 +368,7 @@ class RDHFunction(object):
     def get_type(self):
         raise NotImplementedError(self)
 
-    def invoke(self, argument, flow_manager):
+    def invoke(self, argument, frame_manager):
         raise NotImplementedError()
 
 

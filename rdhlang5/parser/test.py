@@ -797,7 +797,7 @@ class TestEuler(TestCase):
                     if(cachedResult is int) {
                         return argument;
                     };
-                    var calcedResult = testNumber(number % 2 ? number / 2 : number * 3 + 1) + 1;
+                    int calcedResult = testNumber(number % 2 ? number / 2 : number * 3 + 1) + 1;
                     cachedResults[number] = calcedResult;
                     return calcedResult;
                 };

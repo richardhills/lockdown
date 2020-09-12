@@ -683,6 +683,8 @@ class RDHDict(Composite, DictMixin, object):
             raise KeyError()
 
     def __setitem__(self, key, value, raw=False):
+        if key == "out":
+            pass
         if self is self.wrapped:
             raise FatalError()
         if raw:

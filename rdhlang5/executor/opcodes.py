@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 from _collections import defaultdict
 from abc import abstractmethod
 import ast
+import collections
 from pydoc import visiblename
 
 from traitlets.traitlets import HasDescriptors
@@ -31,6 +32,7 @@ from rdhlang5.type_system.list_types import RDHList, ListGetterType, \
     ListWildcardDeletterType, ListInsertType, ListWildcardInsertType, \
     is_list_checker, RDHListType
 from rdhlang5.type_system.managers import get_type_of_value, get_manager
+from rdhlang5.type_system.micro_ops import merge_composite_types
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType, \
     ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
     ObjectWildcardSetterType, is_object_checker
@@ -85,7 +87,7 @@ def flatten_out_types(break_types):
         if not isinstance(break_types, list):
             raise FatalError()
         for b in break_types:
-            if not isinstance(b, dict):
+            if not isinstance(b, (dict, RDHDict)):
                 raise FatalError()
             if "out" not in b:
                 raise FatalError()
@@ -144,6 +146,9 @@ class Opcode(object):
             "{return_value_jump}({context_name}, _frame_manager)",
             context_name, dependency_builder, return_value_jump=self.return_value_jump
         )
+
+    def __repr__(self):
+        return self.__str__()
 
     def to_code(self):
         return str(type(self))
@@ -216,13 +221,13 @@ class ObjectTemplateOp(Opcode):
         all_value_types = []
 
         for key_opcode, value_opcode in self.opcodes.items():
-            key_type, other_key_break_types = get_expression_break_types(key_opcode, context, frame_manager)
+            key_type, other_key_break_types = get_expression_break_types(key_opcode, context, frame_manager, immediate_context=immediate_context)
             break_types.merge(other_key_break_types)
 
-            value_type, other_value_break_types = get_expression_break_types(value_opcode, context, frame_manager)
+            value_type, other_value_break_types = get_expression_break_types(value_opcode, context, frame_manager, immediate_context=immediate_context)
             break_types.merge(other_value_break_types)
 
-            if key_type is MISSING or value_type is MISSING:
+            if key_type is MISSING:
                 continue
 
             key_type = flatten_out_types(key_type)
@@ -236,6 +241,12 @@ class ObjectTemplateOp(Opcode):
                 pass
 
             if key is None:
+                continue
+
+            if key == "testNumber":
+                pass
+
+            if value_type is MISSING:
                 continue
 
             value_type = flatten_out_types(value_type)
@@ -451,7 +462,12 @@ def get_context_type(context):
 class ContextOp(Opcode):
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
-        break_types.add("value", get_context_type(context))
+        context_type = get_context_type(context)
+
+        if immediate_context:
+            context_type = immediate_context.get("context_type", context_type)
+
+        break_types.add("value", context_type)
         return break_types.build()
 
     def jump(self, context, frame_manager, immediate_context=None):
@@ -1431,7 +1447,9 @@ class PrepareOp(Opcode):
             from rdhlang5.executor.function import prepare
 
             immediate_context = immediate_context or {}
-            immediate_context["suggested_outer_type"] = get_context_type(context)
+            context_type = get_context_type(context)
+            context_type = immediate_context.get("context_type", context_type)
+            immediate_context["suggested_outer_type"] = context_type
 
             function = prepare(function_data, context, frame_manager, immediate_context)
 
@@ -1457,7 +1475,7 @@ class CloseOp(Opcode):
             function_type = flatten_out_types(function_type)
         break_types.merge(function_break_types)
 
-        outer_context_type, outer_context_break_types = get_expression_break_types(self.outer_context, context, frame_manager)
+        outer_context_type, outer_context_break_types = get_expression_break_types(self.outer_context, context, frame_manager, immediate_context=immediate_context)
         outer_context_type = flatten_out_types(outer_context_type)
         break_types.merge(outer_context_break_types)
 

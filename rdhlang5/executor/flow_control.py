@@ -46,8 +46,6 @@ class BreakTypesFactory(object):
 
     def merge(self, break_types):
         for mode, break_types in break_types.items():
-            if isinstance(break_types, InternalMarker):
-                pass
             if len(break_types) > 0:
                 self.result[mode].extend(break_types)
 
