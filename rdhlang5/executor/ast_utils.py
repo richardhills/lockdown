@@ -103,8 +103,8 @@ def compile_ast_function_def(function_creator_ast, open_function_id, dependencie
 #    print ast.dump(function_creator_ast)
     ast.fix_missing_locations(function_creator_ast)
 
-    print "--- {} ---".format(open_function_id)
-    print to_source(function_creator_ast)
+#    print "--- {} ---".format(open_function_id)
+#    print to_source(function_creator_ast)
 
     function_creator = compile(function_creator_ast, "<string>", "exec")
 

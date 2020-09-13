@@ -45,16 +45,14 @@ def get_default_global_context():
                     list_type([ int_type(), int_type() ], None),
                     infer_all(), int_type(), dereference("argument.0"),
                     prepared_function(
-                        transform_op("return", "value",
-                            loop_op(
-                                condition_op(
-                                    binary_integer_op("lt", dereference("outer.local"), dereference("outer.argument.1")),
-                                    comma_op(
-                                        shift_op(dereference("outer.local"), no_value_type()),
-                                        assignment_op(dereference("outer"), literal_op("local"), addition_op(dereference("outer.local"), literal_op(1)))
-                                    ),
-                                    transform_op("return")
-                                )
+                        loop_op(
+                            condition_op(
+                                binary_integer_op("lt", dereference("outer.local"), dereference("outer.argument.1")),
+                                comma_op(
+                                    shift_op(dereference("outer.local"), no_value_type()),
+                                    assignment_op(dereference("outer"), literal_op("local"), addition_op(dereference("outer.local"), literal_op(1)))
+                                ),
+                                transform_op("end")
                             )
                         )
                     )
@@ -68,7 +66,7 @@ def get_default_global_context():
                             "in": no_value_type(),
                             "out": int_type()
                         })]),
-                        "value": list_template_op([ dict_template_op({
+                        "end": list_template_op([ dict_template_op({
                             "out": no_value_type()
                         })]),
                     }),
@@ -80,7 +78,7 @@ def get_default_global_context():
                     }),
                     comma_op(
                         transform_op(
-                            "break", "value",
+                            "end", "value",
                             loop_op(
                                 invoke_op(
                                     prepared_function(
@@ -89,7 +87,6 @@ def get_default_global_context():
                                         inferred_type(),
                                         transform(
                                             ("yield", "value"),
-                                            ("value", "break"),
                                             reset_op(dereference("outer.local.callback"), nop())
                                         ),
                                         comma_op(

@@ -608,7 +608,7 @@ class ObjectSetterType(ObjectMicroOpType):
 
     def to_ast(self, dependency_builder, target, new_value):
         if bind_runtime_contexts() or self.type_error or self.key_error:
-            return super(ObjectGetterType, self).to_ast(dependency_builder, target, new_value)
+            return super(ObjectSetterType, self).to_ast(dependency_builder, target, new_value)
         return compile_statement(
             "{target}.__dict__[\"{key}\"] = {rvalue}",
             None, dependency_builder,

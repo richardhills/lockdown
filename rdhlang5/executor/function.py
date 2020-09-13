@@ -83,9 +83,12 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
 
     try:
         argument_type = argument_type.replace_inferred_types(suggested_argument_type)
+    except InvalidInferredType:
+        raise PreparationException("Invalid argument inferred types")
+    try:
         outer_type = outer_type.replace_inferred_types(suggested_outer_type)
     except InvalidInferredType:
-        raise PreparationException("Invalid argument or outer inferred types")
+        raise PreparationException("Invalid outer inferred types")
 
     argument_type = argument_type.reify_revconst_types()
     outer_type = outer_type.reify_revconst_types()
@@ -106,11 +109,11 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
     )
 
 # optimization to avoid generating context_type lazily
-#    get_manager(context)._context_type = RDHObjectType({
-#        "outer": outer_type,
-#        "argument": argument_type,
-##        "local": local_type
-#    }, wildcard_value_type=AnyType(), name="local-prepare-context-type")
+    get_manager(context)._context_type = RDHObjectType({
+        "outer": outer_type,
+        "argument": argument_type,
+#        "local": local_type
+    }, wildcard_value_type=AnyType(), name="local-prepare-context-type")
 
     local_initializer = enrich_opcode(
         data.local_initializer,
@@ -119,20 +122,16 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
     actual_local_type, local_other_break_types = get_expression_break_types(
         local_initializer,
         context,
-        frame_manager,
-        immediate_context={
-            "context_type": RDHObjectType({
-                "outer": outer_type,
-                "argument": argument_type,
-                "local": local_type
-            }, wildcard_value_type=AnyType(), name="local-prepare-context-type")
-        }
+        frame_manager
     )
 
     get_manager(context).remove_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
 
     if actual_local_type is MISSING:
         raise PreparationException("Actual local type missing")
+
+    if len(actual_local_type) > 1:
+        pass
 
     actual_local_type = flatten_out_types(actual_local_type)
 
@@ -335,6 +334,8 @@ class UnboundDereferenceBinder(object):
 
 
 def type_conditional_converter(expression):
+    if not hasattr(expression, "opcode"):
+        pass
     is_conditional = expression.opcode == "conditional"
     if not is_conditional:
         return expression

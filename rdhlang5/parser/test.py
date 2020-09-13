@@ -792,6 +792,10 @@ class TestEuler(TestCase):
                 Dictionary<int : int> cachedResults = { 1: 1 };
 
                 Function<int => int> testNumber = function(int number) => int {
+                    return 0;
+                };
+
+                testNumber = function(int number) => int {
                     var cachedResult = cachedResults[number]?;
 
                     if(cachedResult is int) {

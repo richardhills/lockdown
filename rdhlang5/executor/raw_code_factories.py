@@ -125,6 +125,7 @@ def function_lit(*args, **kwargs):
     check_is_opcode(local_initializer)
     check_is_opcode(argument_type)
     check_is_opcode(local_type)
+    check_is_opcode(code)
     if not isinstance(break_types, dict):
         raise FatalError()
 
@@ -220,12 +221,12 @@ def comma_op(*opcodes):
     }, debug_reason="code")
 
 
-def loop_op(opcode):
+def loop_op(opcode, **kwargs):
     check_is_opcode(opcode)
-    return RDHObject({
+    return RDHObject(spread_dict({
         "opcode": "loop",
         "code": opcode
-    }, debug_reason="code")
+    }, **kwargs), debug_reason="code")
 
 def transform(*args, **kwargs):
     transforms = args[:-1]

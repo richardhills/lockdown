@@ -487,40 +487,37 @@ class RDHLang5Visitor(langVisitor):
         return transform_op(
             "break", "value",
             invoke_op(local_function(
-                transform(
-                    ("yield", "value"),
-                    ("value", "break"),
-                    reset_op(
-                        invoke_op(
-                            generator_expression,
-                            **get_debug_info(ctx)
-                        ), **get_debug_info(ctx)
-                    ),
-                ),
+                object_template_op({
+                    "callback": generator_expression
+                }),
                 loop_op(
-                    comma_op(
-                        invoke_op(
-                            prepare_function_lit(
-                                loop_code,
+                    invoke_op(local_function(
+                        transform(
+                            ("yield", "value"),
+                            ("value", "end"),
+                            reset_op(
+                                dereference("outer.local.callback", **get_debug_info(ctx)), nop(),
                                 **get_debug_info(ctx)
                             ),
-                            object_template_op({
-                                iterator_name: dereference("local.value")
-                            }, **get_debug_info(ctx))
+                            **get_debug_info(ctx)
                         ),
-                        assignment_op(
-                            context_op(), literal_op("local"),
-                            transform(
-                                ("yield", "value"),
-                                ("value", "break"),
-                                reset_op(
-                                    dereference("local.continuation", **get_debug_info(ctx)), nop(),
-                                    **get_debug_info(ctx)
-                                ),
+                        comma_op(
+                            assignment_op(
+                                dereference("outer.local"),
+                                literal_op("callback"),
+                                dereference("local.continuation"),
+                                **get_debug_info(ctx)
+                            ),
+                            invoke_op(
+                                prepare_function_lit(loop_code),
+                                object_template_op({
+                                    iterator_name: dereference("local.value")
+                                }, **get_debug_info(ctx)),
                                 **get_debug_info(ctx)
                             )
-                        )
-                    )
+                        ),
+                    ), **get_debug_info(ctx)),
+                    **get_debug_info(ctx)
                 ),
                 **get_debug_info(ctx)
             ))

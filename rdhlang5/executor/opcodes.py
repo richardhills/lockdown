@@ -147,9 +147,6 @@ class Opcode(object):
             context_name, dependency_builder, return_value_jump=self.return_value_jump
         )
 
-    def __repr__(self):
-        return self.__str__()
-
     def to_code(self):
         return str(type(self))
 
@@ -462,12 +459,7 @@ def get_context_type(context):
 class ContextOp(Opcode):
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
-        context_type = get_context_type(context)
-
-        if immediate_context:
-            context_type = immediate_context.get("context_type", context_type)
-
-        break_types.add("value", context_type)
+        break_types.add("value", get_context_type(context))
         return break_types.build()
 
     def jump(self, context, frame_manager, immediate_context=None):
@@ -729,11 +721,11 @@ class AssignmentOp(Opcode):
             self.invalid_assignment_error = self.invalid_rvalue_error = self.invalid_lvalue_error = True
 
         if self.invalid_assignment_error:
-            break_types.add("exception", self.INVALID_ASSIGNMENT.get_type())
+            break_types.add("exception", self.INVALID_ASSIGNMENT.get_type(), opcode=self)
         if self.invalid_rvalue_error:
-            break_types.add("exception", self.INVALID_RVALUE.get_type())
+            break_types.add("exception", self.INVALID_RVALUE.get_type(), opcode=self)
         if self.invalid_lvalue_error:
-            break_types.add("exception", self.INVALID_LVALUE.get_type())
+            break_types.add("exception", self.INVALID_LVALUE.get_type(), opcode=self)
 
         return break_types.build()
 
@@ -1317,9 +1309,13 @@ class LoopOp(Opcode):
         break_types = BreakTypesFactory(self)
         _, other_break_types = get_expression_break_types(self.code, context, frame_manager)
         continue_value_type = other_break_types.pop("continue", MISSING)
+        end_break = other_break_types.pop("end", MISSING)
 
-        if continue_value_type is not MISSING:
-            continue_value_type = flatten_out_types(continue_value_type)
+        if end_break is not MISSING:
+            if continue_value_type is not MISSING:
+                continue_value_type = flatten_out_types(continue_value_type)
+            else:
+                continue_value_type = None
             break_types.add("value", RDHListType([], continue_value_type))
 
         break_types.merge(other_break_types)
@@ -1329,13 +1325,15 @@ class LoopOp(Opcode):
         code = self.code
         results = []
 
-        while True:
-            with frame_manager.capture("continue") as capturer:
-                evaluate(code, context, frame_manager)
-            if capturer.value is not MISSING:
-                results.append(capturer.value)
-
-        return frame_manager.value(results)
+        with frame_manager.get_next_frame(self) as frame:
+            while True:
+                with frame_manager.capture("end") as ender:
+                    with frame_manager.capture("continue") as capturer:
+                        evaluate(code, context, frame_manager)
+                    if capturer.value is not MISSING:
+                        results.append(capturer.value)
+                if ender.value is not MISSING:
+                    return frame.value(RDHList(results))
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         return compile_statement("""
@@ -1447,9 +1445,7 @@ class PrepareOp(Opcode):
             from rdhlang5.executor.function import prepare
 
             immediate_context = immediate_context or {}
-            context_type = get_context_type(context)
-            context_type = immediate_context.get("context_type", context_type)
-            immediate_context["suggested_outer_type"] = context_type
+            immediate_context["suggested_outer_type"] = get_context_type(context)
 
             function = prepare(function_data, context, frame_manager, immediate_context)
 
