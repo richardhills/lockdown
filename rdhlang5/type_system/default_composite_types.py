@@ -1,11 +1,12 @@
+from rdhlang5.type_system.composites import CompositeType
 from rdhlang5.type_system.core_types import OneOfType, AnyType
 from rdhlang5.type_system.dict_types import RDHDictType, DictWildcardGetterType, \
-    DictWildcardSetterType, DictWildcardDeletterType
+    DictWildcardSetterType, DictWildcardDeletterType, is_dict_checker
 from rdhlang5.type_system.list_types import RDHListType, ListWildcardGetterType, \
     ListWildcardSetterType, ListInsertType, ListWildcardDeletterType, \
-    ListWildcardInsertType
+    ListWildcardInsertType, is_list_checker
 from rdhlang5.type_system.object_types import RDHObjectType, \
-    ObjectWildcardGetterType, ObjectWildcardSetterType
+    ObjectWildcardGetterType, ObjectWildcardSetterType, is_object_checker
 
 
 READONLY_DEFAULT_OBJECT_TYPE = RDHObjectType(name="readonly-default-object-type")
@@ -37,3 +38,8 @@ DEFAULT_LIST_TYPE.micro_op_types[("insert-wildcard", )] = ListWildcardInsertType
 DEFAULT_DICT_TYPE.micro_op_types[("get-wildcard", )] = DictWildcardGetterType(readonly_rich_composite_type, rich_composite_type, True, False)
 DEFAULT_DICT_TYPE.micro_op_types[("set-wildcard", )] = DictWildcardSetterType(readonly_rich_composite_type, rich_composite_type, True, True)
 DEFAULT_DICT_TYPE.micro_op_types[("delete-wildcard", )] = DictWildcardDeletterType(True)
+
+EMPTY_OBJECT_TYPE = CompositeType({}, is_object_checker, name="empty")
+EMPTY_LIST_TYPE = CompositeType({}, is_list_checker, name="empty")
+EMPTY_DICT_TYPE = CompositeType({}, is_dict_checker, name="empty")
+

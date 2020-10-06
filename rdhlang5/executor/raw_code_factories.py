@@ -391,6 +391,15 @@ def insert_op(of, reference, rvalue):
         "rvalue": rvalue
     }, debug_reason="code")
 
+def map_op(composite, mapper):
+    check_is_opcode(composite)
+    check_is_opcode(mapper)
+    return RDHObject({
+        "opcode": "map",
+        "composite": composite,
+        "mapper": mapper
+    }, debug_reason="code")
+
 def condition_op(condition, when_true, when_false):
     check_is_opcode(condition)
     check_is_opcode(when_true)

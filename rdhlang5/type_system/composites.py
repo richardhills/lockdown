@@ -53,7 +53,6 @@ class CompositeType(Type):
                 pass
             if not isinstance(tag, tuple):
                 raise FatalError()
-        from rdhlang5.type_system.dict_types import RDHDict
 
         if isinstance(initial_data, dict):
             pass
@@ -338,7 +337,7 @@ class CompositeObjectManager(object):
 
     def get_effective_composite_type(self):
         if not self.cached_effective_composite_type:
-            self.cached_effective_composite_type = merge_composite_types(self.attached_types.values(), self.obj, "Composed from {}".format(self.debug_reason))
+            self.cached_effective_composite_type = merge_composite_types(self.attached_types.values(), initial_data=self.obj, name="Composed from {}".format(self.debug_reason))
         return self.cached_effective_composite_type
 
     def check_for_runtime_data_conflicts(self, type):
@@ -360,7 +359,7 @@ class CompositeObjectManager(object):
         return False
 
     def check_for_runtime_micro_op_conflicts(self, type):
-        new_merged_composite_type = merge_composite_types([ self.get_effective_composite_type(), type ], "check_for_runtime_micro_op_conflicts")
+        new_merged_composite_type = merge_composite_types([ self.get_effective_composite_type(), type ], name="check_for_runtime_micro_op_conflicts")
 
         for micro_op_type in type.micro_op_types.values():
             micro_op_type.check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(
@@ -368,6 +367,8 @@ class CompositeObjectManager(object):
             )
 
     def add_composite_type(self, type, caller_has_verified_type=False):
+#        if self.debug_reason is None:
+#            print self.debug_reason
         type_id = id(type)
 
         if type.is_revconst:

@@ -121,6 +121,7 @@ expression
    | expression '(|' expression '|)'     # singleParameterInvocation
    | expression '(' ')'     # noParameterInvocation
    | '(' expression ')'     # parenthesis
+   | '<' expression '>'		# staticExpression
    | expression 'is' expression # is
    | SYMBOL					# immediateDereference
    | expression '.' SYMBOL  # staticDereference
@@ -147,7 +148,8 @@ expression
    | 'break'			    # breakStatement
    | ifStatement			# toIfStatement
    | whileLoop				# toWhileLoop
-   | forLoop				# toForLoop
+   | forGeneratorLoop		# toForGeneratorLoop
+   | forListLoop			# toForListLoop
    | objectType				# toObjectType
    | listType				# toListType
    | dictionaryType			# toDictionaryType
@@ -202,6 +204,10 @@ whileLoop
    : 'while' '(' expression ')' '{' codeBlock '}'
    ;
 
-forLoop
+forGeneratorLoop
    : 'for' '(var' SYMBOL 'from' expression ')' '{' codeBlock '}'
+   ;
+
+forListLoop
+   : 'for' '(var' SYMBOL 'in' expression ')' '{' codeBlock '}'
    ;

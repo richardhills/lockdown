@@ -166,6 +166,15 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#toForGeneratorLoop.
+    def enterToForGeneratorLoop(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#toForGeneratorLoop.
+    def exitToForGeneratorLoop(self, ctx):
+        pass
+
+
     # Enter a parse tree produced by langParser#mod.
     def enterMod(self, ctx):
         pass
@@ -226,6 +235,15 @@ class langListener(ParseTreeListener):
 
     # Exit a parse tree produced by langParser#returnStatement.
     def exitReturnStatement(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#staticExpression.
+    def enterStaticExpression(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#staticExpression.
+    def exitStaticExpression(self, ctx):
         pass
 
 
@@ -307,6 +325,15 @@ class langListener(ParseTreeListener):
 
     # Exit a parse tree produced by langParser#noParameterInvocation.
     def exitNoParameterInvocation(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#toForListLoop.
+    def enterToForListLoop(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#toForListLoop.
+    def exitToForListLoop(self, ctx):
         pass
 
 
@@ -526,15 +553,6 @@ class langListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by langParser#toForLoop.
-    def enterToForLoop(self, ctx):
-        pass
-
-    # Exit a parse tree produced by langParser#toForLoop.
-    def exitToForLoop(self, ctx):
-        pass
-
-
     # Enter a parse tree produced by langParser#objectTemplate.
     def enterObjectTemplate(self, ctx):
         pass
@@ -634,12 +652,21 @@ class langListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by langParser#forLoop.
-    def enterForLoop(self, ctx):
+    # Enter a parse tree produced by langParser#forGeneratorLoop.
+    def enterForGeneratorLoop(self, ctx):
         pass
 
-    # Exit a parse tree produced by langParser#forLoop.
-    def exitForLoop(self, ctx):
+    # Exit a parse tree produced by langParser#forGeneratorLoop.
+    def exitForGeneratorLoop(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#forListLoop.
+    def enterForListLoop(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#forListLoop.
+    def exitForListLoop(self, ctx):
         pass
 
 

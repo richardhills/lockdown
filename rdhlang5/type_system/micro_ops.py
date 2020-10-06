@@ -89,22 +89,42 @@ def raise_micro_op_conflicts(micro_op, args, other_micro_op_types):
         other_micro_op_type.raise_on_runtime_micro_op_conflict(micro_op, args)
 
 
-def merge_composite_types(types, initial_data, name=None):
+def merge_composite_types(types, initial_data=None, name=None):
+#    print "Merge {}".format([id(t) for t in types])
     from rdhlang5.type_system.composites import CompositeType
 
-    for t in types:
-        if not isinstance(t, CompositeType):
-            raise FatalError()
-
-    if len(types) == 1:
-        return CompositeType(types[0].micro_op_types, types[0].python_object_type_checker, initial_data=initial_data, name=name) 
-
-    result = {}
     python_object_type_checker = None
     for type in types:
+        if not isinstance(type, CompositeType):
+            raise FatalError()
         if python_object_type_checker and python_object_type_checker != type.python_object_type_checker:
             raise FatalError()
-        python_object_type_checker = type.python_object_type_checker
+        if type.python_object_type_checker:
+            python_object_type_checker = type.python_object_type_checker
+
+    # Optimization - remove any composite types that are empty.
+    types_with_opcodes = [t for t in types if t.micro_op_types]
+
+    # Optimization - use a global static type if safe to do so
+    if len(types_with_opcodes) == 0 and not initial_data:
+        from rdhlang5.type_system.dict_types import is_dict_checker
+        from rdhlang5.type_system.list_types import is_list_checker
+        from rdhlang5.type_system.object_types import is_object_checker
+        if python_object_type_checker == is_object_checker:
+            from rdhlang5.type_system.default_composite_types import EMPTY_OBJECT_TYPE
+            return EMPTY_OBJECT_TYPE
+        if python_object_type_checker == is_list_checker:
+            from rdhlang5.type_system.default_composite_types import EMPTY_LIST_TYPE
+            return EMPTY_LIST_TYPE
+        if python_object_type_checker == is_dict_checker:
+            from rdhlang5.type_system.default_composite_types import EMPTY_DICT_TYPE
+            return EMPTY_DICT_TYPE
+
+    if len(types_with_opcodes) == 1:
+        return CompositeType(types_with_opcodes[0].micro_op_types, python_object_type_checker, initial_data=initial_data, name=name) 
+
+    result = {}
+    for type in types_with_opcodes:
         for tag, micro_op_type in type.micro_op_types.items():
             if tag in result:
                 result[tag] = result[tag].merge(micro_op_type)

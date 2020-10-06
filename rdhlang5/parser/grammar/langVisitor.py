@@ -95,6 +95,11 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#toForGeneratorLoop.
+    def visitToForGeneratorLoop(self, ctx):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#mod.
     def visitMod(self, ctx):
         return self.visitChildren(ctx)
@@ -127,6 +132,11 @@ class langVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by langParser#returnStatement.
     def visitReturnStatement(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#staticExpression.
+    def visitStaticExpression(self, ctx):
         return self.visitChildren(ctx)
 
 
@@ -172,6 +182,11 @@ class langVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by langParser#noParameterInvocation.
     def visitNoParameterInvocation(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#toForListLoop.
+    def visitToForListLoop(self, ctx):
         return self.visitChildren(ctx)
 
 
@@ -295,11 +310,6 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by langParser#toForLoop.
-    def visitToForLoop(self, ctx):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by langParser#objectTemplate.
     def visitObjectTemplate(self, ctx):
         return self.visitChildren(ctx)
@@ -355,8 +365,13 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by langParser#forLoop.
-    def visitForLoop(self, ctx):
+    # Visit a parse tree produced by langParser#forGeneratorLoop.
+    def visitForGeneratorLoop(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#forListLoop.
+    def visitForListLoop(self, ctx):
         return self.visitChildren(ctx)
 
 

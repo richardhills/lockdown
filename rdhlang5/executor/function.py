@@ -130,9 +130,6 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
     if actual_local_type is MISSING:
         raise PreparationException("Actual local type missing")
 
-    if len(actual_local_type) > 1:
-        pass
-
     actual_local_type = flatten_out_types(actual_local_type)
 
     try:

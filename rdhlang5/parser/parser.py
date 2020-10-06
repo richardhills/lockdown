@@ -16,7 +16,7 @@ from rdhlang5.executor.raw_code_factories import function_lit, nop, comma_op, \
     loop_op, condition_op, binary_integer_op, equality_op, dereference, \
     local_function, reset_op, inferred_type, prepare_function_lit, transform, \
     continue_op, check_is_opcode, is_op, function_type, dict_template_op, \
-    composite_type
+    composite_type, static_op, map_op
 from rdhlang5.parser.grammar.langLexer import langLexer
 from rdhlang5.parser.grammar.langParser import langParser
 from rdhlang5.parser.grammar.langVisitor import langVisitor
@@ -287,6 +287,9 @@ class RDHLang5Visitor(langVisitor):
     def visitParenthesis(self, ctx):
         return self.visit(ctx.expression())
 
+    def visitStaticExpression(self, ctx):
+        return static_op(self.visit(ctx.expression()))
+
     def visitIs(self, ctx):
         expression, type = ctx.expression()
         expression = self.visit(expression)
@@ -470,7 +473,7 @@ class RDHLang5Visitor(langVisitor):
             ))
         )
 
-    def visitForLoop(self, ctx):
+    def visitForGeneratorLoop(self, ctx):
         iterator_name = ctx.SYMBOL().getText()
         generator_expression = self.visit(ctx.expression())
         loop_code = self.visit(ctx.codeBlock())
@@ -521,6 +524,35 @@ class RDHLang5Visitor(langVisitor):
                 ),
                 **get_debug_info(ctx)
             ))
+        )
+
+    def visitForListLoop(self, ctx):
+        iterator_name = ctx.SYMBOL().getText()
+        composite_expression = self.visit(ctx.expression())
+        loop_code = self.visit(ctx.codeBlock())
+
+        loop_code = CodeBlockBuilder(
+            argument_type_expression=object_type({
+                iterator_name: inferred_type()
+            })
+        ).chain(loop_code, get_debug_info(ctx))
+
+        loop_code = loop_code.create("function", get_debug_info(ctx))
+
+        return map_op(
+            composite_expression,
+            local_function(
+                nop(),
+                transform(
+                    ("continue", "value"),
+                    invoke_op(
+                        prepare_function_lit(loop_code),
+                        object_template_op({
+                            iterator_name: dereference("local.value")
+                        }, **get_debug_info(ctx)),
+                    )
+                )
+            )
         )
 
     def visitObjectTemplate(self, ctx):

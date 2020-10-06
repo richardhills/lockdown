@@ -37,6 +37,7 @@ from rdhlang5.type_system.object_types import RDHObject, RDHObjectType, \
     ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
     ObjectWildcardSetterType, is_object_checker
 from rdhlang5.utils import MISSING, NO_VALUE, is_debug, one_shot_memoize
+from jsonpickle.util import is_list
 
 
 def evaluate(expression, context, frame_manager, immediate_context=None):
@@ -926,6 +927,72 @@ class InsertOp(Opcode):
             except InvalidAssignmentKey:
                 return frame.exception(self.INVALID_ASSIGNMENT())
 
+class MapOp(Opcode):
+    MISSING_COMPOSITE_TYPE = TypeErrorFactory("{}: missing_integers")
+    MISSING_MAPPER_FUNCTION = TypeErrorFactory("{}: missing_mapper_function")
+
+    def __init__(self, data, visitor):
+        super(MapOp, self).__init__(data, visitor)
+        self.composite = enrich_opcode(data.composite, visitor)
+        self.mapper = enrich_opcode(data.mapper, visitor)
+
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
+
+        composite_type = get_expression_break_types(self.composite, context, frame_manager)
+        mapper_type = get_expression_break_types(self.mapper, context, frame_manager)
+
+        if composite_type is not MISSING:
+            composite_type = flatten_out_types(composite_type)
+        if mapper_type is not MISSING:
+            mapper_type = flatten_out_types(mapper_type)
+
+        if not isinstance(composite_type, CompositeType):
+            break_types.add("exception", self.MISSING_COMPOSITE_TYPE.get_type(), opcode=self)
+        if not isinstance(mapper_type, ClosedFunctionType):
+            break_types.add("exception", self.MISSING_mapper.get_type(), opcode=self)
+
+        if composite_type is not MISSING and mapper_type is not MISSING:
+            result = CompositeType({}, is_list_checker, {}, True)
+
+            if isinstance(composite_type, CompositeType) and isinstance(mapper_type, ClosedFunctionType):
+                mapper_return_type = mapper_type.break_types.get("value", MISSING)
+
+                if mapper_return_type is not MISSING:
+                    micro_ops = {}
+
+                    keys = [getattr(micro_op, "key", None) for micro_op in composite_type.micro_op_types.values()]
+                    integer_keys = [k for k in keys if isinstance(k, int)]
+
+                    for index in integer_keys:
+                        micro_ops[("get", index)] = ListGetterType(index, mapper_return_type, False, False)
+                        micro_ops[("set", index)] = ListSetterType(index, AnyType(), False, False)
+
+                    micro_ops[("get-wildcard",)] = ListWildcardGetterType(mapper_return_type, True, False)
+                    micro_ops[("set-wildcard",)] = ListWildcardSetterType(AnyType(), True, True)
+                    micro_ops[("insert", 0)] = ListInsertType(AnyType(), 0, False, False)
+                    micro_ops[("delete-wildcard",)] = ListWildcardDeletterType(True)
+                    micro_ops[("insert-wildcard",)] = ListWildcardInsertType(AnyType(), True, False)
+
+                    result = CompositeType(micro_ops, is_list_checker, {}, True)
+
+            break_types.add("value", result)
+
+        return break_types.build()
+
+    def jump(self, context, frame_manager, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
+            composite = frame.step("composite", lambda: evaluate(self.composite, context, frame_manager))
+            mapper = frame.step("mapper", lambda: evaluate(self.mapper, context, frame_manager))
+
+            if not isinstance(composite, RDHList):
+                raise FatalError() # Be more liberal
+
+            result = RDHList([
+                mapper.invoke(v, frame_manager) for v in composite
+            ])
+
+            return frame.value(result)
 
 def BinaryOp(name, symbol, func, argument_type, result_type, number_op=None, cmp_op=None):
     class _BinaryOp(Opcode):
@@ -1136,6 +1203,7 @@ class ShiftOp(Opcode):
 
 class ResetOp(Opcode):
     MISSING_IN_BREAK_TYPE = TypeErrorFactory("ResetOp: missing_in_break_type")
+    MISSING_FUNCTION = TypeErrorFactory("ResetOp: missing_function")
 
     def __init__(self, data, visitor):
         super(ResetOp, self).__init__(data, visitor)
@@ -1157,6 +1225,9 @@ class ResetOp(Opcode):
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
 
+        yield_break_types = []
+        self.continuation_break_types = None
+
         if self.opcode:
             opcode_break_types = dict(self.opcode.get_break_types(context, frame_manager))
             self.continuation_break_types = dict(opcode_break_types)
@@ -1164,13 +1235,17 @@ class ResetOp(Opcode):
             break_types.merge(opcode_break_types)
         else:
             function_type, function_break_types = get_expression_break_types(self.function, context, frame_manager)
-            function_type = flatten_out_types(function_type)
+            if function_type is not MISSING:
+                function_type = flatten_out_types(function_type)
             break_types.merge(function_break_types)
 
-            self.continuation_break_types = function_type.break_types
-            function_break_types = dict(function_type.break_types)
-            yield_break_types = function_break_types.pop("yield", [])
-            break_types.merge(function_break_types)
+            if isinstance(function_type, ClosedFunctionType): 
+                self.continuation_break_types = function_type.break_types
+                function_break_types = dict(function_type.break_types)
+                yield_break_types = function_break_types.pop("yield", [])
+                break_types.merge(function_break_types)
+            else:
+                break_types.add("exception", self.MISSING_FUNCTION.get_type(), opcode=self)
 
         missing_in_error = False
 
@@ -1310,6 +1385,7 @@ class LoopOp(Opcode):
         _, other_break_types = get_expression_break_types(self.code, context, frame_manager)
         continue_value_type = other_break_types.pop("continue", MISSING)
         end_break = other_break_types.pop("end", MISSING)
+        mode_break_type = other_break_types.pop("break", MISSING)
 
         if end_break is not MISSING:
             if continue_value_type is not MISSING:
@@ -1317,6 +1393,10 @@ class LoopOp(Opcode):
             else:
                 continue_value_type = None
             break_types.add("value", RDHListType([], continue_value_type))
+
+        if mode_break_type is not MISSING:
+            mode_break_type = flatten_out_types(mode_break_type)
+            break_types.add("value", mode_break_type)
 
         break_types.merge(other_break_types)
         return break_types.build()
@@ -1326,14 +1406,19 @@ class LoopOp(Opcode):
         results = []
 
         with frame_manager.get_next_frame(self) as frame:
-            while True:
-                with frame_manager.capture("end") as ender:
-                    with frame_manager.capture("continue") as capturer:
-                        evaluate(code, context, frame_manager)
-                    if capturer.value is not MISSING:
-                        results.append(capturer.value)
-                if ender.value is not MISSING:
-                    return frame.value(RDHList(results))
+            with frame_manager.capture("break") as breaker:
+                while True:
+                    with frame_manager.capture("end") as ender:
+                        with frame_manager.capture("continue") as capturer:
+                            evaluate(code, context, frame_manager)
+                        if capturer.value is not MISSING:
+                            results.append(capturer.value)
+                    if ender.value is not MISSING:
+                        return frame.value(RDHList(results))
+            if breaker.value is not MISSING:
+                return frame.value(breaker.value)
+
+        raise FatalError()
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         return compile_statement("""
@@ -1570,6 +1655,7 @@ class InvokeOp(Opcode):
         super(InvokeOp, self).__init__(data, visitor)
         self.function = enrich_opcode(data.function, visitor)
         self.argument = enrich_opcode(data.argument, visitor)
+        self.invalid_argument_type_exception_is_possible = True
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
@@ -1587,18 +1673,14 @@ class InvokeOp(Opcode):
         if function_type is not MISSING and argument_type is not MISSING:
             function_type = flatten_out_types(function_type)
 
-            argument_type_is_safe = False
-
             if isinstance(function_type, ClosedFunctionType):
                 break_types.merge(function_type.break_types)
                 if function_type.argument_type.is_copyable_from(argument_type):
-                    argument_type_is_safe = True
+                    self.invalid_argument_type_exception_is_possible = False
             else:
                 break_types.add("exception", self.INVALID_FUNCTION_TYPE.get_type(), opcode=self)
 
-            self.invalid_argument_type_exception = False
-            if not argument_type_is_safe:
-                self.invalid_argument_type_exception = True
+            if self.invalid_argument_type_exception_is_possible:
                 break_types.add("exception", self.INVALID_ARGUMENT_TYPE.get_type(), opcode=self)
 
         return break_types.build()
@@ -1613,7 +1695,7 @@ class InvokeOp(Opcode):
 
             if not isinstance(function, RDHFunction):
                 return frame.exception(self.INVALID_FUNCTION_TYPE())
-            if self.invalid_argument_type_exception and not function.get_type().argument_type.is_copyable_from(get_type_of_value(argument)):
+            if self.invalid_argument_type_exception_is_possible and not function.get_type().argument_type.is_copyable_from(get_type_of_value(argument)):
                 return frame.exception(self.INVALID_ARGUMENT_TYPE()) 
 
             return function.invoke(argument, frame_manager)
@@ -1805,6 +1887,7 @@ OPCODES = {
     "dynamic_dereference": DynamicDereferenceOp,
     "assignment": AssignmentOp,
     "insert": InsertOp,
+    "map": MapOp,
     "context": ContextOp,
     "comma": CommaOp,
     "loop": LoopOp,

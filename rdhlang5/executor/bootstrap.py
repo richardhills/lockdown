@@ -14,7 +14,7 @@ from rdhlang5.executor.raw_code_factories import inferred_type, function_lit, \
     function_type, list_template_op, insert_op, transform_op, literal_op, \
     invoke_op, object_template_op, prepared_function, no_value_type, \
     assignment_op, dict_template_op, addition_op, reset_op, shift_op, \
-    transform
+    transform, local_function
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE
 from rdhlang5.type_system.dict_types import RDHDict
 from rdhlang5.type_system.list_types import RDHList
@@ -52,7 +52,7 @@ def get_default_global_context():
                                     shift_op(dereference("outer.local"), no_value_type()),
                                     assignment_op(dereference("outer"), literal_op("local"), addition_op(dereference("outer.local"), literal_op(1)))
                                 ),
-                                transform_op("end")
+                                transform_op("break")
                             )
                         )
                     )
@@ -61,55 +61,78 @@ def get_default_global_context():
             ).close(None),
             "list": prepare(
                 function_lit(
-                    function_type(no_value_type(), {
-                        "yield": list_template_op([ dict_template_op({
-                            "in": no_value_type(),
-                            "out": int_type()
-                        })]),
-                        "end": list_template_op([ dict_template_op({
-                            "out": no_value_type()
-                        })]),
-                    }),
+                    list_type([
+                        function_type(no_value_type(), {
+                            "yield": list_template_op([ dict_template_op({
+                                "in": no_value_type(),
+                                "out": int_type()
+                            })]),
+                            "value": list_template_op([ dict_template_op({
+                                "out": no_value_type()
+                            })]),
+                        }),
+                    ], None),
                     infer_all(),
                     inferred_type(),
-                    object_template_op({
-                        "result": list_template_op([]),
-                        "callback": dereference("argument")
-                    }),
-                    comma_op(
-                        transform_op(
-                            "end", "value",
-                            loop_op(
-                                invoke_op(
-                                    prepared_function(
-                                        no_value_type(),
-                                        infer_all(),
-                                        inferred_type(),
-                                        transform(
-                                            ("yield", "value"),
-                                            reset_op(dereference("outer.local.callback"), nop())
-                                        ),
-                                        comma_op(
-                                            insert_op(
-                                                dereference("outer.local.result"),
-                                                literal_op(0),
-                                                dereference("local.value")
-                                            ),
-                                            assignment_op(
-                                                dereference("outer.local"),
-                                                literal_op("callback"),
-                                                dereference("local.continuation")
-                                            )
-                                        )
+                    dereference("argument.0"),
+                    loop_op(
+                        invoke_op(
+                            local_function(
+                                transform(
+                                    ("yield", "value"),
+                                    ("value", "end"),
+                                    reset_op(dereference("outer.local"), nop())
+                                ),
+                                comma_op(
+                                    assignment_op(
+                                        dereference("outer"),
+                                        literal_op("local"),
+                                        dereference("local.continuation")
+                                    ),
+                                    transform_op(
+                                        "value",
+                                        "continue",
+                                        dereference("local.value")
                                     )
                                 )
-                            ),
-                        ),
-                        dereference("local.result")
+                            )
+                        )
                     )
                 ),
                 None, FrameManager()
-            ).close(None)
+            ).close(None),
+#             "max": prepare(
+#                 function_lit(
+#                     list_type([], int_type()),
+#                     infer_all(),
+#                     inferred_type(),
+#                     dereference("argument.0"),
+#                     loop_op(
+#                         invoke_op(
+#                             local_function(
+#                                 transform(
+#                                     ("yield", "value"),
+#                                     ("value", "end"),
+#                                     reset_op(dereference("outer.local"), nop())
+#                                 ),
+#                                 comma_op(
+#                                     assignment_op(
+#                                         dereference("outer"),
+#                                         literal_op("local"),
+#                                         dereference("local.continuation")
+#                                     ),
+#                                     transform_op(
+#                                         "value",
+#                                         "continue",
+#                                         dereference("local.value")
+#                                     )
+#                                 )
+#                             )
+#                         )
+#                     )
+#                 ),
+#                 None, FrameManager()
+#             ).close(None),
         }, debug_reason="default-global-context")
     }, bind=DEFAULT_OBJECT_TYPE, debug_reason="default-global-context")
 
