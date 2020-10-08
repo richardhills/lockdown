@@ -7,45 +7,62 @@ from rdhlang5.utils import is_debug
 
 
 class MicroOpType(object):
-#    __metaclass__ = ABCMeta
-
-    @abstractmethod
     def replace_inferred_type(self, other_micro_op_type):
         raise NotImplementedError(self)
 
     def reify_revconst_types(self, other_micro_op_types):
         return self
 
-    @abstractmethod
-    def create(self, target_manager):
-        raise NotImplementedError(self)
-
     def invoke(self, target_manager, *args, **kwargs):
-        return self.create(target_manager).invoke(*args, **kwargs)
-
-    @abstractmethod
-    def can_be_derived_from(self, other_micro_op_type):
         raise NotImplementedError(self)
 
-    @abstractmethod
+    def is_derivable_from(self, type, data):
+        raise NotImplementedError(self)
+
+    def conflicts_with(self, our_type, other_type):
+        raise NotImplementedError(self)
+
     def merge(self, other_micro_op_type):
         raise NotImplementedError(self)
 
-    @abstractmethod
     def unbind(self, source_type, key, target_manager):
         raise NotImplementedError(self)
 
-    @abstractmethod
     def bind(self, source_type, key, target_manager):
+        raise NotImplementedError(self)
+
+    def to_ast(self, dependency_builder, target, *args):
+        args_parameters = { "arg{}".format(i): a for i, a in enumerate(args) }
+        args_string = ", {" + "},{".join(args_parameters.keys()) + "}" if len(args_parameters) > 0 else ""
+
+        return compile_expression(
+            "{invoke}(get_manager({target})" + args_string + ")",
+            None, dependency_builder,
+            invoke=self.invoke, target=target, **args_parameters
+        )
+
+# Deprecated methods
+
+
+    @abstractmethod
+    def create(self, target_manager):
+        raise ValueError()
+        raise NotImplementedError(self)
+
+    @abstractmethod
+    def can_be_derived_from(self, type):
+        raise ValueError()
         raise NotImplementedError(self)
 
     @abstractmethod
     def raise_on_runtime_micro_op_conflict(self, micro_op, args):
+        raise ValueError()
         # Invoked on all MicroOpTypes on a class before any MicroOp is executed to check
         # for run time conflicts
         raise NotImplementedError(self)
 
     def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
+        raise ValueError()
         for other_micro_op_type in micro_op_types.values():
             if not other_micro_op_type:
                 pass
@@ -63,24 +80,12 @@ class MicroOpType(object):
 
     @abstractmethod
     def check_for_runtime_data_conflict(self, obj):
+        raise ValueError()
         raise NotImplementedError(self)     
 
     @abstractmethod
     def check_for_new_micro_op_type_conflict(self, other_micro_op_type, other_micro_op_types):
-        raise NotImplementedError(self)
-
-    def to_ast(self, dependency_builder, target, *args):
-        args_parameters = { "arg{}".format(i): a for i, a in enumerate(args) }
-        args_string = ", {" + "},{".join(args_parameters.keys()) + "}" if len(args_parameters) > 0 else ""
-
-        return compile_expression(
-            "{invoke}(get_manager({target})" + args_string + ")",
-            None, dependency_builder,
-            invoke=self.invoke, target=target, **args_parameters
-        )
-
-class MicroOp(object):
-    def invoke(self, *args, **kwargs):
+        raise ValueError()
         raise NotImplementedError(self)
 
 

@@ -8,7 +8,7 @@ from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict, \
     InvalidDereferenceType, MissingMicroOp, InvalidAssignmentKey, \
     IncorrectObjectTypeForMicroOp
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
-from rdhlang5.type_system.micro_ops import MicroOpType, MicroOp, \
+from rdhlang5.type_system.micro_ops import MicroOpType, \
     raise_micro_op_conflicts
 from rdhlang5.utils import MISSING, is_debug
 
@@ -71,15 +71,69 @@ class DictWildcardGetterType(DictMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target_manager):
-        return DictWildcardGetter(target_manager, self.key_type, self.value_type, self.key_error, self.type_error)
+    def invoke(self, target_manager, key, trust_caller=False, **kwargs):
+        if is_debug() or not trust_caller or self.key_error or self.type_error:
+            self.raise_micro_op_invocation_conflicts(target_manager, key)
 
-    def can_be_derived_from(self, other_micro_op_type):
+        if is_debug() and not self.key_type.is_copyable_from(get_type_of_value(key)):
+            raise FatalError()
+
+        if key in target_manager.obj.wrapped:
+            value = target_manager.obj.__getitem__(key, raw=True)
+        else:
+            default_factory_op_type = target_manager.get_micro_op_type(("default-factory",))
+
+            if not default_factory_op_type:
+                raise_if_safe(InvalidDereferenceKey, self.key_error)
+
+            default_factory_op = default_factory_op_type.create(target_manager)
+            value = default_factory_op.invoke(key)
+
+        if is_debug() or self.type_error:
+            type_of_value = get_type_of_value(value)
+            if not self.value_type.is_copyable_from(type_of_value):
+                raise raise_if_safe(InvalidDereferenceType, self.type_error)
+
+        return value
+
+    def raise_micro_op_invocation_conflicts(self, target_manager, key):
+        pass
+
+    def is_derivable_from(self, other_type, data):
+        if data is not None:
+            return True
+
+        other_micro_op_type = other_type.get_micro_op_type(("get-wildcard", ))
         return (
-            (not other_micro_op_type.key_error or self.key_error)
+            other_micro_op_type
+            and (not other_micro_op_type.key_error or self.key_error)
             and (not other_micro_op_type.type_error or self.type_error)
+            and other_micro_op_type.key_type.is_copyable_from(self.key_type)
             and self.value_type.is_copyable_from(other_micro_op_type.value_type)
         )
+
+    def conflicts_with(self, our_type, other_type):
+        default_factory = our_type.get_micro_op_type(("default-factory",))
+        has_default_factory = default_factory is not None
+
+        if not self.key_error:
+            if not has_default_factory:
+                return True
+
+        wildcard_setter = other_type.get_micro_op_type(("set-wildcard", ))
+        if wildcard_setter:
+            if not self.type_error and not wildcard_setter.type_error and not self.value_type.is_copyable_from(wildcard_setter.value_type):
+                return True
+
+        for key, other_setter_or_deleter in other_type.micro_op_types.items():
+            if key[0] == "set":
+                if not self.type_error and not other_setter_or_deleter.type_error and not self.value_type.is_copyable_from(other_setter_or_deleter.value_type):
+                    return True
+            if key[0] == "delete":
+                if not self.type_error and not other_setter_or_deleter.key_error and not has_default_factory:
+                    return True
+
+        return False
 
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, DictWildcardGetterType):
@@ -110,60 +164,60 @@ class DictWildcardGetterType(DictMicroOpType):
             unbind_type_to_manager(target_manager, source_type, k, "key", self.key_type, get_manager(k))
             unbind_type_to_manager(target_manager, source_type, k, "value", get_manager(target_manager.obj.wrapped[k]))
 
-    def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
-        default_factory = micro_op_types.get(("default-factory",), None)
-        has_default_factory = default_factory is not None
-
-        if not self.key_error:
-            if not has_default_factory:
-                raise MicroOpTypeConflict()
-            if not self.value_type.is_copyable_from(default_factory.value_type):
-                raise MicroOpTypeConflict()
-
-        return super(DictWildcardGetterType, self).check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(obj, micro_op_types)
-
-    def check_for_new_micro_op_type_conflict(self, other_micro_op_type, other_micro_op_types):
-        has_default_factory = ("default-factory",) in other_micro_op_types
-        if not self.key_error:
-            if not has_default_factory:
-                return True
-
-        if isinstance(other_micro_op_type, (DictGetterType, DictWildcardGetterType)):
-            return False
-        if isinstance(other_micro_op_type, (DictSetterType, DictWildcardSetterType)):
-            if not self.type_error and not self.value_type.is_copyable_from(other_micro_op_type.value_type):
-                return True
-        if isinstance(other_micro_op_type, (DictDeletterType, DictWildcardDeletterType)):
-            if not self.key_error and not has_default_factory:
-                return True
-        return False
-
-    def raise_on_runtime_micro_op_conflict(self, other_micro_op, args):
-        if isinstance(other_micro_op, (DictSetter, DictWildcardSetter)):
-            _, new_value = get_key_and_new_value(other_micro_op, args)
-            if not self.type_error and not self.value_type.is_copyable_from(get_type_of_value(new_value)):
-                raise_if_safe(InvalidAssignmentType, other_micro_op.type_error)
-
-        if isinstance(other_micro_op, (DictDeletter, DictWildcardDeletter)):
-            if not self.key_error:
-                raise_if_safe(InvalidAssignmentType, other_micro_op.key_error)
-        return False
-
-    def check_for_runtime_data_conflict(self, obj):
-        if super(DictWildcardGetterType, self).check_for_runtime_data_conflict(obj):
-            return True
-        if not self.key_error and get_manager(obj).default_factory is None:
-            return True
-
-        if not self.type_error:
-            for value in obj.wrapped.values():
-                get_manager(value)
-                if isinstance(self.value_type, dict):
-                    pass
-                if not self.value_type.is_copyable_from(get_type_of_value(value)):
-                    return True
-
-        return False
+#     def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
+#         default_factory = micro_op_types.get(("default-factory",), None)
+#         has_default_factory = default_factory is not None
+# 
+#         if not self.key_error:
+#             if not has_default_factory:
+#                 raise MicroOpTypeConflict()
+#             if not self.value_type.is_copyable_from(default_factory.value_type):
+#                 raise MicroOpTypeConflict()
+# 
+#         return super(DictWildcardGetterType, self).check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(obj, micro_op_types)
+# 
+#     def check_for_new_micro_op_type_conflict(self, other_micro_op_type, other_micro_op_types):
+#         has_default_factory = ("default-factory",) in other_micro_op_types
+#         if not self.key_error:
+#             if not has_default_factory:
+#                 return True
+# 
+#         if isinstance(other_micro_op_type, (DictGetterType, DictWildcardGetterType)):
+#             return False
+#         if isinstance(other_micro_op_type, (DictSetterType, DictWildcardSetterType)):
+#             if not self.type_error and not self.value_type.is_copyable_from(other_micro_op_type.value_type):
+#                 return True
+#         if isinstance(other_micro_op_type, (DictDeletterType, DictWildcardDeletterType)):
+#             if not self.key_error and not has_default_factory:
+#                 return True
+#         return False
+# 
+#     def raise_on_runtime_micro_op_conflict(self, other_micro_op, args):
+#         if isinstance(other_micro_op, (DictSetter, DictWildcardSetter)):
+#             _, new_value = get_key_and_new_value(other_micro_op, args)
+#             if not self.type_error and not self.value_type.is_copyable_from(get_type_of_value(new_value)):
+#                 raise_if_safe(InvalidAssignmentType, other_micro_op.type_error)
+# 
+#         if isinstance(other_micro_op, (DictDeletter, DictWildcardDeletter)):
+#             if not self.key_error:
+#                 raise_if_safe(InvalidAssignmentType, other_micro_op.key_error)
+#         return False
+# 
+#     def check_for_runtime_data_conflict(self, obj):
+#         if super(DictWildcardGetterType, self).check_for_runtime_data_conflict(obj):
+#             return True
+#         if not self.key_error and get_manager(obj).default_factory is None:
+#             return True
+# 
+#         if not self.type_error:
+#             for value in obj.wrapped.values():
+#                 get_manager(value)
+#                 if isinstance(self.value_type, dict):
+#                     pass
+#                 if not self.value_type.is_copyable_from(get_type_of_value(value)):
+#                     return True
+# 
+#         return False
 
     def merge(self, other_micro_op_type):
         return DictWildcardGetterType(
@@ -174,38 +228,38 @@ class DictWildcardGetterType(DictMicroOpType):
         )
 
 
-class DictWildcardGetter(MicroOp):
-
-    def __init__(self, target_manager, key_type, value_type, key_error, type_error):
-        self.target_manager = target_manager
-        self.key_type = key_type
-        self.value_type = value_type
-        self.key_error = key_error
-        self.type_error = type_error
-
-    def invoke(self, key, **kwargs):
-        raise_micro_op_conflicts(self, [ key ], self.target_manager.get_flattened_micro_op_types())
-
-        if is_debug() and not self.key_type.is_copyable_from(get_type_of_value(key)):
-            raise FatalError()
-
-        if key in self.target_manager.obj.wrapped:
-            value = self.target_manager.obj.__getitem__(key, raw=True)
-        else:
-            default_factory_op_type = self.target_manager.get_micro_op_type(("default-factory",))
-
-            if not default_factory_op_type:
-                raise_if_safe(InvalidDereferenceKey, self.key_error)
-
-            default_factory_op = default_factory_op_type.create(self.target_manager)
-            value = default_factory_op.invoke(key)
-
-        get_manager(value)
-
-        type_of_value = get_type_of_value(value)
-        if not self.value_type.is_copyable_from(type_of_value):
-            raise raise_if_safe(InvalidDereferenceType, self.type_error)
-        return value
+# class DictWildcardGetter(MicroOp):
+# 
+#     def __init__(self, target_manager, key_type, value_type, key_error, type_error):
+#         target_manager = target_manager
+#         self.key_type = key_type
+#         self.value_type = value_type
+#         self.key_error = key_error
+#         self.type_error = type_error
+# 
+#     def invoke(self, key, **kwargs):
+#         raise_micro_op_conflicts(self, [ key ], target_manager.get_flattened_micro_op_types())
+# 
+#         if is_debug() and not self.key_type.is_copyable_from(get_type_of_value(key)):
+#             raise FatalError()
+# 
+#         if key in target_manager.obj.wrapped:
+#             value = target_manager.obj.__getitem__(key, raw=True)
+#         else:
+#             default_factory_op_type = target_manager.get_micro_op_type(("default-factory",))
+# 
+#             if not default_factory_op_type:
+#                 raise_if_safe(InvalidDereferenceKey, self.key_error)
+# 
+#             default_factory_op = default_factory_op_type.create(target_manager)
+#             value = default_factory_op.invoke(key)
+# 
+#         get_manager(value)
+# 
+#         type_of_value = get_type_of_value(value)
+#         if not self.value_type.is_copyable_from(type_of_value):
+#             raise raise_if_safe(InvalidDereferenceType, self.type_error)
+#         return value
 
 
 class DictGetterType(DictMicroOpType):
@@ -216,15 +270,64 @@ class DictGetterType(DictMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target_manager):
-        return DictGetter(target_manager, self.key, self.value_type, self.key_error, self.type_error)
+    def invoke(self, target_manager, **kwargs):
+        self.raise_micro_op_invocation_conflicts(target_manager)
+ 
+        if self.key in target_manager.obj.wrapped:
+            value = target_manager.obj.wrapped[self.key]
+        else:
+            default_factory_op = target_manager.get_micro_op_type(("default-factory",))
+ 
+            if default_factory_op:
+                value = default_factory_op.invoke(self.key)
+            else:
+                raise_if_safe(InvalidDereferenceKey, self.key_error)
+ 
+        get_manager(value)
+ 
+        type_of_value = get_type_of_value(value)
+ 
+        if not self.value_type.is_copyable_from(type_of_value):
+            raise raise_if_safe(InvalidDereferenceType, self.type_error)
+ 
+        return value
 
-    def can_be_derived_from(self, other_micro_op_type):
+    def raise_micro_op_invocation_conflicts(self, target_manager):
+        pass
+
+    def is_derivable_from(self, other_type, data):
+        if data and self.key in data.wrapped:
+            return True
+
+        other_micro_op_type = other_type.get_micro_op_type(("get", self.key))
         return (
+            other_micro_op_type,
             (not other_micro_op_type.key_error or self.key_error)
             and (not other_micro_op_type.type_error or self.value_type_error)
             and self.value_type.is_copyable_from(other_micro_op_type.value_type)
         )
+
+    def conflicts_with(self, our_type, other_type):
+        default_factory = our_type.get_micro_op_type(("default-factory",))
+        has_default_factory = default_factory is not None
+
+        wildcard_setter = other_type.get_micro_op_type(("set-wildcard", ))
+        if wildcard_setter and not self.type_error and not wildcard_setter.type_error and not self.value_type.is_copyable_from(wildcard_setter.value_type):
+            return True
+
+        wildcard_deletter = other_type.get_micro_op_type(("delete-wildcard", ))
+        if wildcard_deletter and not self.type_error and not wildcard_setter.key_error and not has_default_factory:
+            return True
+
+        detail_setter = other_type.get_micro_op_type(("set", self.key))
+        if detail_setter and not self.type_error and not detail_setter.type_error and not self.value_type.is_copyable_from(detail_setter.value_type):
+            return True
+
+        detail_deleter = other_type.get_micro_op_type(("delete", self.key))
+        if detail_deleter and not self.type_error and not detail_deleter.key_error and not has_default_factory:
+            return True
+
+        return False
 
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, DictGetterType):
@@ -250,65 +353,65 @@ class DictGetterType(DictMicroOpType):
         value = target_manager.obj.wrapped[key]
         unbind_type_to_manager(target_manager, source_type, self.key, "value", get_manager(value))
 
-    def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
-        default_factory = micro_op_types.get(("default-factory",), None)
-        has_default_factory = default_factory is not None
-        has_value_in_place = self.key in obj.wrapped
-
-        if not self.key_error and not has_value_in_place:
-            if not has_default_factory:
-                raise MicroOpTypeConflict()
-            if not self.value_type.is_copyable_from(default_factory.value_type):
-                raise MicroOpTypeConflict()
-
-        return super(DictGetterType, self).check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(obj, micro_op_types)
-
-    def check_for_new_micro_op_type_conflict(self, other_micro_op_type, other_micro_op_types):
-        if isinstance(other_micro_op_type, (DictGetterType, DictWildcardGetterType)):
-            return False
-        if isinstance(other_micro_op_type, (DictSetterType, DictWildcardSetterType)):
-            other_key, other_type = get_key_and_type(other_micro_op_type)
-            if other_key is not WILDCARD and other_key != self.key:
-                return False
-            if not self.type_error and not other_micro_op_type.type_error and not self.value_type.is_copyable_from(other_type):
-                return True
-        if isinstance(other_micro_op_type, (DictDeletterType, DictWildcardDeletterType)):
-            other_key, _ = get_key_and_type(other_micro_op_type)
-            if other_key is not WILDCARD and other_key != self.key:
-                return False
-
-            default_factory = other_micro_op_types.get(("default-factory",), None)
-            has_default_factory = default_factory is not None
-
-            if not self.key_error and not has_default_factory:
-                return True
-        return False
-
-    def raise_on_runtime_micro_op_conflict(self, other_micro_op, args):
-        if isinstance(other_micro_op, (DictGetter, DictWildcardGetter)):
-            return
-        if isinstance(other_micro_op, (DictSetter, DictWildcardSetter)):
-            other_key, other_new_value = get_key_and_new_value(other_micro_op, args)
-            if other_key != self.key:
-                return
-            if not self.type_error and not self.value_type.is_copyable_from(get_type_of_value(other_new_value)):
-                raise_if_safe(InvalidAssignmentType, other_micro_op.type_error)
-        if isinstance(other_micro_op, (DictDeletter, DictWildcardDeletter)):
-            other_key, _ = get_key_and_new_value(other_micro_op, args)
-            if not self.key_error and other_key == self.key:
-                raise raise_if_safe(InvalidDereferenceKey, other_micro_op.key_error)
-
-    def check_for_runtime_data_conflict(self, obj):
-        if super(DictGetterType, self).check_for_runtime_data_conflict(obj):
-            return True
-
-        value_in_place = obj.wrapped[self.key]
-        get_manager(value_in_place)
-        type_of_value = get_type_of_value(value_in_place)
-        if not self.value_type.is_copyable_from(type_of_value):
-            return True
-
-        return False
+#     def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
+#         default_factory = micro_op_types.get(("default-factory",), None)
+#         has_default_factory = default_factory is not None
+#         has_value_in_place = self.key in obj.wrapped
+# 
+#         if not self.key_error and not has_value_in_place:
+#             if not has_default_factory:
+#                 raise MicroOpTypeConflict()
+#             if not self.value_type.is_copyable_from(default_factory.value_type):
+#                 raise MicroOpTypeConflict()
+# 
+#         return super(DictGetterType, self).check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(obj, micro_op_types)
+# 
+#     def check_for_new_micro_op_type_conflict(self, other_micro_op_type, other_micro_op_types):
+#         if isinstance(other_micro_op_type, (DictGetterType, DictWildcardGetterType)):
+#             return False
+#         if isinstance(other_micro_op_type, (DictSetterType, DictWildcardSetterType)):
+#             other_key, other_type = get_key_and_type(other_micro_op_type)
+#             if other_key is not WILDCARD and other_key != self.key:
+#                 return False
+#             if not self.type_error and not other_micro_op_type.type_error and not self.value_type.is_copyable_from(other_type):
+#                 return True
+#         if isinstance(other_micro_op_type, (DictDeletterType, DictWildcardDeletterType)):
+#             other_key, _ = get_key_and_type(other_micro_op_type)
+#             if other_key is not WILDCARD and other_key != self.key:
+#                 return False
+# 
+#             default_factory = other_micro_op_types.get(("default-factory",), None)
+#             has_default_factory = default_factory is not None
+# 
+#             if not self.key_error and not has_default_factory:
+#                 return True
+#         return False
+# 
+#     def raise_on_runtime_micro_op_conflict(self, other_micro_op, args):
+#         if isinstance(other_micro_op, (DictGetter, DictWildcardGetter)):
+#             return
+#         if isinstance(other_micro_op, (DictSetter, DictWildcardSetter)):
+#             other_key, other_new_value = get_key_and_new_value(other_micro_op, args)
+#             if other_key != self.key:
+#                 return
+#             if not self.type_error and not self.value_type.is_copyable_from(get_type_of_value(other_new_value)):
+#                 raise_if_safe(InvalidAssignmentType, other_micro_op.type_error)
+#         if isinstance(other_micro_op, (DictDeletter, DictWildcardDeletter)):
+#             other_key, _ = get_key_and_new_value(other_micro_op, args)
+#             if not self.key_error and other_key == self.key:
+#                 raise raise_if_safe(InvalidDereferenceKey, other_micro_op.key_error)
+# 
+#     def check_for_runtime_data_conflict(self, obj):
+#         if super(DictGetterType, self).check_for_runtime_data_conflict(obj):
+#             return True
+# 
+#         value_in_place = obj.wrapped[self.key]
+#         get_manager(value_in_place)
+#         type_of_value = get_type_of_value(value_in_place)
+#         if not self.value_type.is_copyable_from(type_of_value):
+#             return True
+# 
+#         return False
 
     def merge(self, other_micro_op_type):
         if other_micro_op_type.key != self.key:
@@ -321,35 +424,35 @@ class DictGetterType(DictMicroOpType):
         )
 
 
-class DictGetter(MicroOp):
-    def __init__(self, target_manager, key, type, key_error, type_error):
-        self.target_manager = target_manager
-        self.key = key
-        self.value_type = type
-        self.key_error = key_error
-        self.type_error = type_error
-
-    def invoke(self, **kwargs):
-        raise_micro_op_conflicts(self, [], self.target_manager.get_flattened_micro_op_types())
-
-        if self.key in self.target_manager.obj.wrapped:
-            value = self.target_manager.obj.wrapped[self.key]
-        else:
-            default_factory_op = self.target_manager.get_micro_op_type(("default-factory",))
-
-            if default_factory_op:
-                value = default_factory_op.invoke(self.key)
-            else:
-                raise_if_safe(InvalidDereferenceKey, self.key_error)
-
-        get_manager(value)
-
-        type_of_value = get_type_of_value(value)
-
-        if not self.value_type.is_copyable_from(type_of_value):
-            raise raise_if_safe(InvalidDereferenceType, self.type_error)
-
-        return value
+# class DictGetter(MicroOp):
+#     def __init__(self, target_manager, key, type, key_error, type_error):
+#         target_manager = target_manager
+#         self.key = key
+#         self.value_type = type
+#         self.key_error = key_error
+#         self.type_error = type_error
+# 
+#     def invoke(self, **kwargs):
+#         raise_micro_op_conflicts(self, [], target_manager.get_flattened_micro_op_types())
+# 
+#         if self.key in target_manager.obj.wrapped:
+#             value = target_manager.obj.wrapped[self.key]
+#         else:
+#             default_factory_op = target_manager.get_micro_op_type(("default-factory",))
+# 
+#             if default_factory_op:
+#                 value = default_factory_op.invoke(self.key)
+#             else:
+#                 raise_if_safe(InvalidDereferenceKey, self.key_error)
+# 
+#         get_manager(value)
+# 
+#         type_of_value = get_type_of_value(value)
+# 
+#         if not self.value_type.is_copyable_from(type_of_value):
+#             raise raise_if_safe(InvalidDereferenceType, self.type_error)
+# 
+#         return value
 
 
 class DictWildcardSetterType(DictMicroOpType):
@@ -359,15 +462,53 @@ class DictWildcardSetterType(DictMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target_manager):
-        return DictWildcardSetter(target_manager, self.value_type, self.key_error, self.type_error)
+    def invoke(self, target_manager, key, new_value, **kwargs):
+        self.raise_micro_op_invocation_conflicts(target_manager, key, new_value)
 
-    def can_be_derived_from(self, other_micro_op_type):
+        new_value_type = get_type_of_value(new_value)
+        if not self.value_type.is_copyable_from(new_value_type):
+            raise FatalError()
+
+        target_manager.unbind_key(key)
+
+        target_manager.obj.wrapped[key] = new_value
+
+        target_manager.bind_key(key)
+
+    def raise_micro_op_invocation_conflicts(self, target_manager, key, new_value):
+        target_type = target_manager.get_effective_composite_type()
+
+        wildcard_getter = target_type.get_micro_op_type(("get-wildcard", ))
+        if wildcard_getter and not wildcard_getter.type_error and not wildcard_getter.value_type.is_copyable_from(get_type_of_value(new_value)):
+            raise_if_safe(InvalidAssignmentType, self.type_error)
+
+        detail_getter = target_type.get_micro_op_type(("get", key))
+        if detail_getter and not detail_getter.type_error and not detail_getter.value_type.is_copyable_from(get_type_of_value(new_value)):
+            raise_if_safe(InvalidAssignmentType, self.type_error)
+
+    def is_derivable_from(self, other_type, data):
+        if data is not None:
+            return True
+
+        other_micro_op_type = other_type.get_micro_op_type(("set-wildcard", ))
         return (
-            (not other_micro_op_type.key_error or self.key_error)
+            other_micro_op_type
+            and (not other_micro_op_type.key_error or self.key_error)
             and (not other_micro_op_type.type_error or self.type_error)
             and other_micro_op_type.value_type.is_copyable_from(self.value_type)
         )
+
+    def conflicts_with(self, our_type, other_type):
+        wildcard_getter = other_type.get_micro_op_type(("get-wildcard", ))
+        if wildcard_getter and not self.type_error and not wildcard_getter.type_error and not wildcard_getter.value_type.is_copyable_from(self.value_type):
+            return True
+
+        for key, other_getter in other_type.micro_op_types.items():
+            if key[0] == "get":
+                if not self.type_error and not other_getter.type_error and not other_getter.value_type.is_copyable_from(self.value_type):
+                    return True
+
+        return False
 
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, DictWildcardSetterType):
@@ -385,20 +526,20 @@ class DictWildcardSetterType(DictMicroOpType):
     def unbind(self, source_type, key, target):
         pass
 
-    def check_for_new_micro_op_type_conflict(self, other_micro_op_type, other_micro_op_types):
-        if isinstance(other_micro_op_type, (DictGetterType, DictWildcardGetterType)):
-            if not self.type_error and not other_micro_op_type.type_error and not other_micro_op_type.value_type.is_copyable_from(self.value_type):
-                return True
-        return False
-
-    def raise_on_runtime_micro_op_conflict(self, other_micro_op, args):
-        pass
-
-    def check_for_runtime_data_conflict(self, obj):
-        if super(DictWildcardSetterType, self).check_for_runtime_data_conflict(obj):
-            return True
-
-        return False
+#     def check_for_new_micro_op_type_conflict(self, other_micro_op_type, other_micro_op_types):
+#         if isinstance(other_micro_op_type, (DictGetterType, DictWildcardGetterType)):
+#             if not self.type_error and not other_micro_op_type.type_error and not other_micro_op_type.value_type.is_copyable_from(self.value_type):
+#                 return True
+#         return False
+# 
+#     def raise_on_runtime_micro_op_conflict(self, other_micro_op, args):
+#         pass
+# 
+#     def check_for_runtime_data_conflict(self, obj):
+#         if super(DictWildcardSetterType, self).check_for_runtime_data_conflict(obj):
+#             return True
+# 
+#         return False
 
     def merge(self, other_micro_op_type):
         return DictWildcardSetterType(
@@ -408,27 +549,27 @@ class DictWildcardSetterType(DictMicroOpType):
         )
 
 
-class DictWildcardSetter(MicroOp):
-    def __init__(self, target_manager, value_type, key_error, type_error):
-        self.target_manager = target_manager
-        self.value_type = value_type
-        self.key_error = key_error
-        self.type_error = type_error
-
-    def invoke(self, key, new_value, **kwargs):
-        get_manager(new_value)
-        target_manager = self.target_manager
-        raise_micro_op_conflicts(self, [ key, new_value ], target_manager.get_flattened_micro_op_types())
-
-        new_value_type = get_type_of_value(new_value)
-        if not self.value_type.is_copyable_from(new_value_type):
-            raise FatalError()
-
-        self.target_manager.unbind_key(key)
-
-        self.target_manager.obj.wrapped[key] = new_value
-
-        self.target_manager.bind_key(key)
+# class DictWildcardSetter(MicroOp):
+#     def __init__(self, target_manager, value_type, key_error, type_error):
+#         target_manager = target_manager
+#         self.value_type = value_type
+#         self.key_error = key_error
+#         self.type_error = type_error
+# 
+#     def invoke(self, key, new_value, **kwargs):
+#         get_manager(new_value)
+#         target_manager = target_manager
+#         raise_micro_op_conflicts(self, [ key, new_value ], target_manager.get_flattened_micro_op_types())
+# 
+#         new_value_type = get_type_of_value(new_value)
+#         if not self.value_type.is_copyable_from(new_value_type):
+#             raise FatalError()
+# 
+#         target_manager.unbind_key(key)
+# 
+#         target_manager.obj.wrapped[key] = new_value
+# 
+#         target_manager.bind_key(key)
 
 
 class DictSetterType(DictMicroOpType):
@@ -438,15 +579,52 @@ class DictSetterType(DictMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def create(self, target_manager):
-        return DictSetter(target_manager, self.key, self.value_type, self.key_error, self.type_error)
+    def invoke(self, target_manager, new_value, **kwargs):
+        self.raise_micro_op_invocation_conflicts(target_manager, new_value)
 
-    def can_be_derived_from(self, other_micro_op_type):
+        new_value_type = get_type_of_value(new_value)
+        if not self.value_type.is_copyable_from(new_value_type):
+            raise FatalError()
+
+        target_manager.unbind_key(self.key)
+
+        target_manager.obj.wrapped[self.key] = new_value
+
+        target_manager.bind_key(self.key)
+
+    def raise_micro_op_invocation_conflicts(self, target_manager, new_value):
+        target_type = target_manager.get_effective_composite_type()
+
+        wildcard_getter = target_type.get_micro_op_type(("get-wildcard", ))
+        if wildcard_getter and not wildcard_getter.type_error and not wildcard_getter.value_type.is_copyable_from(get_type_of_value(new_value)):
+            raise_if_safe(InvalidAssignmentType, self.type_error)
+
+        detail_getter = target_type.get_micro_op_type(("get", self.key))
+        if detail_getter and not detail_getter.type_error and not detail_getter.value_type.is_copyable_from(get_type_of_value(new_value)):
+            raise_if_safe(InvalidAssignmentType, self.type_error)
+
+    def is_derivable_from(self, other_type, data):
+        if data is not None:
+            return True
+
+        other_micro_op_type = other_type.get_micro_op_type(("set", self.key))
         return (
+            other_micro_op_type,
             (not other_micro_op_type.key_error or self.key_error)
             and (not other_micro_op_type.type_error or self.type_error)
             and other_micro_op_type.value_type.is_copyable_from(self.value_type)
         )
+
+    def conflicts_with(self, our_type, other_type):
+        wildcard_getter = other_type.get_micro_op_type(("get-wildcard", ))
+        if wildcard_getter and not self.type_error and not wildcard_getter.type_error and not wildcard_getter.value_type.is_copyable_from(self.value_type):
+            return True
+
+        detail_getter = other_type.get_micro_op_type(("get", self.key))
+        if detail_getter and not self.type_error and not detail_getter.type_error and not detail_getter.value_type.is_copyable_from(self.value_type):
+            return True
+
+        return False
 
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, DictSetterType):
@@ -464,23 +642,23 @@ class DictSetterType(DictMicroOpType):
     def unbind(self, source_type, key, target):
         pass
 
-    def check_for_new_micro_op_type_conflict(self, other_micro_op_type, other_micro_op_types):
-        if isinstance(other_micro_op_type, (DictGetterType, DictWildcardGetterType)):
-            other_key, other_type = get_key_and_type(other_micro_op_type)
-            if other_key is not WILDCARD and other_key != self.key:
-                return False
-            if not self.type_error and not other_micro_op_type.type_error and not other_type.is_copyable_from(self.value_type):
-                return True
-        return False
-
-    def raise_on_runtime_micro_op_conflict(self, other_micro_op, args):
-        pass
-
-    def check_for_runtime_data_conflict(self, obj):
-        if super(DictSetterType, self).check_for_runtime_data_conflict(obj):
-            return True
-
-        return False
+#     def check_for_new_micro_op_type_conflict(self, other_micro_op_type, other_micro_op_types):
+#         if isinstance(other_micro_op_type, (DictGetterType, DictWildcardGetterType)):
+#             other_key, other_type = get_key_and_type(other_micro_op_type)
+#             if other_key is not WILDCARD and other_key != self.key:
+#                 return False
+#             if not self.type_error and not other_micro_op_type.type_error and not other_type.is_copyable_from(self.value_type):
+#                 return True
+#         return False
+# 
+#     def raise_on_runtime_micro_op_conflict(self, other_micro_op, args):
+#         pass
+# 
+#     def check_for_runtime_data_conflict(self, obj):
+#         if super(DictSetterType, self).check_for_runtime_data_conflict(obj):
+#             return True
+# 
+#         return False
 
     def merge(self, other_micro_op_type):
         if other_micro_op_type.key != self.key:
@@ -493,29 +671,29 @@ class DictSetterType(DictMicroOpType):
         )
 
 
-class DictSetter(MicroOp):
-
-    def __init__(self, target_manager, key, type, key_error, type_error):
-        self.target_manager = target_manager
-        self.key = key
-        self.value_type = type
-        self.key_error = key_error
-        self.type_error = type_error
-
-    def invoke(self, new_value, **kwargs):
-        get_manager(new_value)
-        target_manager = self.target_manager
-        raise_micro_op_conflicts(self, [ new_value ], target_manager.get_flattened_micro_op_types())
-
-        new_value_type = get_type_of_value(new_value)
-        if not self.value_type.is_copyable_from(new_value_type):
-            raise FatalError()
-
-        self.target_manager.unbind_key(self.key)
-
-        self.target_manager.obj.wrapped[self.key] = new_value
-
-        self.target_manager.bind_key(self.key)
+# class DictSetter(MicroOp):
+# 
+#     def __init__(self, target_manager, key, type, key_error, type_error):
+#         target_manager = target_manager
+#         self.key = key
+#         self.value_type = type
+#         self.key_error = key_error
+#         self.type_error = type_error
+# 
+#     def invoke(self, new_value, **kwargs):
+#         get_manager(new_value)
+#         target_manager = target_manager
+#         raise_micro_op_conflicts(self, [ new_value ], target_manager.get_flattened_micro_op_types())
+# 
+#         new_value_type = get_type_of_value(new_value)
+#         if not self.value_type.is_copyable_from(new_value_type):
+#             raise FatalError()
+# 
+#         target_manager.unbind_key(self.key)
+# 
+#         target_manager.obj.wrapped[self.key] = new_value
+# 
+#         target_manager.bind_key(self.key)
 
 
 class InvalidDeletion(Exception):
@@ -527,11 +705,47 @@ class DictWildcardDeletterType(DictMicroOpType):
     def __init__(self, key_error):
         self.key_error = key_error
 
-    def create(self, target_manager):
-        return DictWildcardDeletter(target_manager, self.key_error)
+    def invoke(self, target_manager, key, **kwargs):
+        self.raise_micro_op_invocation_conflicts(target_manager, key)
 
-    def can_be_derived_from(self, other_micro_op_type):
-        return not other_micro_op_type.key_error or self.key_error
+        target_manager.unbind_key(key)
+ 
+        del target_manager.obj.wrapped[key]
+
+    def raise_micro_op_invocation_conflicts(self, target_manager, key):
+        target_type = target_manager.get_effective_composite_type()
+        default_factory = target_type.get_micro_op_type(("default-factory",))
+        has_default_factory = default_factory is not None
+
+        wildcard_getter = target_type.get_micro_op_type(("get-wildcard", ))
+        if wildcard_getter and not wildcard_getter.key_error and not has_default_factory:
+            raise_if_safe(InvalidDereferenceKey, self.type_error)
+
+        detail_getter = target_type.get_micro_op_type(("get", key))
+        if detail_getter and not detail_getter.key_error and not has_default_factory:
+            raise_if_safe(InvalidDereferenceKey, self.type_error)
+
+    def is_derivable_from(self, other_type, data):
+        if data is not None:
+            return True
+
+        other_micro_op_type = other_type.get_micro_op_type(("delete-wildcard", ))
+        return other_micro_op_type and not other_micro_op_type.key_error or self.key_error
+
+    def conflicts_with(self, our_type, other_type):
+        default_factory = our_type.get_micro_op_type(("default-factory",))
+        has_default_factory = default_factory is not None
+
+        wildcard_getter = other_type.get_micro_op_type(("get-wildcard", ))
+        if wildcard_getter and not self.key_error and not wildcard_getter.key_error and not has_default_factory:
+            return True
+
+        for key, other_getter in other_type.micro_op_types.items():
+            if key[0] == "get":
+                if not self.key_error and not other_getter.key_error and not has_default_factory:
+                    return True
+
+        return False
 
     def replace_inferred_type(self, other_micro_op_type):
         return self
@@ -542,22 +756,22 @@ class DictWildcardDeletterType(DictMicroOpType):
     def unbind(self, source_type, key, target):
         pass
 
-    def check_for_new_micro_op_type_conflict(self, other_micro_op_type, other_micro_op_types):
-        if isinstance(other_micro_op_type, (DictGetterType, DictWildcardGetterType)):
-            default_factory = other_micro_op_types.get(("default-factory",), None)
-            has_default_factory = default_factory is not None
-
-            if not other_micro_op_type.key_error and not has_default_factory:
-                return True
-        return False
-
-    def raise_on_runtime_micro_op_conflict(self, other_micro_op, args):
-        return False
-
-    def check_for_runtime_data_conflict(self, obj):
-        if super(DictWildcardDeletterType, self).check_for_runtime_data_conflict(obj):
-            return True
-        return False
+#     def check_for_new_micro_op_type_conflict(self, other_micro_op_type, other_micro_op_types):
+#         if isinstance(other_micro_op_type, (DictGetterType, DictWildcardGetterType)):
+#             default_factory = other_micro_op_types.get(("default-factory",), None)
+#             has_default_factory = default_factory is not None
+# 
+#             if not other_micro_op_type.key_error and not has_default_factory:
+#                 return True
+#         return False
+# 
+#     def raise_on_runtime_micro_op_conflict(self, other_micro_op, args):
+#         return False
+# 
+#     def check_for_runtime_data_conflict(self, obj):
+#         if super(DictWildcardDeletterType, self).check_for_runtime_data_conflict(obj):
+#             return True
+#         return False
 
     def merge(self, other_micro_op_type):
         return DictWildcardDeletterType(
@@ -565,18 +779,18 @@ class DictWildcardDeletterType(DictMicroOpType):
         )
 
 
-class DictWildcardDeletter(MicroOp):
-    def __init__(self, target_manager, key_error):
-        self.target_manager = target_manager
-        self.key_error = key_error
-
-    def invoke(self, key, **kwargs):
-        target_manager = self.target_manager
-        raise_micro_op_conflicts(self, [ key ], target_manager.get_flattened_micro_op_types())
-
-        self.target_manager.unbind_key(key)
-
-        del self.target_manager.obj.wrapped[key]
+# class DictWildcardDeletter(MicroOp):
+#     def __init__(self, target_manager, key_error):
+#         target_manager = target_manager
+#         self.key_error = key_error
+# 
+#     def invoke(self, key, **kwargs):
+#         target_manager = target_manager
+#         raise_micro_op_conflicts(self, [ key ], target_manager.get_flattened_micro_op_types())
+# 
+#         target_manager.unbind_key(key)
+# 
+#         del target_manager.obj.wrapped[key]
 
 
 class DictDeletterType(DictMicroOpType):
@@ -584,11 +798,46 @@ class DictDeletterType(DictMicroOpType):
         self.key = key
         self.key_error = key_error
 
-    def create(self, target_manager):
-        return DictDeletter(target_manager, self.key, self.key_error)
+    def invoke(self, target_manager, **kwargs):
+        self.raise_micro_op_invocation_conflicts(target_manager)
 
-    def can_be_derived_from(self, other_micro_op_type):
-        return not other_micro_op_type.key_error or self.key_error
+        target_manager.unbind_key(self.key)
+
+        del target_manager.obj.wrapped[self.key]
+
+    def raise_micro_op_invocation_conflicts(self, target_manager):
+        target_type = target_manager.get_effective_composite_type()
+        default_factory = target_type.get_micro_op_type(("default-factory",))
+        has_default_factory = default_factory is not None
+
+        wildcard_getter = target_type.get_micro_op_type(("get-wildcard", ))
+        if wildcard_getter and not wildcard_getter.key_error and not has_default_factory:
+            raise_if_safe(InvalidDereferenceKey, self.type_error)
+
+        detail_getter = target_type.get_micro_op_type(("get", self.key))
+        if detail_getter and not detail_getter.key_error and not has_default_factory:
+            raise_if_safe(InvalidDereferenceKey, self.type_error)
+
+    def is_derivable_from(self, other_type, data):
+        if data is not None:
+            return True
+
+        other_micro_op_type = other_type.get_micro_op_type(("delete", self.key))
+        return other_micro_op_type and not other_micro_op_type.key_error or self.key_error
+
+    def conflicts_with(self, our_type, other_type):
+        default_factory = our_type.get_micro_op_type(("default-factory",))
+        has_default_factory = default_factory is not None
+
+        wildcard_getter = other_type.get_micro_op_type(("get-wildcard", ))
+        if wildcard_getter and not self.key_error and not wildcard_getter.key_error and not has_default_factory:
+            return True
+
+        detail_getter = other_type.get_micro_op_type(("get", self.key))
+        if detail_getter and not self.key_error and not detail_getter.key_error and not has_default_factory:
+            return True
+
+        return False
 
     def replace_inferred_type(self, other_micro_op_type):
         return self
@@ -599,40 +848,40 @@ class DictDeletterType(DictMicroOpType):
     def unbind(self, key, target):
         pass
 
-    def check_for_new_micro_op_type_conflict(self, other_micro_op_type, other_micro_op_types):
-        if isinstance(other_micro_op_type, (DictGetterType, DictWildcardGetterType)):
-            other_key, _ = get_key_and_type(other_micro_op_type)
-            if other_key is not WILDCARD and other_key != self.key:
-                return False
-            if not other_micro_op_type.key_error:
-                return True
-        return False
-
-    def raise_on_runtime_micro_op_conflict(self, other_micro_op, args):
-        pass
-
-    def check_for_runtime_data_conflict(self, obj):
-        if super(DictDeletterType, self).check_for_runtime_data_conflict(obj):
-            return True
-        return False
+#     def check_for_new_micro_op_type_conflict(self, other_micro_op_type, other_micro_op_types):
+#         if isinstance(other_micro_op_type, (DictGetterType, DictWildcardGetterType)):
+#             other_key, _ = get_key_and_type(other_micro_op_type)
+#             if other_key is not WILDCARD and other_key != self.key:
+#                 return False
+#             if not other_micro_op_type.key_error:
+#                 return True
+#         return False
+# 
+#     def raise_on_runtime_micro_op_conflict(self, other_micro_op, args):
+#         pass
+# 
+#     def check_for_runtime_data_conflict(self, obj):
+#         if super(DictDeletterType, self).check_for_runtime_data_conflict(obj):
+#             return True
+#         return False
 
     def merge(self, other_micro_op_type):
         return DictDeletterType(self.key, self.key_error or other_micro_op_type.key_error)
 
 
-class DictDeletter(MicroOp):
-    def __init__(self, target_manager, key, key_error):
-        self.target_manager = target_manager
-        self.key = key
-        self.key_error = key_error
-
-    def invoke(self, **kwargs):
-        target_manager = self.target_manager
-        raise_micro_op_conflicts(self, [ ], target_manager.get_flattened_micro_op_types())
-
-        self.target_manager.unbind_key(self.key)
-
-        del self.target_manager.obj.wrapped[self.key]
+# class DictDeletter(MicroOp):
+#     def __init__(self, target_manager, key, key_error):
+#         target_manager = target_manager
+#         self.key = key
+#         self.key_error = key_error
+# 
+#     def invoke(self, **kwargs):
+#         target_manager = target_manager
+#         raise_micro_op_conflicts(self, [ ], target_manager.get_flattened_micro_op_types())
+# 
+#         target_manager.unbind_key(self.key)
+# 
+#         del target_manager.obj.wrapped[self.key]
 
 def is_dict_checker(obj):
     return isinstance(obj, RDHDict)
@@ -669,16 +918,14 @@ class RDHDict(Composite, DictMixin, object):
 
             micro_op_type = manager.get_micro_op_type(("get", key))
             if micro_op_type is not None:
-                micro_op = micro_op_type.create(manager)
-                return micro_op.invoke()
+                return micro_op_type.invoke(manager)
             else:
                 micro_op_type = manager.get_micro_op_type(("get-wildcard",))
 
                 if micro_op_type is None:
                     raise MissingMicroOp()
 
-                micro_op = micro_op_type.create(manager)
-                return micro_op.invoke(key)
+                return micro_op_type.invoke(manager, key)
         except InvalidDereferenceKey:
             raise KeyError()
 
@@ -695,16 +942,14 @@ class RDHDict(Composite, DictMixin, object):
 
             micro_op_type = manager.get_micro_op_type(("set", key))
             if micro_op_type is not None:
-                micro_op = micro_op_type.create(manager)
-                micro_op.invoke(value)
+                micro_op_type.invoke(manager, value)
             else:
                 micro_op_type = manager.get_micro_op_type(("set-wildcard",))
 
                 if micro_op_type is None:
                     raise MissingMicroOp()
 
-                micro_op = micro_op_type.create(manager)
-                micro_op.invoke(key, value)
+                micro_op_type.invoke(manager, key, value)
         except InvalidAssignmentKey:
             raise KeyError()
 
@@ -719,16 +964,14 @@ class RDHDict(Composite, DictMixin, object):
 
             micro_op_type = manager.get_micro_op_type(("delete", key))
             if micro_op_type is not None:
-                micro_op = micro_op_type.create(manager)
-                return micro_op.invoke()
+                return micro_op_type.invoke(manager)
             else:
                 micro_op_type = manager.get_micro_op_type(("delete-wildcard",))
     
                 if micro_op_type is None:
                     raise MissingMicroOp()
-    
-                micro_op = micro_op_type.create(manager)
-                return micro_op.invoke(key)
+
+                return micro_op_type.invoke(manager, key)
         except MissingMicroOp:
             raise KeyError()
 

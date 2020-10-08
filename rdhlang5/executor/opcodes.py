@@ -7,6 +7,7 @@ import ast
 import collections
 from pydoc import visiblename
 
+from jsonpickle.util import is_list
 from traitlets.traitlets import HasDescriptors
 
 from log import logger
@@ -18,13 +19,16 @@ from rdhlang5.executor.function_type import OpenFunctionType, ClosedFunctionType
 from rdhlang5.executor.type_factories import enrich_type
 from rdhlang5.type_system.builtins import BuiltInFunctionGetterType, \
     ListInsertFunctionType, ObjectGetFunctionType
-from rdhlang5.type_system.composites import CompositeType
+from rdhlang5.type_system.composites import CompositeType, dynamic_bind
 from rdhlang5.type_system.core_types import AnyType, Type, merge_types, Const, \
     UnitType, NoValueType, AllowedValuesNotAvailable, unwrap_types, IntegerType, \
     BooleanType, remove_type
-from rdhlang5.type_system.default_composite_types import rich_composite_type
+from rdhlang5.type_system.default_composite_types import rich_composite_type, \
+    DEFAULT_OBJECT_TYPE, readonly_rich_composite_type, \
+    READONLY_DEFAULT_OBJECT_TYPE
 from rdhlang5.type_system.dict_types import RDHDict, DictGetterType, \
-    DictSetterType, DictWildcardGetterType, DictWildcardSetterType
+    DictSetterType, DictWildcardGetterType, DictWildcardSetterType, \
+    is_dict_checker
 from rdhlang5.type_system.exceptions import FatalError, InvalidDereferenceType, \
     InvalidDereferenceKey, InvalidAssignmentType, InvalidAssignmentKey
 from rdhlang5.type_system.list_types import RDHList, ListGetterType, \
@@ -36,8 +40,8 @@ from rdhlang5.type_system.micro_ops import merge_composite_types
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType, \
     ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
     ObjectWildcardSetterType, is_object_checker
-from rdhlang5.utils import MISSING, NO_VALUE, is_debug, one_shot_memoize
-from jsonpickle.util import is_list
+from rdhlang5.utils import MISSING, NO_VALUE, is_debug, one_shot_memoize, \
+    bind_runtime_contexts
 
 
 def evaluate(expression, context, frame_manager, immediate_context=None):
@@ -205,11 +209,17 @@ class ObjectTemplateOp(Opcode):
 
     def __init__(self, data, visitor):
         super(ObjectTemplateOp, self).__init__(data, visitor)
+        if not isinstance(data.opcodes, RDHList):
+            raise FatalError()
+        for e in data.opcodes:
+            if not isinstance(e, tuple) and len(e) != 2:
+                raise FatalError()
         self.opcodes = {
             enrich_opcode(key, visitor): enrich_opcode(opcode, visitor)
-            for key, opcode in data.opcodes.items()
+            for key, opcode in data.opcodes
         }
 
+    @abstractmethod
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
 
@@ -280,15 +290,14 @@ class ObjectTemplateOp(Opcode):
         micro_ops[("set-wildcard",)] = ObjectWildcardSetterType(AnyType(), AnyType(), True, True)
         micro_ops[("get", "get")] = BuiltInFunctionGetterType(ObjectGetFunctionType(micro_ops[("get-wildcard",)]))
 
-        break_types.add(
-            "value",
-            CompositeType(
-                micro_ops,
-                is_object_checker,
-                initial_data=RDHObject(initial_data),
-                is_revconst=True
-            )
+        value_type = CompositeType(
+            micro_ops,
+            is_object_checker,
+            initial_data=RDHObject(initial_data),
+            is_revconst=True
         )
+
+        break_types.add("value", value_type)
 
         return break_types.build()
 
@@ -354,10 +363,10 @@ class DictTemplateOp(Opcode):
             if initial_value is not MISSING:
                 initial_data[key] = initial_value
 
-        micro_ops[("get-wildcard",)] = DictWildcardGetterType(rich_composite_type, True, False)
-        micro_ops[("set-wildcard",)] = DictWildcardSetterType(rich_composite_type, True, True)
+        micro_ops[("get-wildcard",)] = DictWildcardGetterType(AnyType(), rich_composite_type, True, False)
+        micro_ops[("set-wildcard",)] = DictWildcardSetterType(AnyType(), rich_composite_type, True, True)
 
-        break_types.add("value", CompositeType(micro_ops, initial_data=initial_data, is_revconst=True))
+        break_types.add("value", CompositeType(micro_ops, is_dict_checker, initial_data=initial_data, is_revconst=True))
 
         return break_types.build()
 
@@ -449,9 +458,9 @@ def get_context_type(context):
             if hasattr(context.types, "outer"):
                 value_type["outer"] = context.types.outer
         if hasattr(context, "prepare"):
-            value_type["prepare"] = get_type_of_value(context.prepare)
+            value_type["prepare"] = readonly_rich_composite_type
         if hasattr(context, "static"):
-            value_type["static"] = get_type_of_value(context.static)
+            value_type["static"] = readonly_rich_composite_type
         context_manager._context_type = RDHObjectType(value_type, name="context-type-{}".format(context_manager.debug_reason))
 
     return context_manager._context_type
@@ -894,16 +903,14 @@ class InsertOp(Opcode):
                     if self.invalid_rvalue_error and not direct_micro_op_type.value_type.is_copyable_from(get_type_of_value(rvalue)):
                         return frame.exception(self.INVALID_RVALUE())
 
-                    micro_op = direct_micro_op_type.create(manager)
-                    return frame.value(micro_op.invoke(rvalue, trust_caller=True))
+                    return frame.value(direct_micro_op_type.invoke(manager, rvalue, trust_caller=True))
 
                 wildcard_micro_op_type = self.wildcard_micro_ops.get(reference, None)
                 if wildcard_micro_op_type:
                     if self.invalid_rvalue_error and not wildcard_micro_op_type.value_type.is_copyable_from(get_type_of_value(rvalue)):
                         return frame.exception(self.INVALID_RVALUE())
 
-                    micro_op = wildcard_micro_op_type.create(manager)
-                    return frame.value(micro_op.invoke(reference, rvalue, trust_caller=True))
+                    return frame.value(wildcard_micro_op_type.invoke(manager, reference, rvalue, trust_caller=True))
 
 #                 direct_micro_op_type = manager.get_micro_op_type(("insert", reference))
 #                 if direct_micro_op_type:
@@ -1174,8 +1181,10 @@ class ShiftOp(Opcode):
         break_types = BreakTypesFactory(self)
 
         value_type, other_break_types = get_expression_break_types(self.opcode, context, frame_manager, immediate_context) 
+
         restart_type_value = evaluate(self.restart_type, context, frame_manager)
-        self.restart_type = enrich_type(restart_type_value)
+        with dynamic_bind(restart_type_value, READONLY_DEFAULT_OBJECT_TYPE):
+            self.restart_type = enrich_type(restart_type_value)
 
         value_type = flatten_out_types(value_type)
         break_types.merge(other_break_types)

@@ -8,8 +8,9 @@ from rdhlang5.type_system.exceptions import FatalError, MicroOpTypeConflict, \
     IncorrectObjectTypeForMicroOp
 from rdhlang5.type_system.managers import get_manager
 from rdhlang5.type_system.micro_ops import MicroOpType, \
-    MicroOp, merge_composite_types
+    merge_composite_types
 from rdhlang5.utils import is_debug, raise_from, capture_raise
+from contextlib import contextmanager
 
 
 class InferredType(Type):
@@ -44,6 +45,18 @@ class RuntimeInitialDataConflict(IsNotCopyable):
     def __repr__(self):
         return "RuntimeInitialDataConflict<{}, {}>".format(self.binding_micro_op, self.initial_data)
 
+@contextmanager
+def dynamic_bind(value, composite_type):
+    if not isinstance(composite_type, CompositeType):
+        raise FatalError()
+
+    manager = get_manager(value)
+    try:
+        manager.add_composite_type(composite_type)
+        yield
+    finally:
+        manager.remove_composite_type(composite_type)
+
 class CompositeType(Type):
     def __init__(self, micro_op_types, python_object_type_checker, initial_data=None, is_revconst=False, name=None):
         if not isinstance(micro_op_types, dict):
@@ -61,15 +74,6 @@ class CompositeType(Type):
         self.is_revconst = is_revconst
         self.name = name or "unknown"
         self.python_object_type_checker = python_object_type_checker
-
-#         if is_debug():
-#             for micro_op_type in micro_op_types.values():
-#                 micro_op_type_type = getattr(micro_op_type, "type", None)
-#                 if not micro_op_type_type:
-#                     continue
-#                 for micro_op_type_subtype in unwrap_types(micro_op_type_type):
-#                     if isinstance(micro_op_type_subtype, CompositeType) and micro_op_type_subtype.is_revconst != is_revconst:
-#                         raise FatalError()
 
     def replace_inferred_types(self, other):
         if not isinstance(other, CompositeType):
@@ -116,19 +120,14 @@ class CompositeType(Type):
         if not self.python_object_type_checker(obj):
             raise IncorrectObjectTypeForMicroOp()
 
-    def check_for_self_micro_op_conflicts(self):
-        for first in self.micro_op_types.values():
-            for second in self.micro_op_types.values():
-                first_check = first.check_for_new_micro_op_type_conflict(second, self.micro_op_types)
-                second_check = second.check_for_new_micro_op_type_conflict(first, self.micro_op_types)
-                if first_check != second_check:
-                    pass
-                if first_check is True:
-                    first_check = first.check_for_new_micro_op_type_conflict(second, self.micro_op_types)
-                    return first_check
-        return False
+    def is_self_consistent(self):
+        for micro_op in self.micro_op_types.values():
+            if micro_op.conflicts_with(self, self):
+                return False
+        return True
 
     def internal_is_copyable_from(self, other):
+        raise ValueError()
         if not isinstance(other, CompositeType):
             return IsNotCompositeType()
 
@@ -158,6 +157,47 @@ class CompositeType(Type):
         return True
 
     def is_copyable_from(self, other):
+        if self is other:
+            return True        
+        if isinstance(other, OneOfType):
+            return other.is_copyable_to(self)
+        if not isinstance(other, CompositeType):
+            return IsNotCompositeType()
+        if self.micro_op_types is other.micro_op_types:
+            return True
+
+        try:
+            cache_initialized_here = False
+            if getattr(composite_type_is_copyable_cache, "_is_copyable_from_cache", None) is None:
+                composite_type_is_copyable_cache._is_copyable_from_cache = defaultdict(lambda: defaultdict(lambda: None))
+                cache_initialized_here = True
+            cache = composite_type_is_copyable_cache._is_copyable_from_cache
+
+            result = cache[id(self)][id(other)]
+            if result is not None:
+                return result
+
+            result = True
+
+            cache[id(self)][id(other)] = result
+            cache[id(other)][id(self)] = result
+
+            for micro_op_type in self.micro_op_types.values():
+                if not micro_op_type.is_derivable_from(other, None):
+                    result = False
+
+            cache[id(self)][id(other)] = result
+            cache[id(other)][id(self)] = result
+
+            return result
+        finally:
+            if cache_initialized_here:
+                composite_type_is_copyable_cache._is_copyable_from_cache = None
+
+        return True
+
+    def old_is_copyable_from(self, other):
+        raise ValueError()
         if self is other:
             return True
 
@@ -366,7 +406,39 @@ class CompositeObjectManager(object):
                 self.obj, new_merged_composite_type.micro_op_types
             )
 
-    def add_composite_type(self, type, caller_has_verified_type=False):
+    def add_composite_type(self, new_type, caller_has_verified_type=False):
+        type_id = id(new_type)
+
+        if new_type.is_revconst:
+            raise FatalError()
+
+        new = self.attached_type_counts.get(type_id, 0) == 0 
+
+        if not new_type.is_self_consistent():
+            raise MicroOpTypeConflict()
+
+        new_type.check_internal_python_object_type(self.obj)
+        existing_type = self.get_effective_composite_type()
+
+        if new:
+            if is_debug() or not caller_has_verified_type:
+                new_type.check_internal_python_object_type(self.obj)
+                for micro_op in new_type.micro_op_types.values():
+                    if not micro_op.is_derivable_from(existing_type, self.obj):
+                        raise MicroOpTypeConflict(self.obj, new_type)
+
+                    if micro_op.conflicts_with(new_type, existing_type):
+                        raise MicroOpTypeConflict(self.obj, new_type)
+
+            self.cached_effective_composite_type = None
+            self.attached_types[type_id] = new_type
+
+            for tag, micro_op_type in new_type.micro_op_types.items():
+                micro_op_type.bind(new_type, None, self)
+
+        self.attached_type_counts[type_id] += 1
+
+    def old_add_composite_type(self, type, caller_has_verified_type=False):
 #        if self.debug_reason is None:
 #            print self.debug_reason
         type_id = id(type)
@@ -409,8 +481,9 @@ class CompositeObjectManager(object):
 
         if dead:
             self.cached_effective_composite_type = None
-            del self.attached_types[type_id]
-            del self.attached_type_counts[type_id]
+            if type_id in self.attached_types:
+                del self.attached_types[type_id]
+                del self.attached_type_counts[type_id]
 
             for tag, micro_op_type in type.micro_op_types.items():
                 micro_op_type.unbind(type, None, self)
@@ -439,6 +512,9 @@ class DefaultFactoryType(MicroOpType):
     def create(self, target):
         return DefaultFactory(target)
 
+    def invoke(self, target_manager, key):
+        return target_manager.default_factory(target_manager.obj, key)
+
     def can_be_derived_from(self, other_micro_op):
         return self.type.is_copyable_from(other_micro_op.type)
 
@@ -463,10 +539,3 @@ class DefaultFactoryType(MicroOpType):
     def check_for_runtime_data_conflict(self, obj):
         if get_manager(obj, "defaultfactory.check_for_runtime_data_conflict").default_factory is None:
             raise MicroOpTypeConflict()
-
-class DefaultFactory(MicroOp):
-    def __init__(self, target_manager):
-        self.target_manager = target_manager
-
-    def invoke(self, key, **kwargs):
-        return self.target_manager.default_factory(self.target_manager.obj, key)

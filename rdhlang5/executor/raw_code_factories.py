@@ -20,9 +20,9 @@ def check_is_opcode(data):
 
 
 def type_lit(name):
-    return literal_op(RDHObject({
-        "type": name
-    }, debug_reason="type-literal"))
+    return object_template_op({
+        "type": literal_op(name)
+    }, debug_reason="type-literal")
 
 
 def unit_type(value):
@@ -49,6 +49,7 @@ def object_type(properties, wildcard_value_type=None, wildcard_key_type=None):
         type["wildcard_key_type"] = wildcard_key_type
     return object_template_op(type, debug_reason="type-literal")
 
+
 def list_type(entry_types, wildcard_type):
     type = {
         "type": literal_op("List"),
@@ -58,12 +59,14 @@ def list_type(entry_types, wildcard_type):
         type["wildcard_type"] = wildcard_type
     return object_template_op(type, debug_reason="type-literal")
 
+
 def composite_type(properties, python_type):
     return object_template_op({
         "type": literal_op("Composite"),
         "python_type": literal_op(python_type),
         "properties": list_template_op(properties)
     })
+
 
 def function_type(argument_type, break_types):
     if not isinstance(break_types, dict):
@@ -153,14 +156,18 @@ def literal_op(value):
 
 
 def object_template_op(values, debug_reason="code", **kwargs):
+    values_list = []
+
     for k, v in values.items():
         check_is_opcode(v)
         if isinstance(k, basestring):
-            values[literal_op(k)] = v
-            del values[k]
+            k = literal_op(k)
+
+        values_list.append([ k, v ])
+
     return RDHObject(spread_dict({
         "opcode": "object_template",
-        "opcodes": RDHDict(values, debug_reason=debug_reason)
+        "opcodes": RDHList(values_list, debug_reason=debug_reason)
     }, **kwargs), debug_reason=debug_reason)
 
 
@@ -228,12 +235,14 @@ def loop_op(opcode, **kwargs):
         "code": opcode
     }, **kwargs), debug_reason="code")
 
+
 def transform(*args, **kwargs):
     transforms = args[:-1]
     code = args[-1]
     for input, output in reversed(transforms):
         code = transform_op(input, output, code, **kwargs)
     return code
+
 
 def transform_op(*args, **kwargs):
     if len(args) == 1:
@@ -258,6 +267,7 @@ def transform_op(*args, **kwargs):
         op["code"] = code
     return RDHObject(spread_dict(op, **kwargs), debug_reason="code")
 
+
 def shift_op(code, restart_type, **kwargs):
     check_is_opcode(code)
     check_is_opcode(restart_type)
@@ -266,6 +276,7 @@ def shift_op(code, restart_type, **kwargs):
         "code": code,
         "restart_type": restart_type
     }, **kwargs), debug_reason="code")
+
 
 def reset_op(*args, **kwargs):
     if len(args) == 1:
@@ -289,6 +300,7 @@ def reset_op(*args, **kwargs):
         result["argument"] = argument
 
     return RDHObject(spread_dict(result, **kwargs), debug_reason="code")
+
 
 def return_op(code):
     return transform_op("value", "return", code)
@@ -331,16 +343,20 @@ def try_catch_op(try_opcode, catch_function, finally_opcode=None):
         finally_opcode
     )
 
+
 def throw_op(code):
     return transform_op("value", "exception", code)
 
+
 def continue_op(code):
     return transform_op("value", "continue", code)
+
 
 def context_op(**kwargs):
     return RDHObject(spread_dict({
         "opcode": "context",
     }, **kwargs), debug_reason="code")
+
 
 def is_op(expression, type, **kwargs):
     check_is_opcode(expression)
@@ -350,6 +366,7 @@ def is_op(expression, type, **kwargs):
         "expression": expression,
         "type": type
     }, **kwargs), debug_reason="code")
+
 
 def dereference_op(of, reference, safe, **kwargs):
     check_is_opcode(of)
@@ -361,6 +378,7 @@ def dereference_op(of, reference, safe, **kwargs):
         "safe": safe
     }, **kwargs), debug_reason="code")
 
+
 def dynamic_dereference_op(reference, **kwargs):
     if not isinstance(reference, basestring):
         raise FatalError()
@@ -368,6 +386,7 @@ def dynamic_dereference_op(reference, **kwargs):
         "opcode": "dynamic_dereference",
         "reference": reference
     }, **kwargs), debug_reason="code")
+
 
 def assignment_op(of, reference, rvalue, **kwargs):
     check_is_opcode(of)
@@ -380,6 +399,7 @@ def assignment_op(of, reference, rvalue, **kwargs):
         "rvalue": rvalue
     }, **kwargs), debug_reason="code")
 
+
 def insert_op(of, reference, rvalue):
     check_is_opcode(of)
     check_is_opcode(reference)
@@ -391,6 +411,7 @@ def insert_op(of, reference, rvalue):
         "rvalue": rvalue
     }, debug_reason="code")
 
+
 def map_op(composite, mapper):
     check_is_opcode(composite)
     check_is_opcode(mapper)
@@ -399,6 +420,7 @@ def map_op(composite, mapper):
         "composite": composite,
         "mapper": mapper
     }, debug_reason="code")
+
 
 def condition_op(condition, when_true, when_false):
     check_is_opcode(condition)
@@ -535,11 +557,14 @@ def unbound_assignment(name, rvalue):
         "rvalue": rvalue
     }, debug_reason="code")
 
+
 def prepare_function_lit(function_lit, **kwargs):
     return close_op(static_op(prepare_op(literal_op(function_lit), **kwargs), **kwargs), context_op(**kwargs), **kwargs)
 
+
 def prepared_function(*args, **kwargs):
     return prepare_function_lit(function_lit(*args, **kwargs), **kwargs)
+
 
 def local_function(local_initializer, code, **kwargs):
     return prepared_function(
@@ -551,10 +576,12 @@ def local_function(local_initializer, code, **kwargs):
         **kwargs
     )
 
+
 def munge_ints(v):
     if v.isdigit():
         return int(v)
     return v
+
 
 def dereference(*vars, **kwargs):
     result = context_op()

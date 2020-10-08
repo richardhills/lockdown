@@ -151,6 +151,7 @@ TYPES = {
 
 
 def enrich_type(data):
+    from rdhlang5.type_system.managers import get_manager
     if not isinstance(data, RDHObject):
         raise PreparationException("Unknown type data {}, {}".format(data, type(data)))
     if not hasattr(data, "type"):

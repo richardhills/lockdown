@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+import StringIO
+import cProfile
+from contextlib import contextmanager
 from functools import wraps
+import pstats
 import sys
 
 from rdhlang5.type_system.exceptions import FatalError
@@ -40,6 +44,16 @@ def micro_op_repr(opname, key, key_error, type=None, type_error=None):
         return "{}.{}{}.{}{}".format(opname, key, "!" if key_error else "", type.short_str(), "!" if type_error else "")
     else:
         return "{}.{}{}".format(opname, key, "!" if key_error else "")
+
+@contextmanager
+def profile(output_file):
+    try:
+        pr = cProfile.Profile()
+        pr.enable()
+        yield
+    finally:
+        pr.disable()
+        pr.dump_stats(output_file)
 
 def one_shot_memoize(func):
     @wraps(func)

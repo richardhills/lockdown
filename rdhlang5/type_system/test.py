@@ -831,27 +831,27 @@ class TestRDHListType(TestCase):
 
     def test_extreme_type1_contains_conflicts(self):
         foo = RDHListType([ IntegerType() ], StringType())
-        self.assertTrue(foo.check_for_self_micro_op_conflicts())
+        self.assertFalse(foo.is_self_consistent())
 
     def test_reified_extreme_type_contains_no_conflicts(self):
         foo = RDHListType([ IntegerType() ], IntegerType()).reify_revconst_types()
-        self.assertFalse(foo.check_for_self_micro_op_conflicts())
+        self.assertTrue(foo.is_self_consistent())
 
     def test_simple_type1_has_no_conflicts(self):
         foo = RDHListType([], IntegerType())
-        self.assertFalse(foo.check_for_self_micro_op_conflicts())
+        self.assertTrue(foo.is_self_consistent())
 
     def test_simple_type2_has_no_conflicts(self):
         foo = RDHListType([ IntegerType() ], None)
-        self.assertFalse(foo.check_for_self_micro_op_conflicts())
+        self.assertTrue(foo.is_self_consistent())
 
     def test_extreme_type_tamed1_has_no_conflicts(self):
         foo = RDHListType([ IntegerType() ], IntegerType())
-        self.assertFalse(foo.check_for_self_micro_op_conflicts())
+        self.assertTrue(foo.is_self_consistent())
 
     def test_extreme_type_tamed2_contains_conflicts(self):
         foo = RDHListType([ IntegerType() ], AnyType(), allow_push=False, allow_wildcard_insert=False)
-        self.assertFalse(foo.check_for_self_micro_op_conflicts())
+        self.assertTrue(foo.is_self_consistent())
 
 class TestList(TestCase):
     def test_simple_list_assignment(self):

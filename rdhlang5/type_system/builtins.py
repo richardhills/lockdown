@@ -4,7 +4,7 @@ from rdhlang5.type_system.core_types import NoValueType, IntegerType, Const, \
     UnitType, OneOfType
 from rdhlang5.type_system.exceptions import FatalError, InvalidDereferenceKey
 from rdhlang5.type_system.managers import get_manager
-from rdhlang5.type_system.micro_ops import MicroOpType, MicroOp, \
+from rdhlang5.type_system.micro_ops import MicroOpType, \
     raise_micro_op_conflicts
 from rdhlang5.utils import NOTHING
 
@@ -19,11 +19,14 @@ class BuiltInFunctionGetterType(MicroOpType):
     def replace_inferred_type(self, other_micro_op_type):
         return self
 
-    def create(self, target_manager):
-        return BuiltInFunctionGetter(self.function_class, target_manager)
+    def invoke(self, target_manager, **kwargs):
+        return self.function_class(target_manager)
 
-    def can_be_derived_from(self, other_micro_op_type):
+    def is_derivable_from(self, type, data):
         return True
+
+    def conflicts_with(self, our_type, other_type):
+        return False
 
     def merge(self, other_micro_op_type):
         return self
@@ -33,24 +36,6 @@ class BuiltInFunctionGetterType(MicroOpType):
 
     def bind(self, source_type, key, target):
         pass
-
-    def raise_on_runtime_micro_op_conflict(self, micro_op, args):
-        pass
-
-    def check_for_runtime_data_conflict(self, obj):
-        pass
-
-    def check_for_new_micro_op_type_conflict(self, other_micro_op_type, other_micro_op_types):
-        return False
-
-class BuiltInFunctionGetter(MicroOp):
-    def __init__(self, function_class, target_manager):
-        self.function_class = function_class
-        self.target_manager = target_manager
-
-    def invoke(self, **kwargs):
-        raise_micro_op_conflicts(self, [ ], self.target_manager.get_flattened_micro_op_types())
-        return self.function_class(self.target_manager)
 
 def ObjectGetFunctionType(object_wildcard_getter_opcode_type):
     from rdhlang5.executor.function import RDHFunction
@@ -117,8 +102,6 @@ def ListInsertFunctionType(insert_micro_op_type, wildcard_type):
                 if not insert_micro_op_type:
                     raise FatalError()
 
-                insert_micro_op = insert_micro_op_type.create(self.target_manager)
-
-                return frame.value(insert_micro_op.invoke(*argument))
+                return frame.value(insert_micro_op_type.invoke(self.target_manager, *argument))
 
     return ListInsertFunction
