@@ -11,9 +11,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-d', action='store_true', help='debug')
 parser.add_argument('-p', action='store_true', help='python mode')
 parser.add_argument('-s', help='cProfile mode')
-parser.add_argument('unittest_args', nargs='*')
-args = parser.parse_args()
-sys.argv[1:] = args.unittest_args
+args, unknown_args = parser.parse_known_args()
+sys.argv[1:] = unknown_args
 
 
 set_debug(args.d)
