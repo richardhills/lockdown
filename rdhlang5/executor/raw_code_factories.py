@@ -163,7 +163,7 @@ def object_template_op(values, debug_reason="code", **kwargs):
         if isinstance(k, basestring):
             k = literal_op(k)
 
-        values_list.append([ k, v ])
+        values_list.append(RDHList([ k, v ]))
 
     return RDHObject(spread_dict({
         "opcode": "object_template",
