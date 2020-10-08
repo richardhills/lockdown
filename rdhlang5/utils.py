@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+import cProfile
+from contextlib import contextmanager
 from functools import wraps
 import sys
 
@@ -67,6 +69,16 @@ def set_debug(debug):
     DEBUG_MODE = debug
 
 BIND_RUNTIME_CONTEXTS = None
+
+@contextmanager
+def profile(output_file):
+    try:
+        pr = cProfile.Profile()
+        pr.enable()
+        yield
+    finally:
+        pr.disable()
+        pr.dump_stats(output_file)
 
 def bind_runtime_contexts():
     global BIND_RUNTIME_CONTEXTS
