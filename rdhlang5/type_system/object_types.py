@@ -16,7 +16,7 @@ from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.micro_ops import MicroOpType, \
     raise_micro_op_conflicts
 from rdhlang5.utils import is_debug, MISSING, micro_op_repr, \
-    bind_runtime_contexts
+    runtime_type_information
 
 
 WILDCARD = object()
@@ -61,6 +61,8 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
             raise FatalError()
         if isinstance(value_type, NoValueType):
             raise FatalError()
+        if not runtime_type_information() and type_error:
+            raise FatalError()
         self.key_type = key_type
         self.value_type = value_type
         self.key_error = key_error
@@ -73,8 +75,8 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
         if is_debug() and not self.key_type.is_copyable_from(get_type_of_value(key)):
             raise FatalError()
 
-        if key in target_manager.obj.__dict__:
-            value = target_manager.obj.__dict__[key]
+        if key in target_manager.get_obj().__dict__:
+            value = target_manager.get_obj().__dict__[key]
         else:
             default_factory_op_type = target_manager.get_micro_op_type(("default-factory", ))
 
@@ -115,9 +117,8 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
                 return True
 
         wildcard_setter = other_type.get_micro_op_type(("set-wildcard", ))
-        if wildcard_setter:
-            if not self.type_error and not wildcard_setter.type_error and not self.value_type.is_copyable_from(wildcard_setter.value_type):
-                return True
+        if wildcard_setter and not self.type_error and not wildcard_setter.type_error and not self.value_type.is_copyable_from(wildcard_setter.value_type):
+            return True
 
         for key, other_setter_or_deleter in other_type.micro_op_types.items():
             if key[0] == "set":
@@ -147,26 +148,26 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
 
     def bind(self, source_type, key, target_manager):
         if key is not None:
-            if key not in target_manager.obj.__dict__:
+            if key not in target_manager.get_obj().__dict__:
                 raise FatalError()
             keys = [ key ]
         else:
-            keys = target_manager.obj.__dict__.keys()
+            keys = target_manager.get_obj().__dict__.keys()
         for k in keys:
             bind_type_to_manager(target_manager, source_type, k, "key", self.key_type, get_manager(k, "ObjectWildcardGetterType.bind"))
-            value = target_manager.obj.__dict__[k]
+            value = target_manager.get_obj().__dict__[k]
             bind_type_to_manager(target_manager, source_type, k, "value", self.value_type, get_manager(value, "ObjectWildcardGetterType.bind"))
 
     def unbind(self, source_type, key, target_manager):
         if key is not None:
             keys = [ key ]
         else:
-            keys = target_manager.obj.__dict__.keys()
+            keys = target_manager.get_obj().__dict__.keys()
         for k in keys:
-            if not k in target_manager.obj.__dict__:
+            if not k in target_manager.get_obj().__dict__:
                 continue
             unbind_type_to_manager(target_manager, source_type, k, "key", get_manager(k, "ObjectWildcardGetterType.unbind"))
-            value = target_manager.obj.__dict__[k]
+            value = target_manager.get_obj().__dict__[k]
             unbind_type_to_manager(target_manager, source_type, k, "value", get_manager(value, "ObjectWildcardGetterType.unbind"))
 
 
@@ -250,6 +251,8 @@ class ObjectGetterType(ObjectMicroOpType):
             raise FatalError()
         if not isinstance(key, (basestring, int)):
             raise FatalError()
+        if not runtime_type_information() and type_error:
+            raise FatalError()
         self.key = key
         self.key_type = get_type_of_value(key)
         self.value_type = value_type
@@ -260,8 +263,8 @@ class ObjectGetterType(ObjectMicroOpType):
         if is_debug() or self.key_error or self.type_error:
             self.raise_micro_op_invocation_conflicts(target_manager)
 
-        if self.key in target_manager.obj.__dict__:
-            value = target_manager.obj.__dict__[self.key]
+        if self.key in target_manager.get_obj().__dict__:
+            value = target_manager.get_obj().__dict__[self.key]
         else:
             default_factory_op = target_manager.get_micro_op_type(("default-factory", ))
 
@@ -334,18 +337,18 @@ class ObjectGetterType(ObjectMicroOpType):
     def bind(self, source_type, key, target_manager):
         if key is not None and key != self.key:
             return
-        bind_type_to_manager(target_manager, source_type, self.key, "key", self.key_type, get_manager(key, "ObjectWildcardGetterType.bind"))
-        value = target_manager.obj.__dict__[self.key]
+        bind_type_to_manager(target_manager, source_type, self.key, "key", self.key_type, get_manager(key, "ObjectGetterType.bind"))
+        value = target_manager.get_obj().__dict__[self.key]
         bind_type_to_manager(target_manager, source_type, self.key, "value", self.value_type, get_manager(value, "ObjectGetterType.bind"))
 
     def unbind(self, source_type, key, target_manager):
         if key is not None:
             if key != self.key:
                 return
-            if key not in target_manager.obj.__dict__:
+            if key not in target_manager.get_obj().__dict__:
                 return
-        unbind_type_to_manager(target_manager, source_type, self.key, "key", get_manager(key, "ObjectWildcardGetterType.bind"))
-        value = target_manager.obj.__dict__[self.key]
+        unbind_type_to_manager(target_manager, source_type, self.key, "key", get_manager(key, "ObjectGetterType.bind"))
+        value = target_manager.get_obj().__dict__[self.key]
         unbind_type_to_manager(target_manager, source_type, self.key, "value", get_manager(value, "ObjectGetterType.unbind"))
 
 #     def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
@@ -422,7 +425,7 @@ class ObjectGetterType(ObjectMicroOpType):
         )
 
     def to_ast(self, dependency_builder, target):
-        if bind_runtime_contexts() or self.type_error or self.key_error:
+        if runtime_type_information() or self.type_error or self.key_error:
             return super(ObjectGetterType, self).to_ast(dependency_builder, target)
         return compile_expression(
             "{target}.__dict__[\"{key}\"]",
@@ -437,6 +440,8 @@ class ObjectWildcardSetterType(ObjectMicroOpType):
 
     def __init__(self, key_type, value_type, key_error, type_error):
         if isinstance(value_type, NoValueType):
+            raise FatalError()
+        if not runtime_type_information() and type_error:
             raise FatalError()
         self.key_type = key_type
         self.value_type = value_type
@@ -454,7 +459,7 @@ class ObjectWildcardSetterType(ObjectMicroOpType):
 
         target_manager.unbind_key(key)
 
-        target_manager.obj.__dict__[key] = new_value
+        target_manager.get_obj().__dict__[key] = new_value
 
         target_manager.bind_key(key)
 
@@ -556,6 +561,8 @@ class ObjectSetterType(ObjectMicroOpType):
             raise FatalError()
         if not isinstance(key, (basestring, int)):
             raise FatalError()
+        if not runtime_type_information() and type_error:
+            raise FatalError()
         self.key = key
         self.value_type = value_type
         self.key_error = key_error
@@ -572,7 +579,7 @@ class ObjectSetterType(ObjectMicroOpType):
 
         target_manager.unbind_key(self.key)
 
-        target_manager.obj.__dict__[self.key] = new_value
+        target_manager.get_obj().__dict__[self.key] = new_value
 
         target_manager.bind_key(self.key)
 
@@ -666,7 +673,7 @@ class ObjectSetterType(ObjectMicroOpType):
         )
 
     def to_ast(self, dependency_builder, target, new_value):
-        if bind_runtime_contexts() or self.type_error or self.key_error:
+        if runtime_type_information() or self.type_error or self.key_error:
             return super(ObjectSetterType, self).to_ast(dependency_builder, target, new_value)
         return compile_statement(
             "{target}.__dict__[\"{key}\"] = {rvalue}",
@@ -694,7 +701,7 @@ class ObjectWildcardDeletterType(ObjectMicroOpType):
 
         target_manager.unbind_key(key)
 
-        del target_manager.obj.__dict__[key]
+        del target_manager.get_obj().__dict__[key]
 
     def raise_micro_op_invocation_conflicts(self, target_manager, key):
         target_type = target_manager.get_effective_composite_type()
@@ -777,7 +784,7 @@ class ObjectDeletterType(ObjectMicroOpType):
 
         target_manager.unbind_key(self.key)
 
-        del target_manager.obj.__dict__[self.key]
+        del target_manager.get_obj().__dict__[self.key]
 
     def raise_micro_op_invocation_conflicts(self, target_manager):
         target_type = target_manager.get_effective_composite_type()

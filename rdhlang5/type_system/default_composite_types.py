@@ -7,6 +7,7 @@ from rdhlang5.type_system.list_types import RDHListType, ListWildcardGetterType,
     ListWildcardInsertType, is_list_checker
 from rdhlang5.type_system.object_types import RDHObjectType, \
     ObjectWildcardGetterType, ObjectWildcardSetterType, is_object_checker
+from rdhlang5.utils import runtime_type_information
 
 
 READONLY_DEFAULT_OBJECT_TYPE = RDHObjectType(name="readonly-default-object-type")
@@ -27,16 +28,19 @@ DEFAULT_DICT_TYPE = RDHDictType()
 rich_composite_type = OneOfType([ DEFAULT_OBJECT_TYPE, DEFAULT_LIST_TYPE, DEFAULT_DICT_TYPE, AnyType() ])
 
 DEFAULT_OBJECT_TYPE.micro_op_types[("get-wildcard", )] = ObjectWildcardGetterType(readonly_rich_composite_type, rich_composite_type, True, False)
-DEFAULT_OBJECT_TYPE.micro_op_types[("set-wildcard", )] = ObjectWildcardSetterType(readonly_rich_composite_type, rich_composite_type, True, True)
+if runtime_type_information():
+    DEFAULT_OBJECT_TYPE.micro_op_types[("set-wildcard", )] = ObjectWildcardSetterType(readonly_rich_composite_type, rich_composite_type, True, True)
 
 DEFAULT_LIST_TYPE.micro_op_types[("get-wildcard", )] = ListWildcardGetterType(rich_composite_type, True, False)
-DEFAULT_LIST_TYPE.micro_op_types[("set-wildcard", )] = ListWildcardSetterType(rich_composite_type, True, True)
 DEFAULT_LIST_TYPE.micro_op_types[("insert", 0 )] = ListInsertType(rich_composite_type, 0, False, False)
 DEFAULT_LIST_TYPE.micro_op_types[("delete-wildcard", )] = ListWildcardDeletterType(True)
-DEFAULT_LIST_TYPE.micro_op_types[("insert-wildcard", )] = ListWildcardInsertType(rich_composite_type, True, True)
+if runtime_type_information():
+    DEFAULT_LIST_TYPE.micro_op_types[("set-wildcard", )] = ListWildcardSetterType(rich_composite_type, True, True)
+    DEFAULT_LIST_TYPE.micro_op_types[("insert-wildcard", )] = ListWildcardInsertType(rich_composite_type, True, True)
 
 DEFAULT_DICT_TYPE.micro_op_types[("get-wildcard", )] = DictWildcardGetterType(readonly_rich_composite_type, rich_composite_type, True, False)
-DEFAULT_DICT_TYPE.micro_op_types[("set-wildcard", )] = DictWildcardSetterType(readonly_rich_composite_type, rich_composite_type, True, True)
+if runtime_type_information():
+    DEFAULT_DICT_TYPE.micro_op_types[("set-wildcard", )] = DictWildcardSetterType(readonly_rich_composite_type, rich_composite_type, True, True)
 DEFAULT_DICT_TYPE.micro_op_types[("delete-wildcard", )] = DictWildcardDeletterType(True)
 
 EMPTY_OBJECT_TYPE = CompositeType({}, is_object_checker, name="empty")

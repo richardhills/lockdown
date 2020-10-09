@@ -78,8 +78,8 @@ class DictWildcardGetterType(DictMicroOpType):
         if is_debug() and not self.key_type.is_copyable_from(get_type_of_value(key)):
             raise FatalError()
 
-        if key in target_manager.obj.wrapped:
-            value = target_manager.obj.__getitem__(key, raw=True)
+        if key in target_manager.get_obj().wrapped:
+            value = target_manager.get_obj().__getitem__(key, raw=True)
         else:
             default_factory_op_type = target_manager.get_micro_op_type(("default-factory",))
 
@@ -149,20 +149,20 @@ class DictWildcardGetterType(DictMicroOpType):
         if key is not None:
             keys = [ key ]
         else:
-            keys = target_manager.obj.keys()
+            keys = target_manager.get_obj().keys()
         for k in keys:
             bind_type_to_manager(target_manager, source_type, k, "key", self.key_type, get_manager(k))
-            value = target_manager.obj.wrapped[k]
+            value = target_manager.get_obj().wrapped[k]
             bind_type_to_manager(target_manager, source_type, k, "value", self.value_type, get_manager(value))
 
     def unbind(self, source_type, key, target_manager):
         if key is not None:
             keys = [ key ]
         else:
-            keys = target_manager.obj.wrapped.keys()
+            keys = target_manager.get_obj().wrapped.keys()
         for k in keys:
             unbind_type_to_manager(target_manager, source_type, k, "key", self.key_type, get_manager(k))
-            unbind_type_to_manager(target_manager, source_type, k, "value", get_manager(target_manager.obj.wrapped[k]))
+            unbind_type_to_manager(target_manager, source_type, k, "value", get_manager(target_manager.get_obj().wrapped[k]))
 
 #     def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
 #         default_factory = micro_op_types.get(("default-factory",), None)
@@ -243,8 +243,8 @@ class DictWildcardGetterType(DictMicroOpType):
 #         if is_debug() and not self.key_type.is_copyable_from(get_type_of_value(key)):
 #             raise FatalError()
 # 
-#         if key in target_manager.obj.wrapped:
-#             value = target_manager.obj.__getitem__(key, raw=True)
+#         if key in target_manager.get_obj().wrapped:
+#             value = target_manager.get_obj().__getitem__(key, raw=True)
 #         else:
 #             default_factory_op_type = target_manager.get_micro_op_type(("default-factory",))
 # 
@@ -273,8 +273,8 @@ class DictGetterType(DictMicroOpType):
     def invoke(self, target_manager, **kwargs):
         self.raise_micro_op_invocation_conflicts(target_manager)
  
-        if self.key in target_manager.obj.wrapped:
-            value = target_manager.obj.wrapped[self.key]
+        if self.key in target_manager.get_obj().wrapped:
+            value = target_manager.get_obj().wrapped[self.key]
         else:
             default_factory_op = target_manager.get_micro_op_type(("default-factory",))
  
@@ -343,14 +343,14 @@ class DictGetterType(DictMicroOpType):
         if key is not None and key != self.key:
             return
         bind_type_to_manager(target_manager, source_type, self.key, "key", self.key_type, get_manager(key, "DictWildcardGetterType.bind"))
-        value = target_manager.obj.wrapped[self.key]
+        value = target_manager.get_obj().wrapped[self.key]
         bind_type_to_manager(target_manager, source_type, self.key, "value", self.value_type, get_manager(value, "DictWildcardGetterType.bind"))
 
     def unbind(self, source_type, key, target_manager):
         if key is not None and key != self.key:
             return
         unbind_type_to_manager(target_manager, source_type, self.key, "key", get_manager(key, "DictWildcardGetterType.bind"))
-        value = target_manager.obj.wrapped[key]
+        value = target_manager.get_obj().wrapped[key]
         unbind_type_to_manager(target_manager, source_type, self.key, "value", get_manager(value))
 
 #     def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
@@ -435,8 +435,8 @@ class DictGetterType(DictMicroOpType):
 #     def invoke(self, **kwargs):
 #         raise_micro_op_conflicts(self, [], target_manager.get_flattened_micro_op_types())
 # 
-#         if self.key in target_manager.obj.wrapped:
-#             value = target_manager.obj.wrapped[self.key]
+#         if self.key in target_manager.get_obj().wrapped:
+#             value = target_manager.get_obj().wrapped[self.key]
 #         else:
 #             default_factory_op = target_manager.get_micro_op_type(("default-factory",))
 # 
@@ -471,7 +471,7 @@ class DictWildcardSetterType(DictMicroOpType):
 
         target_manager.unbind_key(key)
 
-        target_manager.obj.wrapped[key] = new_value
+        target_manager.get_obj().wrapped[key] = new_value
 
         target_manager.bind_key(key)
 
@@ -567,7 +567,7 @@ class DictWildcardSetterType(DictMicroOpType):
 # 
 #         target_manager.unbind_key(key)
 # 
-#         target_manager.obj.wrapped[key] = new_value
+#         target_manager.get_obj().wrapped[key] = new_value
 # 
 #         target_manager.bind_key(key)
 
@@ -588,7 +588,7 @@ class DictSetterType(DictMicroOpType):
 
         target_manager.unbind_key(self.key)
 
-        target_manager.obj.wrapped[self.key] = new_value
+        target_manager.get_obj().wrapped[self.key] = new_value
 
         target_manager.bind_key(self.key)
 
@@ -691,7 +691,7 @@ class DictSetterType(DictMicroOpType):
 # 
 #         target_manager.unbind_key(self.key)
 # 
-#         target_manager.obj.wrapped[self.key] = new_value
+#         target_manager.get_obj().wrapped[self.key] = new_value
 # 
 #         target_manager.bind_key(self.key)
 
@@ -710,7 +710,7 @@ class DictWildcardDeletterType(DictMicroOpType):
 
         target_manager.unbind_key(key)
  
-        del target_manager.obj.wrapped[key]
+        del target_manager.get_obj().wrapped[key]
 
     def raise_micro_op_invocation_conflicts(self, target_manager, key):
         target_type = target_manager.get_effective_composite_type()
@@ -790,7 +790,7 @@ class DictWildcardDeletterType(DictMicroOpType):
 # 
 #         target_manager.unbind_key(key)
 # 
-#         del target_manager.obj.wrapped[key]
+#         del target_manager.get_obj().wrapped[key]
 
 
 class DictDeletterType(DictMicroOpType):
@@ -803,7 +803,7 @@ class DictDeletterType(DictMicroOpType):
 
         target_manager.unbind_key(self.key)
 
-        del target_manager.obj.wrapped[self.key]
+        del target_manager.get_obj().wrapped[self.key]
 
     def raise_micro_op_invocation_conflicts(self, target_manager):
         target_type = target_manager.get_effective_composite_type()
@@ -881,7 +881,7 @@ class DictDeletterType(DictMicroOpType):
 # 
 #         target_manager.unbind_key(self.key)
 # 
-#         del target_manager.obj.wrapped[self.key]
+#         del target_manager.get_obj().wrapped[self.key]
 
 def is_dict_checker(obj):
     return isinstance(obj, RDHDict)

@@ -363,21 +363,30 @@ def unbind_type_to_manager(source_manager, source_type, key, rel_type, value_man
 
 
 class CompositeObjectManager(object):
-    def __init__(self, obj):
-        self.obj = obj
+    def __init__(self, obj, on_gc_callback):
+        self.obj_ref = weakref.ref(obj, self.obj_gced)
+        self.obj_id = id(obj)
         self.attached_types = {}
         self.attached_type_counts = defaultdict(int)
         self.child_key_type_references = defaultdict(lambda: defaultdict(list))
         self.child_value_type_references = defaultdict(lambda: defaultdict(list))
+        self.on_gc_callback = on_gc_callback
 
         self.cached_effective_composite_type = None
 
         self.default_factory = None
         self.debug_reason = None
 
+    def get_obj(self):
+        return self.obj_ref()
+
+    def obj_gced(self, _):
+        self.on_gc_callback(self.obj_id)
+
     def get_effective_composite_type(self):
         if not self.cached_effective_composite_type:
-            self.cached_effective_composite_type = merge_composite_types(self.attached_types.values(), initial_data=self.obj, name="Composed from {}".format(self.debug_reason))
+            obj = self.get_obj()
+            self.cached_effective_composite_type = merge_composite_types(self.attached_types.values(), initial_data=obj, name="Composed from {}".format(self.debug_reason))
         return self.cached_effective_composite_type
 
     def check_for_runtime_data_conflicts(self, type):
@@ -417,18 +426,20 @@ class CompositeObjectManager(object):
         if not new_type.is_self_consistent():
             raise MicroOpTypeConflict()
 
-        new_type.check_internal_python_object_type(self.obj)
+        obj = self.get_obj()
+
+        new_type.check_internal_python_object_type(obj)
         existing_type = self.get_effective_composite_type()
 
         if new:
             if is_debug() or not caller_has_verified_type:
-                new_type.check_internal_python_object_type(self.obj)
+                new_type.check_internal_python_object_type(obj)
                 for micro_op in new_type.micro_op_types.values():
-                    if not micro_op.is_derivable_from(existing_type, self.obj):
-                        raise MicroOpTypeConflict(self.obj, new_type)
+                    if not micro_op.is_derivable_from(existing_type, obj):
+                        raise MicroOpTypeConflict(obj, new_type)
 
                     if micro_op.conflicts_with(new_type, existing_type):
-                        raise MicroOpTypeConflict(self.obj, new_type)
+                        raise MicroOpTypeConflict(obj, new_type)
 
             self.cached_effective_composite_type = None
             self.attached_types[type_id] = new_type
@@ -495,15 +506,15 @@ class CompositeObjectManager(object):
     def get_flattened_micro_op_types(self):
         return self.get_effective_composite_type().micro_op_types.values()
 
-    def unbind_key(self, key):
-        for attached_type in self.attached_types.values():
-            for other_micro_op_type in attached_type.micro_op_types.values():
-                other_micro_op_type.unbind(attached_type, key, self)
-
     def bind_key(self, key):
         for attached_type in self.attached_types.values():
             for other_micro_op_type in attached_type.micro_op_types.values():
                 other_micro_op_type.bind(attached_type, key, self)
+
+    def unbind_key(self, key):
+        for attached_type in self.attached_types.values():
+            for other_micro_op_type in attached_type.micro_op_types.values():
+                other_micro_op_type.unbind(attached_type, key, self)
 
 class DefaultFactoryType(MicroOpType):
     def __init__(self, type):

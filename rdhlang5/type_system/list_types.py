@@ -77,8 +77,8 @@ class ListWildcardGetterType(ListMicroOpType):
     def invoke(self, target_manager, key, **kwargs):
         self.raise_micro_op_invocation_conflicts(target_manager, key)
  
-        if key >= 0 and key < len(target_manager.obj):
-            value = target_manager.obj.__getitem__(key, raw=True)
+        if key >= 0 and key < len(target_manager.get_obj()):
+            value = target_manager.get_obj().__getitem__(key, raw=True)
         else:
             default_factory_op_type = target_manager.get_micro_op_type(("default-factory",))
  
@@ -154,20 +154,20 @@ class ListWildcardGetterType(ListMicroOpType):
         if key is not None:
             keys = [ key ]
         else:
-            keys = range(0, len(target_manager.obj.wrapped))
+            keys = range(0, len(target_manager.get_obj().wrapped))
         for k in keys:
-            value = target_manager.obj.wrapped[k]
+            value = target_manager.get_obj().wrapped[k]
             bind_type_to_manager(target_manager, source_type, k, "value", self.value_type, get_manager(value))
 
     def unbind(self, source_type, key, target_manager):
         if key is not None:
-            if key < 0 or key >= len(target_manager.obj):
+            if key < 0 or key >= len(target_manager.get_obj()):
                 return
             keys = [ key ]
         else:
-            keys = range(0, len(target_manager.obj))
+            keys = range(0, len(target_manager.get_obj()))
         for k in keys:
-            unbind_type_to_manager(target_manager, source_type, k, "value", get_manager(target_manager.obj.wrapped[k]))
+            unbind_type_to_manager(target_manager, source_type, k, "value", get_manager(target_manager.get_obj().wrapped[k]))
 
 #     def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
 #         default_factory = micro_op_types.get(("default-factory",), None)
@@ -251,8 +251,8 @@ class ListWildcardGetterType(ListMicroOpType):
 #     def invoke(self, key, **kwargs):
 #         raise_micro_op_conflicts(self, [ key ], target_manager.get_flattened_micro_op_types())
 # 
-#         if key >= 0 and key < len(target_manager.obj):
-#             value = target_manager.obj.__getitem__(key, raw=True)
+#         if key >= 0 and key < len(target_manager.get_obj()):
+#             value = target_manager.get_obj().__getitem__(key, raw=True)
 #         else:
 #             default_factory_op_type = target_manager.get_micro_op_type(("default-factory",))
 # 
@@ -280,8 +280,8 @@ class ListGetterType(ListMicroOpType):
     def invoke(self, target_manager, **kwargs):
         self.raise_micro_op_invocation_conflicts(target_manager)
 
-        if self.key >= 0 and self.key < len(target_manager.obj):
-            value = target_manager.obj.__getitem__(self.key, raw=True)
+        if self.key >= 0 and self.key < len(target_manager.get_obj()):
+            value = target_manager.get_obj().__getitem__(self.key, raw=True)
         else:
             default_factory_op = target_manager.get_micro_op_type(("default-factory",))
 
@@ -354,13 +354,13 @@ class ListGetterType(ListMicroOpType):
     def bind(self, source_type, key, target_manager):
         if key is not None and key != self.key:
             return
-        value = target_manager.obj.wrapped[self.key]
+        value = target_manager.get_obj().wrapped[self.key]
         bind_type_to_manager(target_manager, source_type, key, "value", self.value_type, get_manager(value))
 
     def unbind(self, source_type, key, target_manager):
         if key is not None and key != self.key:
             return
-        value = target_manager.obj.wrapped[self.key]
+        value = target_manager.get_obj().wrapped[self.key]
         unbind_type_to_manager(target_manager, source_type, key, "value", get_manager(value))
 
 #     def check_for_runtime_conflicts_before_adding_to_micro_op_type_to_object(self, obj, micro_op_types):
@@ -433,7 +433,7 @@ class ListGetterType(ListMicroOpType):
 #                 if not self.value_type.is_copyable_from(get_type_of_value(new_value)):
 #                     raise raise_if_safe(InvalidAssignmentType, other_micro_op.type_error)
 #             elif self.key > other_key:
-#                 new_value = other_micro_op.target_manager.obj[self.key - 1]
+#                 new_value = other_micro_op.target_manager.get_obj()[self.key - 1]
 #                 if not self.value_type.is_copyable_from(get_type_of_value(new_value)):
 #                     raise raise_if_safe(InvalidAssignmentType, other_micro_op.type_error)
 #         if isinstance(other_micro_op, (ListDeletter, ListWildcardDeletter)):
@@ -441,7 +441,7 @@ class ListGetterType(ListMicroOpType):
 #             if self.key < other_key:
 #                 return
 #             else:
-#                 new_value = other_micro_op.target_manager.obj[self.key + 1]
+#                 new_value = other_micro_op.target_manager.get_obj()[self.key + 1]
 #                 if not self.key_error and not self.value_type.is_copyable_from(get_type_of_value(new_value)):
 #                     raise_if_safe(InvalidAssignmentType, other_micro_op.type_error)
 # 
@@ -478,8 +478,8 @@ class ListGetterType(ListMicroOpType):
 #     def invoke(self, **kwargs):
 #         raise_micro_op_conflicts(self, [], target_manager.get_flattened_micro_op_types())
 # 
-#         if self.key >= 0 and self.key < len(target_manager.obj):
-#             value = target_manager.obj.__getitem__(self.key, raw=True)
+#         if self.key >= 0 and self.key < len(target_manager.get_obj()):
+#             value = target_manager.get_obj().__getitem__(self.key, raw=True)
 #         else:
 #             default_factory_op = target_manager.get_micro_op_type(("default-factory",))
 # 
@@ -510,13 +510,13 @@ class ListWildcardSetterType(ListMicroOpType):
             if not self.value_type.is_copyable_from(new_value_type):
                 raise FatalError()
 
-        if key < 0 or key > len(target_manager.obj):
+        if key < 0 or key > len(target_manager.get_obj()):
             if self.key_error:
                 raise InvalidAssignmentKey()
 
         target_manager.unbind_key(key)
 
-        target_manager.obj.__setitem__(key, new_value, raw=True)
+        target_manager.get_obj().__setitem__(key, new_value, raw=True)
 
         target_manager.bind_key(key)
 
@@ -623,13 +623,13 @@ class ListWildcardSetterType(ListMicroOpType):
 #         if not self.value_type.is_copyable_from(new_value_type):
 #             raise FatalError()
 # 
-#         if key < 0 or key > len(target_manager.obj):
+#         if key < 0 or key > len(target_manager.get_obj()):
 #             if self.key_error:
 #                 raise InvalidAssignmentKey()
 # 
 #         target_manager.unbind_key(key)
 # 
-#         target_manager.obj.__setitem__(key, new_value, raw=True)
+#         target_manager.get_obj().__setitem__(key, new_value, raw=True)
 # 
 #         target_manager.bind_key(key)
 
@@ -648,12 +648,12 @@ class ListSetterType(ListMicroOpType):
         if not self.value_type.is_copyable_from(new_value_type):
             raise FatalError()
 
-        if self.key < 0 or self.key > len(target_manager.obj):
+        if self.key < 0 or self.key > len(target_manager.get_obj()):
             raise_if_safe(InvalidAssignmentKey, self.key_error)
 
         target_manager.bind_key(self.key)
 
-        target_manager.obj.__setitem__(self.key, new_value, raw=True)
+        target_manager.get_obj().__setitem__(self.key, new_value, raw=True)
 
         target_manager.unbind_key(self.key)
 
@@ -763,12 +763,12 @@ class ListSetterType(ListMicroOpType):
 #         if not self.value_type.is_copyable_from(new_value_type):
 #             raise FatalError()
 # 
-#         if self.key < 0 or self.key > len(target_manager.obj):
+#         if self.key < 0 or self.key > len(target_manager.get_obj()):
 #             raise_if_safe(InvalidAssignmentKey, self.can_fail)
 # 
 #         target_manager.bind_key(self.key)
 # 
-#         target_manager.obj.__setitem__(self.key, new_value, raw=True)
+#         target_manager.get_obj().__setitem__(self.key, new_value, raw=True)
 # 
 #         target_manager.unbind_key(self.key)
 
@@ -782,7 +782,7 @@ class ListWildcardDeletterType(ListMicroOpType):
 
         target_manager.unbind_key(key)
 
-        target_manager.obj.__delitem__(raw=True)
+        target_manager.get_obj().__delitem__(raw=True)
 
     def raise_micro_op_invocation_conflicts(self, target_manager, key):
         target_type = target_manager.get_effective_composite_type()
@@ -865,7 +865,7 @@ class ListWildcardDeletterType(ListMicroOpType):
 # 
 #         target_manager.unbind_key(self.key)
 # 
-#         target_manager.obj.__delitem__(raw=True)
+#         target_manager.get_obj().__delitem__(raw=True)
 
 
 class ListDeletterType(ListMicroOpType):
@@ -878,7 +878,7 @@ class ListDeletterType(ListMicroOpType):
 
         target_manager.unbind_key(self.key)
 
-        target_manager.obj.__delitem__(self.key, raw=True)
+        target_manager.get_obj().__delitem__(self.key, raw=True)
 
     def raise_micro_op_invocation_conflicts(self, target_manager):
         target_type = target_manager.get_effective_composite_type()
@@ -966,7 +966,7 @@ class ListDeletterType(ListMicroOpType):
 # 
 #         target_manager.unbind_key(self.key)
 # 
-#         target_manager.obj.__delitem__(self.key, raw=True)
+#         target_manager.get_obj().__delitem__(self.key, raw=True)
 
 
 class ListWildcardInsertType(ListMicroOpType):
@@ -982,12 +982,12 @@ class ListWildcardInsertType(ListMicroOpType):
         if not self.value_type.is_copyable_from(new_value_type):
             raise FatalError()
  
-        for after_key in range(key, len(target_manager.obj)):
+        for after_key in range(key, len(target_manager.get_obj())):
             target_manager.unbind_key(after_key)
  
-        target_manager.obj.insert(key, new_value, raw=True)
+        target_manager.get_obj().insert(key, new_value, raw=True)
  
-        for after_key in range(key, len(target_manager.obj)):
+        for after_key in range(key, len(target_manager.get_obj())):
             target_manager.unbind_key(after_key)
 
     def raise_micro_op_invocation_conflicts(self, target_manager, key, new_value):
@@ -1061,12 +1061,12 @@ class ListWildcardInsertType(ListMicroOpType):
 #         if not self.value_type.is_copyable_from(new_value_type):
 #             raise FatalError()
 # 
-#         for after_key in range(key, len(target_manager.obj)):
+#         for after_key in range(key, len(target_manager.get_obj())):
 #             target_manager.unbind_key(after_key)
 # 
-#         target_manager.obj.insert(key, new_value, raw=True)
+#         target_manager.get_obj().insert(key, new_value, raw=True)
 # 
-#         for after_key in range(key, len(target_manager.obj)):
+#         for after_key in range(key, len(target_manager.get_obj())):
 #             target_manager.unbind_key(after_key)
 
 
@@ -1084,12 +1084,12 @@ class ListInsertType(ListMicroOpType):
         if not self.value_type.is_copyable_from(new_value_type):
             raise FatalError()
  
-        for after_key in range(self.key, len(target_manager.obj)):
+        for after_key in range(self.key, len(target_manager.get_obj())):
             target_manager.unbind_key(after_key)
  
-        target_manager.obj.insert(self.key, new_value, raw=True)
+        target_manager.get_obj().insert(self.key, new_value, raw=True)
  
-        for after_key in range(self.key, len(target_manager.obj)):
+        for after_key in range(self.key, len(target_manager.get_obj())):
             target_manager.bind_key(after_key)
 
     def raise_micro_op_invocation_conflicts(self, target_manager, new_value):
@@ -1178,12 +1178,12 @@ class ListInsertType(ListMicroOpType):
 #         if not self.value_type.is_copyable_from(new_value_type):
 #             raise FatalError()
 # 
-#         for after_key in range(self.key, len(target_manager.obj)):
+#         for after_key in range(self.key, len(target_manager.get_obj())):
 #             target_manager.unbind_key(after_key)
 # 
-#         target_manager.obj.insert(self.key, new_value, raw=True)
+#         target_manager.get_obj().insert(self.key, new_value, raw=True)
 # 
-#         for after_key in range(self.key, len(target_manager.obj)):
+#         for after_key in range(self.key, len(target_manager.get_obj())):
 #             target_manager.bind_key(after_key)
 
 def is_list_checker(obj):

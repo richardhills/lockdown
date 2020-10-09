@@ -4,7 +4,7 @@ import inspect
 import types
 
 from rdhlang5.type_system.exceptions import FatalError
-from rdhlang5.utils import bind_runtime_contexts, is_debug
+from rdhlang5.utils import runtime_type_information, is_debug
 
 
 def proxy0(data):
@@ -60,7 +60,7 @@ def replace_all_refs(old_obj, new_obj):
         Inspired by https://benkurtovic.com/2015/01/28/python-object-replacement.html
     """
 
-    if is_debug() and not bind_runtime_contexts():
+    if is_debug() and not runtime_type_information():
         raise FatalError()
 
     gc.collect()

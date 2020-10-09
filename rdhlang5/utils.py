@@ -80,19 +80,19 @@ def set_debug(debug):
         raise FatalError()
     DEBUG_MODE = debug
 
-BIND_RUNTIME_CONTEXTS = None
+runtime_type_information_active = None
 
-def bind_runtime_contexts():
-    global BIND_RUNTIME_CONTEXTS
-    if BIND_RUNTIME_CONTEXTS is None:
+def runtime_type_information():
+    global runtime_type_information_active
+    if runtime_type_information_active is None:
         raise FatalError()
-    return BIND_RUNTIME_CONTEXTS
+    return runtime_type_information_active
 
-def set_bind_runtime_contexts(bind):
-    global BIND_RUNTIME_CONTEXTS
-    if BIND_RUNTIME_CONTEXTS is not None:
+def set_runtime_type_information(bind):
+    global runtime_type_information_active
+    if runtime_type_information_active is not None:
         raise FatalError()
-    BIND_RUNTIME_CONTEXTS = bind
+    runtime_type_information_active = bind
 
 NO_VALUE = InternalMarker("NO_VALUE")
 MISSING = InternalMarker("MISSING")

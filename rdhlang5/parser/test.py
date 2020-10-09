@@ -12,7 +12,7 @@ from rdhlang5.type_system.default_composite_types import DEFAULT_LIST_TYPE
 from rdhlang5.type_system.list_types import RDHList
 from rdhlang5.type_system.managers import get_manager
 from rdhlang5.type_system.object_types import RDHObject
-from rdhlang5.utils import set_debug, set_bind_runtime_contexts
+from rdhlang5.utils import set_debug, set_runtime_type_information
 
 
 class TestJSONParsing(TestCase):

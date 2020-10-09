@@ -4,15 +4,12 @@ from rdhlang5.type_system.core_types import Type, UnitType, NoValueType
 from rdhlang5.type_system.exceptions import FatalError, InvalidData
 from rdhlang5.type_system.runtime import replace_all_refs
 from rdhlang5.utils import InternalMarker, NO_VALUE, is_debug,\
-    bind_runtime_contexts
+    runtime_type_information
 
-
-weak_objs_by_id = {}
-managers_by_id = {}
-
+managers_by_object_id = {}
 
 def get_manager(obj, trigger=None):
-    manager = managers_by_id.get(id(obj), None)
+    manager = managers_by_object_id.get(id(obj), None)
     if manager:
         return manager
 
@@ -38,50 +35,48 @@ def get_manager(obj, trigger=None):
 
     old_obj = obj
     if isinstance(obj, Composite):
-        manager = CompositeObjectManager(obj)
+        manager = CompositeObjectManager(obj, obj_cleared_callback)
     elif isinstance(obj, list):
-        if is_debug() and not bind_runtime_contexts():
+        if is_debug() and not runtime_type_information():
             raise FatalError()
         from rdhlang5.type_system.list_types import RDHList
         obj = RDHList(obj)
         replace_all_refs(old_obj, obj)            
-        manager = CompositeObjectManager(obj)
+        manager = CompositeObjectManager(obj, obj_cleared_callback)
     elif isinstance(obj, tuple):
-        if is_debug() and not bind_runtime_contexts():
+        if is_debug() and not runtime_type_information():
             raise FatalError()
         from rdhlang5.type_system.list_types import RDHList
         obj = RDHList(obj)
         replace_all_refs(old_obj, obj)            
-        manager = CompositeObjectManager(obj)
+        manager = CompositeObjectManager(obj, obj_cleared_callback)
     elif isinstance(obj, dict):
-        if is_debug() and not bind_runtime_contexts():
+        if is_debug() and not runtime_type_information():
             raise FatalError()
         from rdhlang5.type_system.dict_types import RDHDict
         obj = RDHDict(obj, debug_reason="monkey-patch")
         replace_all_refs(old_obj, obj)
-        manager = CompositeObjectManager(obj)
+        manager = CompositeObjectManager(obj, obj_cleared_callback)
     elif isinstance(obj, object) and hasattr(obj, "__dict__"):
-        if is_debug() and not bind_runtime_contexts():
+        if is_debug() and not runtime_type_information():
             raise FatalError()
         from rdhlang5.type_system.object_types import RDHObject
         original_type = obj.__class__
         new_type = type("RDH{}".format(original_type.__name__), (RDHObject, original_type,), {})
         obj = new_type(obj.__dict__)
         replace_all_refs(old_obj, obj)
-        manager = CompositeObjectManager(obj)
+        manager = CompositeObjectManager(obj, obj_cleared_callback)
         manager.debug_reason = "monkey-patch"
     else:
         raise FatalError()
 
-    weak_objs_by_id[id(obj)] = weakref.ref(obj, obj_cleared_callback)
-    managers_by_id[id(obj)] = manager
+    managers_by_object_id[id(obj)] = manager
 
     return manager
 
 
-def obj_cleared_callback(obj):
-    del weak_objs_by_id[id(obj)]
-    del managers_by_id[id(obj)]
+def obj_cleared_callback(obj_id):
+    del managers_by_object_id[obj_id]
 
 
 def get_type_of_value(value):

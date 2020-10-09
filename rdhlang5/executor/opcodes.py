@@ -41,7 +41,7 @@ from rdhlang5.type_system.object_types import RDHObject, RDHObjectType, \
     ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
     ObjectWildcardSetterType, is_object_checker
 from rdhlang5.utils import MISSING, NO_VALUE, is_debug, one_shot_memoize, \
-    bind_runtime_contexts
+    runtime_type_information
 
 
 def evaluate(expression, context, frame_manager, immediate_context=None):

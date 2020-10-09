@@ -34,7 +34,7 @@ from rdhlang5.type_system.exceptions import FatalError, InvalidInferredType, \
 from rdhlang5.type_system.list_types import RDHList
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType
-from rdhlang5.utils import MISSING, is_debug, bind_runtime_contexts, raise_from, \
+from rdhlang5.utils import MISSING, is_debug, runtime_type_information, raise_from, \
     spread_dict
 
 
@@ -591,7 +591,7 @@ class ClosedFunction(RDHFunction):
                         "static": self.open_function.static,
                         "types": self.open_function.types_context
                     },
-                        bind=self.open_function.local_initialization_context_type if bind_runtime_contexts() else None,
+                        bind=self.open_function.local_initialization_context_type if runtime_type_information() else None,
                         instantiator_has_verified_bind=True,
                         debug_reason="local-initialization-context"
                     )
@@ -604,7 +604,7 @@ class ClosedFunction(RDHFunction):
             logger.debug("ClosedFunction:local_initializer")
             local = frame.step("local", lambda: evaluate(self.open_function.local_initializer, new_context, frame_manager))
 
-            if bind_runtime_contexts():
+            if runtime_type_information():
                 frame.step("remove_local_initialization_context_type", lambda: get_manager(new_context).remove_composite_type(self.open_function.local_initialization_context_type))
 
             logger.debug("ClosedFunction:local_check")
@@ -622,7 +622,7 @@ class ClosedFunction(RDHFunction):
                         "local": local,
                         "types": self.open_function.types_context
                     },
-                        bind=self.open_function.execution_context_type if bind_runtime_contexts() else None,
+                        bind=self.open_function.execution_context_type if runtime_type_information() else None,
                         instantiator_has_verified_bind=True,
                         debug_reason="code-execution-context"
                     )
@@ -636,7 +636,7 @@ class ClosedFunction(RDHFunction):
             logger.debug("ClosedFunction:code_execute")
             result = frame.step("code", lambda: evaluate(self.open_function.code, new_context, frame_manager))
 
-            if bind_runtime_contexts():
+            if runtime_type_information():
                 frame.step("remove_code_execution_context_type", lambda: get_manager(new_context).remove_composite_type(self.open_function.execution_context_type))
 
             return frame.value(result)
