@@ -5,7 +5,6 @@ from __builtin__ import True
 from _collections import defaultdict
 
 from rdhlang5.type_system.core_types import Type
-from rdhlang5.type_system.dict_types import RDHDict
 from rdhlang5.type_system.exceptions import FatalError
 from rdhlang5.type_system.managers import get_type_of_value
 from rdhlang5.utils import MISSING, InternalMarker, is_debug

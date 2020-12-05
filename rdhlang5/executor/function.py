@@ -24,13 +24,12 @@ from rdhlang5.executor.raw_code_factories import dynamic_dereference_op, \
 from rdhlang5.executor.type_factories import enrich_type
 from rdhlang5.type_system.composites import CompositeType
 from rdhlang5.type_system.core_types import Type, NoValueType, IntegerType, \
-    TopType, AnyType
+    AnyType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     DEFAULT_DICT_TYPE, READONLY_DEFAULT_OBJECT_TYPE, \
     readonly_rich_composite_type
 from rdhlang5.type_system.dict_types import RDHDict
-from rdhlang5.type_system.exceptions import FatalError, InvalidInferredType, \
-    MicroOpTypeConflict, IncorrectObjectTypeForMicroOp
+from rdhlang5.type_system.exceptions import FatalError, InvalidInferredType
 from rdhlang5.type_system.list_types import RDHList
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType
@@ -90,8 +89,8 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
     except InvalidInferredType:
         raise PreparationException("Invalid outer inferred types")
 
-    argument_type = argument_type.reify_revconst_types()
-    outer_type = outer_type.reify_revconst_types()
+    argument_type = argument_type.apply_consistency_heuristic()
+    outer_type = outer_type.apply_consistency_heuristic()
     local_type = enrich_type(static.local)
 
     context = RDHObject({
@@ -104,7 +103,6 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
         }, debug_reason="local-prepare-context")
     },
         bind=READONLY_DEFAULT_OBJECT_TYPE,
-        instantiator_has_verified_bind=True,
         debug_reason="local-prepare-context"
     )
 
@@ -138,7 +136,7 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
         local_type = local_type.replace_inferred_types(actual_local_type)
         raise PreparationException("Invalid local inferred type")
 
-    local_type = local_type.reify_revconst_types()
+    local_type = local_type.apply_consistency_heuristic()
 
     if not local_type.is_copyable_from(actual_local_type):
         local_type.is_copyable_from(actual_local_type)
@@ -162,7 +160,6 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
         }, debug_reason="code-prepare-context")
     },
         bind=READONLY_DEFAULT_OBJECT_TYPE,
-        instantiator_has_verified_bind=True,
         debug_reason="code-prepare-context"
     )
 
@@ -592,11 +589,10 @@ class ClosedFunction(RDHFunction):
                         "types": self.open_function.types_context
                     },
                         bind=self.open_function.local_initialization_context_type if runtime_type_information() else None,
-                        instantiator_has_verified_bind=True,
                         debug_reason="local-initialization-context"
                     )
                 )
-            except MicroOpTypeConflict as e:
+            except Exception as e:
                 raise_from(FatalError, e)
 
             get_manager(new_context)._context_type = self.open_function.local_initialization_context_type
@@ -623,11 +619,10 @@ class ClosedFunction(RDHFunction):
                         "types": self.open_function.types_context
                     },
                         bind=self.open_function.execution_context_type if runtime_type_information() else None,
-                        instantiator_has_verified_bind=True,
                         debug_reason="code-execution-context"
                     )
                 )
-            except MicroOpTypeConflict as e:
+            except Exception as e:
                 raise raise_from(FatalError, e)
 
             # In conjunction with get_context_type, for performance
@@ -682,8 +677,6 @@ class Continuation(RDHFunction):
     __slots__ = [ "frame_manager", "frames", "callback", "restart_type", "break_types" ]
 
     def __init__(self, frame_manager, frames, callback, restart_type, break_types):
-        if isinstance(restart_type, TopType):
-            pass
         if not isinstance(frame_manager, FrameManager):
             raise FatalError()
         self.frame_manager = frame_manager

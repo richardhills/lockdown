@@ -172,11 +172,15 @@ def object_template_op(values, debug_reason="code", **kwargs):
 
 
 def dict_template_op(values):
-    for v in values.values():
+    values_list = []
+
+    for k, v in values.items():
         check_is_opcode(v)
+        values_list.append(RDHList([ k, v ]))
+
     return RDHObject({
         "opcode": "dict_template",
-        "opcodes": RDHDict(values, debug_reason="code")
+        "opcodes": RDHList(values_list, debug_reason="code")
     }, debug_reason="code")
 
 

@@ -701,7 +701,7 @@ class TestMatch(TestCase):
         )
 
         result = bootstrap_function(
-            func, check_safe_exit=True, argument=RDHObject({ "foo": 39 })
+            func, check_safe_exit=True, argument=RDHObject({ "foo": 39 }, bind=RDHObjectType({ "foo": IntegerType() }))
         )
 
         self.assertEquals(result.caught_break_mode, "return")
