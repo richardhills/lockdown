@@ -8,7 +8,7 @@ import weakref
 from rdhlang5.type_system.core_types import Type, unwrap_types, OneOfType, \
     AnyType
 from rdhlang5.type_system.exceptions import FatalError, IsNotCompositeType, \
-    CompositeTypeIncompatibleWithTarget
+    CompositeTypeIncompatibleWithTarget, CompositeTypeIsInconsistent
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.micro_ops import merge_composite_types, MicroOpType
 
@@ -20,7 +20,9 @@ class InferredType(Type):
     def replace_inferred_types(self, other):
         return other
 
+
 composite_type_is_copyable_cache = threading.local()
+
 
 @contextmanager
 def temporary_bind(value, composite_type):
@@ -33,6 +35,7 @@ def temporary_bind(value, composite_type):
         yield
     finally:
         manager.remove_composite_type(composite_type)
+
 
 class CompositeType(Type):
     def __init__(self, micro_op_types, name=None):
@@ -88,6 +91,7 @@ class CompositeType(Type):
     def is_self_consistent(self):
         for micro_op in self.micro_op_types.values():
             if micro_op.conflicts_with(self, self):
+                micro_op.conflicts_with(self, self)
                 return False
         return True
 
@@ -262,11 +266,13 @@ class CompositeType(Type):
             ";\n".join(["{}: {}{} {}".format(k, "g" if k in getters else "", "s" if k in setters else "", type[k].to_code()) for k in keys])
         )
 
+
 weakrefs_for_type = {}
 type_ids_for_weakref_id = {}
 results_by_target_id = defaultdict(lambda: defaultdict(lambda: None))
 results_by_source_id = defaultdict(lambda: defaultdict(lambda: None))
 strong_links = {}
+
 
 def type_cleared(type_weakref):
     type_id = type_ids_for_weakref_id[id(type_weakref)]
@@ -275,6 +281,7 @@ def type_cleared(type_weakref):
     del results_by_target_id[type_id]
     del weakrefs_for_type[type_id]
     del type_ids_for_weakref_id[id(type_weakref)]
+
 
 class Composite(object):
     pass
@@ -608,6 +615,7 @@ class CompositeObjectManager(object):
 # 
 #     return True
 
+
 def add_composite_type(target, new_type, key_filter=None, multiplier=1):
     types_to_bind = {}
     succeeded = build_binding_map_for_type(None, new_type, target, key_filter, {}, types_to_bind)
@@ -617,6 +625,7 @@ def add_composite_type(target, new_type, key_filter=None, multiplier=1):
     for _, type, target in types_to_bind.values():
         get_manager(target).attach_type(type, multiplier=multiplier)
 
+
 def remove_composite_type(target, remove_type, key_filter=None, multiplier=1):
     types_to_bind = {}
     succeeded = build_binding_map_for_type(None, remove_type, target, key_filter, {}, types_to_bind)
@@ -625,6 +634,7 @@ def remove_composite_type(target, remove_type, key_filter=None, multiplier=1):
 
     for _, type, target in types_to_bind.values():
         get_manager(target).detach_type(type, multiplier=multiplier)
+
 
 def bind_key(target, key_filter):
     manager = get_manager(target)
@@ -636,6 +646,7 @@ def bind_key(target, key_filter):
             multiplier=manager.attached_type_counts[id(attached_type)]
         )
 
+
 def unbind_key(target, key_filter):
     manager = get_manager(target)
     for attached_type in manager.attached_types.values():
@@ -645,7 +656,6 @@ def unbind_key(target, key_filter):
             key_filter=key_filter,
             multiplier=manager.attached_type_counts[id(attached_type)]
         )
-
 
 # def bind_micro_op(target, micro_op):
 #     if not isinstance(micro_op, MicroOpType):
@@ -723,7 +733,6 @@ def unbind_key(target, key_filter):
 #     return True
 
 
-
 def build_binding_map_for_type(source_micro_op, new_type, target, key_filter, results, types_to_bind):
     result_key = (id(source_micro_op), id(new_type), id(target))
 
@@ -738,7 +747,7 @@ def build_binding_map_for_type(source_micro_op, new_type, target, key_filter, re
     for sub_type in unwrap_types(new_type):
         if isinstance(sub_type, CompositeType) and isinstance(target, Composite):
             if not sub_type.is_self_consistent():
-                continue
+                raise CompositeTypeIsInconsistent()
 
             manager = get_manager(target)
             target_effective_type = manager.get_effective_composite_type()
@@ -767,7 +776,7 @@ def build_binding_map_for_type(source_micro_op, new_type, target, key_filter, re
                         break
 
             if micro_ops_checks_worked:
-                if not key_filter:
+                if key_filter is None:
                     extra_types_to_bind[result_key] = (source_micro_op, sub_type, target)
                 atleast_one_sub_type_worked = True
 
@@ -784,7 +793,6 @@ def build_binding_map_for_type(source_micro_op, new_type, target, key_filter, re
         results[result_key] = False
 
     return atleast_one_sub_type_worked
-
 
 # def flatten_composite_type(type, target, results):
 #     for micro_op in type.micro_op_types.values():

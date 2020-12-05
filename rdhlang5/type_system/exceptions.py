@@ -13,6 +13,9 @@ class FatalError(Exception):
 class CompositeTypeIncompatibleWithTarget(Exception):
     pass
 
+class CompositeTypeIsInconsistent(Exception):
+    pass
+
 # class MicroOpCannotBeDerived(Exception):
 #     pass
 # 

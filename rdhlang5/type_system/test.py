@@ -8,7 +8,8 @@ from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     rich_composite_type
 from rdhlang5.type_system.dict_types import DictGetterType, \
     RDHDict
-from rdhlang5.type_system.exceptions import CompositeTypeIncompatibleWithTarget
+from rdhlang5.type_system.exceptions import CompositeTypeIncompatibleWithTarget, \
+    CompositeTypeIsInconsistent
 from rdhlang5.type_system.list_types import RDHListType, RDHList, SPARSE_ELEMENT
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.object_types import ObjectGetterType, ObjectSetterType, \
@@ -85,7 +86,7 @@ class TestBasicObject(TestCase):
         }))
 
     def test_failed_setup_broad_writing_property(self):
-        with self.assertRaises(Exception):
+        with self.assertRaises(CompositeTypeIsInconsistent):
             obj = TestObject({ "foo": "hello" })
 
             get_manager(obj).add_composite_type(CompositeType({
@@ -695,6 +696,10 @@ class TestNestedPythonTypes(TestCase):
 
 
 class TestDefaultDict(TestCase):
+    def test_default_dict_is_consistent_type(self):
+        type = DefaultDictType(StringType())
+        self.assertTrue(type.is_self_consistent())
+
     def test_default_dict(self):
         def default_factory(target, key):
             return "{}-123".format(key)
@@ -949,6 +954,16 @@ class TestList(TestCase):
         with self.assertRaises(Exception):
             foo.insert(0, "hello")
 
+    def test_list_type_is_consistent(self):
+        type = RDHListType(
+            [ IntegerType(), IntegerType() ],
+            IntegerType(),
+            allow_push=True,
+            allow_delete=False,
+            allow_wildcard_insert=False
+        )
+        self.assertTrue(type.is_self_consistent())
+
     def test_insert_on_short_tuple(self):
         foo = RDHList([ 4, 6, 8 ])
         get_manager(foo).add_composite_type(RDHListType([ IntegerType() ], IntegerType(), allow_push=True, allow_delete=False, allow_wildcard_insert=False))
@@ -958,7 +973,15 @@ class TestList(TestCase):
 
     def test_insert_on_long_tuple(self):
         foo = RDHList([ 4, 6, 8 ])
-        get_manager(foo).add_composite_type(RDHListType([ IntegerType(), IntegerType() ], IntegerType(), allow_push=True, allow_delete=False, allow_wildcard_insert=False))
+        get_manager(foo).add_composite_type(
+            RDHListType(
+                [ IntegerType(), IntegerType() ],
+                IntegerType(),
+                allow_push=True,
+                allow_delete=False,
+                allow_wildcard_insert=False
+            )
+        )
 
         foo.insert(0, 2)
         self.assertEqual(list(foo), [ 2, 4, 6, 8 ])

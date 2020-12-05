@@ -296,7 +296,7 @@ class ObjectTemplateOp(Opcode):
             "value_ast{}".format(id(key)): opcode.to_ast(context_name, dependency_builder)
             for key, opcode in self.opcodes
         })
-        parameter_template = ",".join("{{key_ast{}}}: {{value_ast{}}}".format(id(key), id(key)) for key in self.opcodes.keys())
+        parameter_template = ",".join("{{key_ast{}}}: {{value_ast{}}}".format(id(key), id(key)) for key in self.opcodes)
         return compile_expression(
             "RDHObject({{ " + parameter_template + " }})",
             context_name, dependency_builder, **parameters
@@ -1708,6 +1708,9 @@ class MatchOp(Opcode):
         super(MatchOp, self).__init__(data, visitor)
         self.value = enrich_opcode(data.value, visitor)
         self.matchers = [ enrich_opcode(m, visitor) for m in data.matchers ]
+
+        if not runtime_type_information():
+            raise FatalError()
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)

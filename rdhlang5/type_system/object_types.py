@@ -105,6 +105,15 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
         if wildcard_setter and not self.type_error and not wildcard_setter.type_error and not self.value_type.is_copyable_from(wildcard_setter.value_type):
             return True
 
+        # TODO: work out if the get-wildcard and delete-wildcard checks are necessary.
+        # Another type with get-wildcard no key errors with a delete-wildcard with no key errors would be inconsistent
+#         wildcard_getter = other_type.get_micro_op_type(("get-wildcard", ))
+#         other_type_has_default_factory = wildcard_getter and not wildcard_getter.key_error
+# 
+#         wildcard_deletter = other_type.get_micro_op_type(("delete-wildcard", ))
+#         if wildcard_deletter and not self.key_error and not wildcard_deletter.key_error and not other_type_has_default_factory:
+#             return True
+
         for key, other_setter_or_deleter in other_type.micro_op_types.items():
             if key[0] == "set":
                 if not self.type_error and not other_setter_or_deleter.type_error and not self.value_type.is_copyable_from(other_setter_or_deleter.value_type):
@@ -133,7 +142,10 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
 
     def prepare_bind(self, target, key_filter):
         if key_filter:
-            return ([ target.__dict__[key_filter] ], self.value_type)
+            if key_filter in target.__dict__:
+                return ([ target.__dict__[key_filter] ], self.value_type)
+            else:
+                return ([], None)
         else:
             return (target.__dict__.values(), self.value_type)
 
@@ -757,14 +769,14 @@ class ObjectWildcardDeletterType(ObjectMicroOpType):
         return other_micro_op_type and not other_micro_op_type.key_error or self.key_error
 
     def conflicts_with(self, our_type, other_type):
-        wildcard_getter = other_type.get_micro_op_type(("get-wildcard", ))
-        if wildcard_getter and not self.key_error and not wildcard_getter.key_error:
-            return True
-
-        for key, other_getter in other_type.micro_op_types.items():
-            if key[0] == "get":
-                if not self.key_error and not other_getter.key_error:
-                    return True
+#         wildcard_getter = other_type.get_micro_op_type(("get-wildcard", ))
+#         if wildcard_getter and not self.key_error and not wildcard_getter.key_error:
+#             return True
+# 
+#         for key, other_getter in other_type.micro_op_types.items():
+#             if key[0] == "get":
+#                 if not self.key_error and not other_getter.key_error:
+#                     return True
 
         return False
 
