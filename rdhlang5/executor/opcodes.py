@@ -382,7 +382,7 @@ class ListTemplateOp(Opcode):
         micro_ops[("insert-wildcard",)] = ListWildcardInsertType(AnyType(), True, False)
 #        micro_ops[("get", "insert")] = BuiltInFunctionGetterType(ListInsertFunctionType(micro_ops[("insert-wildcard",)], combined_value_types))
 
-        break_types.add("value", CompositeType(micro_ops, is_revconst=True))
+        break_types.add("value", CompositeType(micro_ops))
 
         return break_types.build()
 

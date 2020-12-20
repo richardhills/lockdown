@@ -11,6 +11,7 @@ from rdhlang5.type_system.exceptions import FatalError, IsNotCompositeType, \
     CompositeTypeIncompatibleWithTarget, CompositeTypeIsInconsistent
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.micro_ops import merge_composite_types, MicroOpType
+from rdhlang5.utils import MISSING
 
 
 class InferredType(Type):
@@ -615,10 +616,9 @@ class CompositeObjectManager(object):
 # 
 #     return True
 
-
 def add_composite_type(target, new_type, key_filter=None, multiplier=1):
     types_to_bind = {}
-    succeeded = build_binding_map_for_type(None, new_type, target, key_filter, {}, types_to_bind)
+    succeeded = build_binding_map_for_type(None, new_type, target, key_filter, MISSING, {}, types_to_bind)
     if not succeeded:
         raise CompositeTypeIncompatibleWithTarget()
 
@@ -628,12 +628,15 @@ def add_composite_type(target, new_type, key_filter=None, multiplier=1):
 
 def remove_composite_type(target, remove_type, key_filter=None, multiplier=1):
     types_to_bind = {}
-    succeeded = build_binding_map_for_type(None, remove_type, target, key_filter, {}, types_to_bind)
+    succeeded = build_binding_map_for_type(None, remove_type, target, key_filter, MISSING, {}, types_to_bind)
     if not succeeded:
         raise CompositeTypeIncompatibleWithTarget()
 
     for _, type, target in types_to_bind.values():
         get_manager(target).detach_type(type, multiplier=multiplier)
+
+def check_can_composite_type_be_added(target, new_type, key_filter=None, substitute_value=MISSING):
+    return build_binding_map_for_type(None, new_type, target, key_filter, substitute_value, {}, {})
 
 
 def bind_key(target, key_filter):
@@ -733,7 +736,7 @@ def unbind_key(target, key_filter):
 #     return True
 
 
-def build_binding_map_for_type(source_micro_op, new_type, target, key_filter, results, types_to_bind):
+def build_binding_map_for_type(source_micro_op, new_type, target, key_filter, substitute_value, results, types_to_bind):
     result_key = (id(source_micro_op), id(new_type), id(target))
 
     if result_key in results:
@@ -763,14 +766,16 @@ def build_binding_map_for_type(source_micro_op, new_type, target, key_filter, re
                     micro_ops_checks_worked = False
                     break
 
-                next_targets, next_new_type = micro_op.prepare_bind(target, key_filter)
+                next_targets, next_new_type = micro_op.prepare_bind(target, key_filter, substitute_value)
 
                 if not isinstance(next_targets, list):
                     raise FatalError()
 
                 for next_target in next_targets:
+                    if next_target is MISSING:
+                        raise FatalError()
                     if not build_binding_map_for_type(
-                        micro_op, next_new_type, next_target, None, results, extra_types_to_bind
+                        micro_op, next_new_type, next_target, None, MISSING, results, extra_types_to_bind
                     ):
                         micro_ops_checks_worked = False
                         break

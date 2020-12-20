@@ -4,7 +4,7 @@ from _collections import defaultdict
 from collections import OrderedDict
 
 from rdhlang5.type_system.composites import InferredType, CompositeType, \
-    Composite, unbind_key, bind_key
+    Composite, unbind_key, bind_key, check_can_composite_type_be_added
 from rdhlang5.type_system.core_types import merge_types, Const, NoValueType, \
     IntegerType, Type
 from rdhlang5.type_system.exceptions import FatalError, raise_if_safe, \
@@ -137,14 +137,14 @@ class ListWildcardGetterType(ListMicroOpType):
 
         return True
 
-    def prepare_bind(self, target, key_filter):
+    def prepare_bind(self, target, key_filter, substitute_value):
         if key_filter:
+            if substitute_value is not MISSING:
+                return ([ substitute_value ], self.value_type)
             if key_filter in target.wrapped:
                 return ([ target.wrapped[key_filter] ], self.value_type)
-            else:
-                return ([], None)
-        else:
-            return (target.wrapped.values(), self.value_type)
+            return ([], None)
+        return (target.wrapped.values(), self.value_type)
 
     def apply_consistency_heuristic(self, other_micro_op_types):
         reified_type_to_use = self.value_type.apply_consistency_heuristic()
@@ -363,11 +363,13 @@ class ListGetterType(ListMicroOpType):
 
         return True
 
-    def prepare_bind(self, target, key_filter):
-        if not key_filter or key_filter == self.key and self.key in target.wrapped:
-            return ([ target.__getitem__(self.key, raw=True) ], self.value_type)
-        else:
-            return ([], None)
+    def prepare_bind(self, target, key_filter, substitute_value):
+        if not key_filter or key_filter == self.key:
+            if substitute_value is not MISSING:
+                return ([ substitute_value ], self.value_type)
+            if self.key in target.wrapped:
+                return ([ target.__getitem__(self.key, raw=True) ], self.value_type)
+        return ([], None)
 
     def apply_consistency_heuristic(self, other_micro_op_types):
         reified_type_to_use = self.value_type.apply_consistency_heuristic()
@@ -555,14 +557,18 @@ class ListWildcardSetterType(ListMicroOpType):
 
     def raise_micro_op_invocation_conflicts(self, target_manager, key, new_value):
         target_type = target_manager.get_effective_composite_type()
-
-        wildcard_getter = target_type.get_micro_op_type(("get-wildcard",))
-        if wildcard_getter and not wildcard_getter.type_error and not wildcard_getter.value_type.is_copyable_from(get_type_of_value(new_value)):
+        if not check_can_composite_type_be_added(target_manager.get_obj(), target_type, key_filter=key, substitute_value=new_value):
             raise_if_safe(InvalidAssignmentType, self.type_error)
 
-        detail_getter = target_type.get_micro_op_type(("get", key))
-        if detail_getter and not detail_getter.type_error and not detail_getter.value_type.is_copyable_from(get_type_of_value(new_value)):
-            raise_if_safe(InvalidAssignmentType, self.type_error)
+#         target_type = target_manager.get_effective_composite_type()
+# 
+#         wildcard_getter = target_type.get_micro_op_type(("get-wildcard",))
+#         if wildcard_getter and not wildcard_getter.type_error and not wildcard_getter.value_type.is_copyable_from(get_type_of_value(new_value)):
+#             raise_if_safe(InvalidAssignmentType, self.type_error)
+# 
+#         detail_getter = target_type.get_micro_op_type(("get", key))
+#         if detail_getter and not detail_getter.type_error and not detail_getter.value_type.is_copyable_from(get_type_of_value(new_value)):
+#             raise_if_safe(InvalidAssignmentType, self.type_error)
 
     def is_derivable_from(self, other_type):
         other_micro_op_type = other_type.get_micro_op_type(("set-wildcard",))
@@ -593,7 +599,7 @@ class ListWildcardSetterType(ListMicroOpType):
 
         return True
 
-    def prepare_bind(self, target, key_filter):
+    def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
     def apply_consistency_heuristic(self, other_micro_op_types):
@@ -699,14 +705,18 @@ class ListSetterType(ListMicroOpType):
 
     def raise_micro_op_invocation_conflicts(self, target_manager, new_value):
         target_type = target_manager.get_effective_composite_type()
-
-        wildcard_getter = target_type.get_micro_op_type(("get-wildcard",))
-        if wildcard_getter and not wildcard_getter.type_error and not wildcard_getter.value_type.is_copyable_from(get_type_of_value(new_value)):
+        if not check_can_composite_type_be_added(target_manager.get_obj(), target_type, key_filter=self.key, substitute_value=new_value):
             raise_if_safe(InvalidAssignmentType, self.type_error)
 
-        detail_getter = target_type.get_micro_op_type(("get", self.key))
-        if detail_getter and not detail_getter.type_error and not detail_getter.value_type.is_copyable_from(get_type_of_value(new_value)):
-            raise_if_safe(InvalidAssignmentType, self.type_error)
+#         target_type = target_manager.get_effective_composite_type()
+# 
+#         wildcard_getter = target_type.get_micro_op_type(("get-wildcard",))
+#         if wildcard_getter and not wildcard_getter.type_error and not wildcard_getter.value_type.is_copyable_from(get_type_of_value(new_value)):
+#             raise_if_safe(InvalidAssignmentType, self.type_error)
+# 
+#         detail_getter = target_type.get_micro_op_type(("get", self.key))
+#         if detail_getter and not detail_getter.type_error and not detail_getter.value_type.is_copyable_from(get_type_of_value(new_value)):
+#             raise_if_safe(InvalidAssignmentType, self.type_error)
 
     def is_derivable_from(self, other_type):
         other_micro_op_type = other_type.get_micro_op_type(("set", self.key))
@@ -737,7 +747,7 @@ class ListSetterType(ListMicroOpType):
 
         return True
 
-    def prepare_bind(self, target, key_filter):
+    def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
     def apply_consistency_heuristic(self, other_micro_op_types):
@@ -878,7 +888,7 @@ class ListWildcardDeletterType(ListMicroOpType):
 
         return True
 
-    def prepare_bind(self, target, key_filter):
+    def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
     def replace_inferred_type(self, other_micro_op_type):
@@ -981,7 +991,7 @@ class ListDeletterType(ListMicroOpType):
 
         return True
 
-    def prepare_bind(self, target, key_filter):
+    def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
     def replace_inferred_type(self, other_micro_op_type):
@@ -1060,14 +1070,17 @@ class ListWildcardInsertType(ListMicroOpType):
 
     def raise_micro_op_invocation_conflicts(self, target_manager, key, new_value):
         target_type = target_manager.get_effective_composite_type()
+        for after_key in range(key, len(target_manager.get_obj())):            
+            if not check_can_composite_type_be_added(target_manager.get_obj(), target_type, key_filter=after_key, substitute_value=target_manager.get_obj().wrapped[after_key - 1]):
+                raise_if_safe(InvalidAssignmentType, self.type_error)
 
-        wildcard_getter = target_type.get_micro_op_type(("get-wildcard",))
-        if wildcard_getter and not wildcard_getter.type_error and not wildcard_getter.value_type.is_copyable_from(get_type_of_value(new_value)):
-            raise_if_safe(InvalidAssignmentType, self.type_error)
-
-        detail_getter = target_type.get_micro_op_type(("get", key))
-        if detail_getter and not detail_getter.type_error and not detail_getter.value_type.is_copyable_from(get_type_of_value(new_value)):
-            raise_if_safe(InvalidAssignmentType, self.type_error)
+#         wildcard_getter = target_type.get_micro_op_type(("get-wildcard",))
+#         if wildcard_getter and not wildcard_getter.type_error and not wildcard_getter.value_type.is_copyable_from(get_type_of_value(new_value)):
+#             raise_if_safe(InvalidAssignmentType, self.type_error)
+# 
+#         detail_getter = target_type.get_micro_op_type(("get", key))
+#         if detail_getter and not detail_getter.type_error and not detail_getter.value_type.is_copyable_from(get_type_of_value(new_value)):
+#             raise_if_safe(InvalidAssignmentType, self.type_error)
 
 #         for after_key in range(key, len(target_manager.get_obj())):
 #             # In a sense, we are testing whether the new bind_key calls will work before executing them
@@ -1111,7 +1124,7 @@ class ListWildcardInsertType(ListMicroOpType):
 
         return True
 
-    def prepare_bind(self, target, key_filter):
+    def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
     def replace_inferred_type(self, other_micro_op_type):
@@ -1198,7 +1211,10 @@ class ListInsertType(ListMicroOpType):
             bind_key(target_manager.get_obj(), after_key)
 
     def raise_micro_op_invocation_conflicts(self, target_manager, new_value):
-        pass
+        target_type = target_manager.get_effective_composite_type()
+        for after_key in range(self.key + 1, len(target_manager.get_obj())):            
+            if not check_can_composite_type_be_added(target_manager.get_obj(), target_type, key_filter=after_key, substitute_value=target_manager.get_obj().wrapped[after_key - 1]):
+                raise_if_safe(InvalidAssignmentType, self.type_error)
 
     def is_derivable_from(self, other_type):
         other_micro_op_type = other_type.get_micro_op_type(("insert", self.key))
@@ -1239,7 +1255,7 @@ class ListInsertType(ListMicroOpType):
 
         return True
 
-    def prepare_bind(self, target, key_filter):
+    def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
 #     def bind(self, source_type, key, target):

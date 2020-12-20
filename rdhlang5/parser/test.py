@@ -8,6 +8,7 @@ import unittest.main
 from rdhlang5.executor.bootstrap import bootstrap_function
 from rdhlang5.executor.exceptions import PreparationException
 from rdhlang5.parser.parser import parse
+from rdhlang5.testing import miss_test
 from rdhlang5.type_system.default_composite_types import DEFAULT_LIST_TYPE
 from rdhlang5.type_system.list_types import RDHList
 from rdhlang5.type_system.managers import get_manager
@@ -590,6 +591,7 @@ class TestMisc(TestCase):
 
 class TestSpeed(TestCase):
     def test_loops(self):
+        return miss_test()
         start = time()
         code = parse("""
             function() {
@@ -716,7 +718,7 @@ class TestEuler(TestCase):
         self.assertEquals(result.value, 6857)
 
     def test_4(self):
-        return
+        return miss_test()
         code = parse("""
             function() {
                 int bestResult = 0;
@@ -787,7 +789,7 @@ class TestEuler(TestCase):
         self.assertEquals(result.value, 31875000)
 
     def test_14(self):
-        return
+        return miss_test()
         code = parse("""
             function() {
                 Dictionary<int : int> cachedResults = { 1: 1 };

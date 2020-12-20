@@ -142,14 +142,15 @@ class DictWildcardGetterType(DictMicroOpType):
 
         return True
 
-    def prepare_bind(self, target, key_filter):
+    def prepare_bind(self, target, key_filter, substitute_value):
         if key_filter:
+            if substitute_value is not MISSING:
+                return ([ substitute_value ], self.value_type)
             if key_filter in target.wrapped:
                 return ([ target.wrapped.get(key_filter) ], self.value_type)
-            else:
-                return ([], self.value_type)
-        else:
-            return (target.wrapped.values(), self.value_type)
+            return ([], self.value_type)
+
+        return (target.wrapped.values(), self.value_type)
 
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, DictWildcardGetterType):
@@ -351,11 +352,13 @@ class DictGetterType(DictMicroOpType):
 
         return True
 
-    def prepare_bind(self, target, key_filter):
-        if (not key_filter or key_filter == self.key) and self.key in target.wrapped:
-            return ([ target.wrapped[self.key] ], self.value_type)
-        else:
-            return ([], None)
+    def prepare_bind(self, target, key_filter, substitute_value):
+        if not key_filter or key_filter == self.key:
+            if substitute_value is not MISSING:
+                return ([ substitute_value ], self.value_type)
+            if self.key in target.wrapped:
+                return ([ target.wrapped[self.key] ], self.value_type)
+        return ([], None)
 
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, DictGetterType):
@@ -544,7 +547,7 @@ class DictWildcardSetterType(DictMicroOpType):
 
         return True
 
-    def prepare_bind(self, target, key_filter):
+    def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
     def replace_inferred_type(self, other_micro_op_type):
@@ -669,7 +672,7 @@ class DictSetterType(DictMicroOpType):
 
         return True
 
-    def prepare_bind(self, target, key_filter):
+    def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
     def replace_inferred_type(self, other_micro_op_type):
@@ -797,7 +800,7 @@ class DictWildcardDeletterType(DictMicroOpType):
 
         return True
 
-    def prepare_bind(self, target, key_filter):
+    def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
     def replace_inferred_type(self, other_micro_op_type):
@@ -896,7 +899,7 @@ class DictDeletterType(DictMicroOpType):
 
         return True
 
-    def prepare_bind(self, target, key_filter):
+    def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
     def replace_inferred_type(self, other_micro_op_type):
