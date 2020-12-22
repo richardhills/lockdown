@@ -21,8 +21,8 @@ class Type(object):
     def replace_inferred_types(self, other):
         return self
 
-    def apply_consistency_heuristic(self):
-        return self
+#     def apply_consistency_heuristic(self, other_micro_op_types):
+#         return self
 
     def __str__(self):
         return repr(self)
@@ -62,6 +62,11 @@ class UnitType(Type):
         if not isinstance(other, UnitType):
             return False
         return other.value == self.value
+
+#     def apply_consistency_heuristic(self, other_micro_op_types):
+#         if isinstance(self.value, int):
+#             return IntegerType()
+#         return self
 
     def get_allowed_values(self):
         return [ self.value ]
@@ -109,6 +114,13 @@ def remove_type(target, subtype):
     return merge_types([t for t in unwrap_types(target) if not subtype.is_copyable_from(t)], "exact")
 
 def merge_types(types, mode):
+    if mode not in ("exact", "super", "sub"):
+        raise FatalError()
+
+    for t in types:
+        if not isinstance(t, Type):
+            raise FatalError()
+
     to_drop = []
     for i1, t1 in enumerate(types):
         for i2, t2 in enumerate(types):
@@ -117,6 +129,7 @@ def merge_types(types, mode):
 
     types = [t for i, t in enumerate(types) if i not in to_drop]
 
+    to_drop = []
     if mode != "exact":
         for i1, t1 in enumerate(types):
             for i2, t2 in enumerate(types):
@@ -158,17 +171,17 @@ class OneOfType(Type):
         return True
         
 
-    def apply_consistency_heuristic(self):
-        new_types = []
-        requires_change = False
-        for type in self.types:
-            new_type = type.apply_consistency_heuristic()
-            new_types.append(new_type)
-            requires_change = requires_change or new_type is not type
-        if requires_change:
-            return OneOfType(new_types)
-        else:
-            return self
+#     def apply_consistency_heuristic(self, other_micro_ops):
+#         new_types = []
+#         requires_change = False
+#         for type in self.types:
+#             new_type = type.apply_consistency_heuristic(other_micro_ops)
+#             new_types.append(new_type)
+#             requires_change = requires_change or new_type is not type
+#         if requires_change:
+#             return OneOfType(new_types)
+#         else:
+#             return self
 
     def __repr__(self, *args, **kwargs):
         return "OneOfType<{}>".format(", ".join(t.short_str() for t in self.types))

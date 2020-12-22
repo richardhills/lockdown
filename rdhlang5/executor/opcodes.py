@@ -377,7 +377,7 @@ class ListTemplateOp(Opcode):
 
         micro_ops[("get-wildcard",)] = ListWildcardGetterType(combined_value_types, True, False)
         micro_ops[("set-wildcard",)] = ListWildcardSetterType(AnyType(), True, True)
-        micro_ops[("insert", 0)] = ListInsertType(AnyType(), 0, False, False)
+        micro_ops[("insert", 0)] = ListInsertType(0, AnyType(), False, False)
         micro_ops[("delete-wildcard",)] = ListWildcardDeletterType(True)
         micro_ops[("insert-wildcard",)] = ListWildcardInsertType(AnyType(), True, False)
 #        micro_ops[("get", "insert")] = BuiltInFunctionGetterType(ListInsertFunctionType(micro_ops[("insert-wildcard",)], combined_value_types))
@@ -541,9 +541,9 @@ class DereferenceOp(Opcode):
                     return frame.unwind(exception_break_mode, self.INVALID_DEREFERENCE(reference=reference), None)
 
                 if direct:
-                    return frame.value(micro_op_type.invoke(manager, trust_caller=True))
+                    return frame.value(micro_op_type.invoke(manager, shortcut_checks=True))
                 else:
-                    return frame.value(micro_op_type.invoke(manager, reference, trust_caller=True))
+                    return frame.value(micro_op_type.invoke(manager, reference, shortcut_checks=True))
             except InvalidDereferenceType:
                 return frame.unwind(exception_break_mode, self.INVALID_DEREFERENCE(reference=reference), None)
             except InvalidDereferenceKey:
@@ -711,9 +711,9 @@ class AssignmentOp(Opcode):
                     return frame.exception(self.INVALID_RVALUE())
 
                 if direct:
-                    return frame.value(micro_op_type.invoke(manager, rvalue, trust_caller=True))
+                    return frame.value(micro_op_type.invoke(manager, rvalue, shortcut_checks=True))
                 else:
-                    return frame.value(micro_op_type.invoke(manager, reference, rvalue, trust_caller=True))
+                    return frame.value(micro_op_type.invoke(manager, reference, rvalue, shortcut_checks=True))
             except InvalidAssignmentType:
                 return frame.exception(self.INVALID_ASSIGNMENT())
             except InvalidAssignmentKey:
@@ -857,14 +857,14 @@ class InsertOp(Opcode):
                     if self.invalid_rvalue_error and not direct_micro_op_type.value_type.is_copyable_from(get_type_of_value(rvalue)):
                         return frame.exception(self.INVALID_RVALUE())
 
-                    return frame.value(direct_micro_op_type.invoke(manager, rvalue, trust_caller=True))
+                    return frame.value(direct_micro_op_type.invoke(manager, rvalue, shortcut_checks=True))
 
                 wildcard_micro_op_type = self.wildcard_micro_ops.get(reference, None)
                 if wildcard_micro_op_type:
                     if self.invalid_rvalue_error and not wildcard_micro_op_type.value_type.is_copyable_from(get_type_of_value(rvalue)):
                         return frame.exception(self.INVALID_RVALUE())
 
-                    return frame.value(wildcard_micro_op_type.invoke(manager, reference, rvalue, trust_caller=True))
+                    return frame.value(wildcard_micro_op_type.invoke(manager, reference, rvalue, shortcut_checks=True))
 
 #                 direct_micro_op_type = manager.get_micro_op_type(("insert", reference))
 #                 if direct_micro_op_type:
@@ -931,7 +931,7 @@ class MapOp(Opcode):
 
                     micro_ops[("get-wildcard",)] = ListWildcardGetterType(mapper_return_type, True, False)
                     micro_ops[("set-wildcard",)] = ListWildcardSetterType(AnyType(), True, True)
-                    micro_ops[("insert", 0)] = ListInsertType(AnyType(), 0, False, False)
+                    micro_ops[("insert", 0)] = ListInsertType(0, AnyType(), False, False)
                     micro_ops[("delete-wildcard",)] = ListWildcardDeletterType(True)
                     micro_ops[("insert-wildcard",)] = ListWildcardInsertType(AnyType(), True, False)
 

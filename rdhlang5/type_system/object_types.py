@@ -7,7 +7,7 @@ from rdhlang5.type_system.core_types import merge_types, Type, Const, OneOfType,
     AnyType, StringType, NoValueType
 from rdhlang5.type_system.exceptions import FatalError, raise_if_safe, \
     InvalidDereferenceKey, InvalidDereferenceType, InvalidInferredType, \
-    InvalidAssignmentType, MissingMicroOp
+    InvalidAssignmentType, MissingMicroOp, InvalidAssignmentKey
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.micro_ops import MicroOpType
 from rdhlang5.utils import is_debug, MISSING, micro_op_repr, \
@@ -63,9 +63,9 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def invoke(self, target_manager, key, trust_caller=False, **kwargs):
-        if is_debug() or not trust_caller or self.key_error or self.type_error:
-            self.raise_micro_op_invocation_conflicts(target_manager, key)
+    def invoke(self, target_manager, key, shortcut_checks=False, allow_failure=False, **kwargs):
+        if is_debug() or not shortcut_checks or self.key_error or self.type_error:
+            self.raise_micro_op_invocation_conflicts(target_manager, key, allow_failure)
 
         if is_debug() and not self.key_type.is_copyable_from(get_type_of_value(key)):
             raise FatalError()
@@ -87,7 +87,7 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
 
         return value
 
-    def raise_micro_op_invocation_conflicts(self, target_manager, key):
+    def raise_micro_op_invocation_conflicts(self, target_manager, key, allow_failure):
         pass
 
     def is_derivable_from(self, other_type):
@@ -159,11 +159,11 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
             return ObjectWildcardGetterType(self.key_type, new_type, self.key_error, self.type_error)
         return self
 
-    def apply_consistency_heuristic(self, other_micro_op_types):
-        reified_type_to_use = self.value_type.apply_consistency_heuristic()
-        if reified_type_to_use != self.value_type:
-            return ObjectWildcardGetterType(self.key_type, reified_type_to_use, self.key_error, self.type_error)
-        return self
+#     def apply_consistency_heuristic(self, other_micro_op_types):
+#         reified_type_to_use = self.value_type.apply_consistency_heuristic(other_micro_op_types)
+#         if reified_type_to_use != self.value_type:
+#             return ObjectWildcardGetterType(self.key_type, reified_type_to_use, self.key_error, self.type_error)
+#         return self
 
 #     def bind(self, source_type, key, target_manager):
 #         if key is not None:
@@ -351,11 +351,11 @@ class ObjectGetterType(ObjectMicroOpType):
                 return ([ target.__dict__[self.key] ], self.value_type)
         return ([], None)
 
-    def apply_consistency_heuristic(self, other_micro_op_types):
-        reified_type_to_use = self.value_type.apply_consistency_heuristic()
-        if reified_type_to_use != self.value_type:
-            return ObjectGetterType(self.key, reified_type_to_use, self.key_error, self.type_error)
-        return self
+#     def apply_consistency_heuristic(self, other_micro_op_types):
+#         reified_type_to_use = self.value_type.apply_consistency_heuristic(other_micro_op_types)
+#         if reified_type_to_use != self.value_type:
+#             return ObjectGetterType(self.key, reified_type_to_use, self.key_error, self.type_error)
+#         return self
 
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, ObjectGetterType):
@@ -366,6 +366,9 @@ class ObjectGetterType(ObjectMicroOpType):
         if new_type is not self.value_type:
             return ObjectGetterType(self.key, new_type, key_error=self.key_error, type_error=self.type_error)
         return self
+
+    def clone(self, value_type=None):
+        return ObjectGetterType(self.key, value_type, self.key_error, self.type_error)
 
 #     def bind(self, source_type, key, target_manager):
 #         if key is not None and key != self.key:
@@ -481,14 +484,14 @@ class ObjectWildcardSetterType(ObjectMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def invoke(self, target_manager, key, new_value, trust_caller=False, *args, **kwargs):
-        if is_debug() or not trust_caller or self.key_error or self.type_error:
-            self.raise_micro_op_invocation_conflicts(target_manager, key, new_value)
+    def invoke(self, target_manager, key, new_value, shortcut_checks=False, allow_failure=False, **kwargs):
+        if is_debug() or not shortcut_checks or self.key_error or self.type_error:
+            self.raise_micro_op_invocation_conflicts(target_manager, key, new_value, allow_failure)
 
-        if (is_debug() or not trust_caller):
-            new_value_type = get_type_of_value(new_value)
-            if not self.value_type.is_copyable_from(new_value_type):
-                raise FatalError()
+#         if (is_debug() or not trust_caller):
+#             new_value_type = get_type_of_value(new_value)
+#             if not self.value_type.is_copyable_from(new_value_type):
+#                 raise FatalError()
 
         unbind_key(target_manager.get_obj(), key)
 
@@ -496,10 +499,10 @@ class ObjectWildcardSetterType(ObjectMicroOpType):
 
         bind_key(target_manager.get_obj(), key)
 
-    def raise_micro_op_invocation_conflicts(self, target_manager, key, new_value):
+    def raise_micro_op_invocation_conflicts(self, target_manager, key, new_value, allow_failure):
         target_type = target_manager.get_effective_composite_type()
         if not check_can_composite_type_be_added(target_manager.get_obj(), target_type, key_filter=key, substitute_value=new_value):
-            raise_if_safe(InvalidAssignmentType, self.type_error)
+            raise_if_safe(InvalidAssignmentType, self.type_error or allow_failure)
 
 #         target_type = target_manager.get_effective_composite_type()
 # 
@@ -544,16 +547,16 @@ class ObjectWildcardSetterType(ObjectMicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
-    def apply_consistency_heuristic(self, other_micro_op_types):
-        getter = other_micro_op_types.get(("get-wildcard", ), None)
-        type_to_use = self.value_type
-        if getter:
-            type_to_use = getter.value_type
-
-        reified_type_to_use = type_to_use.apply_consistency_heuristic()
-        if reified_type_to_use != self.value_type:
-            return ObjectWildcardSetterType(self.key_type, reified_type_to_use, self.key_error, self.type_error)
-        return self
+#     def apply_consistency_heuristic(self, other_micro_op_types):
+#         getter = other_micro_op_types.get(("get-wildcard", ), None)
+#         type_to_use = self.value_type
+#         if getter:
+#             type_to_use = getter.value_type
+# 
+#         reified_type_to_use = type_to_use.apply_consistency_heuristic(other_micro_op_types)
+#         if reified_type_to_use != self.value_type:
+#             return ObjectWildcardSetterType(self.key_type, reified_type_to_use, self.key_error, self.type_error)
+#         return self
 
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, ObjectWildcardSetterType):
@@ -564,6 +567,9 @@ class ObjectWildcardSetterType(ObjectMicroOpType):
         if new_type is not self.value_type:
             return ObjectWildcardSetterType(new_type, key_error=self.key_error, type_error=self.type_error)
         return self
+
+    def clone(self, value_type=None):
+        return ObjectWildcardSetterType(self.key_type, value_type, self.key_error, self.type_error)
 
 #     def bind(self, source_type, key, target):
 #         pass
@@ -614,14 +620,14 @@ class ObjectSetterType(ObjectMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def invoke(self, target_manager, new_value, trust_caller=False, **kwargs):
-        if is_debug() or not trust_caller or self.key_error or self.type_error:
-            self.raise_micro_op_invocation_conflicts(target_manager, new_value)
+    def invoke(self, target_manager, new_value, shortcut_checks=False, allow_failure=False, **kwargs):
+        if is_debug() or not shortcut_checks or self.key_error or self.type_error:
+            self.raise_micro_op_invocation_conflicts(target_manager, new_value, allow_failure)
 
-        if (is_debug() or not trust_caller):
-            new_value_type = get_type_of_value(new_value)
-            if not self.value_type.is_copyable_from(new_value_type):
-                raise FatalError()
+#         if (is_debug() or not trust_caller):
+#             new_value_type = get_type_of_value(new_value)
+#             if not self.value_type.is_copyable_from(new_value_type):
+#                 raise FatalError()
 
         unbind_key(target_manager.get_obj(), self.key)
 
@@ -629,10 +635,10 @@ class ObjectSetterType(ObjectMicroOpType):
 
         bind_key(target_manager.get_obj(), self.key)
 
-    def raise_micro_op_invocation_conflicts(self, target_manager, new_value):
+    def raise_micro_op_invocation_conflicts(self, target_manager, new_value, allow_failure):
         target_type = target_manager.get_effective_composite_type()
         if not check_can_composite_type_be_added(target_manager.get_obj(), target_type, key_filter=self.key, substitute_value=new_value):
-            raise_if_safe(InvalidAssignmentType, self.type_error)
+            raise_if_safe(InvalidAssignmentType, self.type_error or allow_failure)
 
 #         wildcard_getter = target_type.get_micro_op_type(("get-wildcard", ))
 #         if wildcard_getter and not wildcard_getter.type_error and not wildcard_getter.value_type.is_copyable_from(get_type_of_value(new_value)):
@@ -684,16 +690,19 @@ class ObjectSetterType(ObjectMicroOpType):
             return ObjectSetterType(self.key, new_type, key_error=self.key_error, type_error=self.type_error)
         return self
 
-    def apply_consistency_heuristic(self, other_micro_op_types):
-        getter = other_micro_op_types.get(("get", self.key), None)
-        type_to_use = self.value_type
-        if getter:
-            type_to_use = getter.value_type
+    def clone(self, value_type=None):
+        return ObjectSetterType(self.key, value_type, self.key_error, self.type_error)
 
-        reified_type_to_use = type_to_use.apply_consistency_heuristic()
-        if reified_type_to_use != self.value_type:
-            return ObjectSetterType(self.key, reified_type_to_use, self.key_error, self.type_error)
-        return self
+#     def apply_consistency_heuristic(self, other_micro_op_types):
+#         getter = other_micro_op_types.get(("get", self.key), None)
+#         type_to_use = self.value_type
+#         if getter:
+#             type_to_use = getter.value_type
+# 
+#         reified_type_to_use = type_to_use.apply_consistency_heuristic(other_micro_op_types)
+#         if reified_type_to_use != self.value_type:
+#             return ObjectSetterType(self.key, reified_type_to_use, self.key_error, self.type_error)
+#         return self
 
 #     def bind(self, source_type, key, target):
 #         pass
@@ -1005,17 +1014,18 @@ class RDHObject(Composite, object):
 
             micro_op_type = manager.get_micro_op_type(("set", key))
             if micro_op_type is not None:
-                micro_op_type.invoke(manager, value)
+                micro_op_type.invoke(manager, value, allow_failure=True)
             else:
                 micro_op_type = manager.get_micro_op_type(("set-wildcard",))
     
                 if micro_op_type is None:
-                    manager.get_micro_op_type(("set-wildcard",))
                     raise MissingMicroOp()
 
-                micro_op_type.invoke(manager, key, value)
-        except MissingMicroOp:
+                micro_op_type.invoke(manager, key, value, allow_failure=True)
+        except (InvalidAssignmentKey, MissingMicroOp):
             raise AttributeError(key)
+        except InvalidAssignmentType:
+            raise TypeError()
 
     def __getattribute__(self, key):
         if key in ("__dict__", "__class__"):

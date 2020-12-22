@@ -69,8 +69,8 @@ class DictWildcardGetterType(DictMicroOpType):
         self.key_error = key_error
         self.type_error = type_error
 
-    def invoke(self, target_manager, key, trust_caller=False, **kwargs):
-        if is_debug() or not trust_caller or self.key_error or self.type_error:
+    def invoke(self, target_manager, key, shortcut_checks=False, **kwargs):
+        if is_debug() or not shortcut_checks or self.key_error or self.type_error:
             self.raise_micro_op_invocation_conflicts(target_manager, key)
 
         if is_debug() and not self.key_type.is_copyable_from(get_type_of_value(key)):

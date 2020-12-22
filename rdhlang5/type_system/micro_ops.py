@@ -7,8 +7,8 @@ class MicroOpType(object):
     def replace_inferred_type(self, other_micro_op_type):
         raise NotImplementedError(self)
 
-    def apply_consistency_heuristic(self, other_micro_op_types):
-        return self
+#    def apply_consistency_heuristic(self, other_micro_op_types):
+#        return self
 
     def invoke(self, target_manager, *args, **kwargs):
         raise NotImplementedError(self)
@@ -26,10 +26,12 @@ class MicroOpType(object):
         # Returns a tuple (nested_targets, nested_type)
         raise NotImplementedError(self)
 
-
-
     def merge(self, other_micro_op_type):
         raise NotImplementedError(self)
+
+    def clone(self, **kwargs):
+        raise NotImplementedError(self)
+
 
 #     def unbind(self, source_type, key, target_manager):
 #         raise NotImplementedError(self)

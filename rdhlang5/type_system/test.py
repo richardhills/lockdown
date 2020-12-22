@@ -1,20 +1,22 @@
 from unittest import main
 from unittest.case import TestCase
 
-from rdhlang5.type_system.composites import CompositeType, InferredType
+from rdhlang5.type_system.composites import CompositeType, InferredType, \
+    apply_consistency_heiristic
 from rdhlang5.type_system.core_types import IntegerType, UnitType, StringType, \
-    AnyType, Const, OneOfType, BooleanType
+    AnyType, Const, OneOfType, BooleanType, merge_types
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     rich_composite_type
 from rdhlang5.type_system.dict_types import DictGetterType, \
     RDHDict
 from rdhlang5.type_system.exceptions import CompositeTypeIncompatibleWithTarget, \
-    CompositeTypeIsInconsistent
-from rdhlang5.type_system.list_types import RDHListType, RDHList, SPARSE_ELEMENT
+    CompositeTypeIsInconsistent, FatalError
+from rdhlang5.type_system.list_types import RDHListType, RDHList, SPARSE_ELEMENT, \
+    ListGetterType, ListSetterType, ListInsertType, ListDeletterType
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.object_types import ObjectGetterType, ObjectSetterType, \
     ObjectDeletterType, RDHObjectType, PythonObjectType, RDHObject, \
-    DefaultDictType
+    DefaultDictType, ObjectWildcardGetterType, ObjectWildcardSetterType
 from rdhlang5.utils import set_debug
 
 
@@ -23,7 +25,6 @@ class TestObject(RDHObject):
         for key, value in initial_data.items():
             self.__dict__[key] = value
         super(TestObject, self).__init__(*args, **kwargs)
-
 
 class TestMicroOpMerging(TestCase):
     def test_merge_gets(self):
@@ -239,12 +240,118 @@ class TestRevConstType(TestCase):
             ("set", "foo"): ObjectSetterType("foo", StringType(), False, False)
         })
 
-        rev_const_type = rev_const_type.apply_consistency_heuristic()
+        rev_const_type = apply_consistency_heiristic(rev_const_type)
 
-        self.assertTrue(isinstance(rev_const_type.micro_op_types[("get", "foo")].value_type, StringType))
+        self.assertTrue(isinstance(rev_const_type.micro_op_types[("set", "foo")].value_type, StringType))
 
-        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type.apply_consistency_heuristic()))
+        self.assertTrue(normal_broad_type.is_copyable_from(apply_consistency_heiristic(rev_const_type)))
 
+    def test_rev_const_wildcard(self):
+        rev_const_type = CompositeType({
+            ("get-wildcard", ): ObjectWildcardGetterType(StringType(), StringType(), False, False),
+            ("set-wildcard", ): ObjectWildcardSetterType(StringType(), AnyType(), False, False)
+        })
+
+        normal_broad_type = CompositeType({
+            ("get", "foo"): ObjectWildcardGetterType(StringType(), StringType(), False, False),
+            ("set", "foo"): ObjectWildcardSetterType(StringType(), StringType(), False, False)
+        })
+
+        rev_const_type = apply_consistency_heiristic(rev_const_type)
+
+        self.assertTrue(isinstance(rev_const_type.micro_op_types[("set-wildcard",)].value_type, StringType))
+
+        self.assertTrue(normal_broad_type.is_copyable_from(apply_consistency_heiristic(rev_const_type)))
+
+    def test_rev_const_flatten_tuple(self):
+        rev_const_type = CompositeType({
+            ("get", 0): ListGetterType(0, StringType(), False, False),
+            ("set", 0): ListSetterType(0, AnyType(), False, False)
+        })
+
+        normal_broad_type = CompositeType({
+            ("get", 0): ListGetterType(0, StringType(), False, False),
+            ("set", 0): ListSetterType(0, StringType(), False, False)
+        })
+
+        rev_const_type = apply_consistency_heiristic(rev_const_type)
+
+        self.assertTrue(isinstance(rev_const_type.micro_op_types[("set", 0)].value_type, StringType))
+
+        self.assertTrue(normal_broad_type.is_copyable_from(apply_consistency_heiristic(rev_const_type)))
+
+    def test_rev_const_flatten_list(self):
+        rev_const_type = CompositeType({
+            ("get", 0): ListGetterType(0, StringType(), False, False),
+            ("set", 0): ListSetterType(0, AnyType(), False, False),
+            ("insert", 0): ListInsertType(0, IntegerType(), False, False)
+        })
+
+        normal_broad_type = CompositeType({
+            ("get", 0): ListGetterType(0, OneOfType([ StringType(), IntegerType() ]), False, False),
+            ("set", 0): ListSetterType(0, StringType(), False, False),
+            ("insert", 0): ListInsertType(0, IntegerType(), False, False),
+        })
+
+        rev_const_type = apply_consistency_heiristic(rev_const_type)
+
+        self.assertTrue(rev_const_type.is_self_consistent())
+
+        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type))
+
+    def test_rev_const_merge_types_in_list(self):
+        rev_const_type = CompositeType({
+            ("get", 0): ListGetterType(0, StringType(), False, False),
+            ("set", 0): ListSetterType(0, StringType(), False, False),
+            ("get", 1): ListGetterType(1, IntegerType(), False, False),
+            ("set", 1): ListSetterType(1, IntegerType(), False, False),
+            ("get", 2): ListGetterType(2, AnyType(), False, False),
+            ("set", 2): ListSetterType(2, AnyType(), False, False),
+            ("insert", 0): ListInsertType(0, StringType(), False, False)
+        })
+
+        normal_broad_type = CompositeType({
+            ("get", 0): ListGetterType(0, StringType(), False, False),
+            ("set", 0): ListSetterType(0, StringType(), False, False),
+            ("get", 1): ListGetterType(1, OneOfType([ StringType(), IntegerType() ]), False, False),
+            ("set", 1): ListSetterType(1, IntegerType(), False, False),
+            ("get", 2): ListGetterType(2, AnyType(), False, False),
+            ("set", 2): ListSetterType(2, AnyType(), False, False),
+            ("insert", 0): ListInsertType(0, StringType(), False, False),
+        })
+
+        rev_const_type = apply_consistency_heiristic(rev_const_type)
+
+        self.assertTrue(rev_const_type.is_self_consistent())
+
+        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type))
+
+    def test_rev_const_merge_types_with_delete(self):
+        rev_const_type = CompositeType({
+            ("get", 0): ListGetterType(0, AnyType(), False, False),
+            ("set", 0): ListSetterType(0, AnyType(), False, False),
+            ("get", 1): ListGetterType(1, IntegerType(), False, False),
+            ("set", 1): ListSetterType(1, IntegerType(), False, False),
+            ("get", 2): ListGetterType(2, StringType(), False, False),
+            ("set", 2): ListSetterType(2, StringType(), False, False),
+            ("delete", 0): ListDeletterType(0, False)
+        })
+
+        normal_broad_type = CompositeType({
+            ("get", 0): ListGetterType(0, AnyType(), True, False),
+            ("set", 0): ListSetterType(0, AnyType(), True, False),
+            ("get", 1): ListGetterType(1, OneOfType([ StringType(), IntegerType() ]), True, False),
+            ("set", 1): ListSetterType(1, IntegerType(), True, False),
+            ("get", 2): ListGetterType(2, StringType(), True, False),
+            ("set", 2): ListSetterType(2, StringType(), True, False),
+            ("delete", 0): ListDeletterType(0, False),
+        })
+
+        rev_const_type = apply_consistency_heiristic(rev_const_type)
+
+        self.assertTrue(rev_const_type.is_self_consistent())
+
+        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type))
 
 class TestRDHObjectType(TestCase):
     def test_basic_class(self):
@@ -713,7 +820,6 @@ class TestDefaultDict(TestCase):
         self.assertEquals(foo.bar, "forty-two")
         self.assertEquals(foo.bam, "bam-123")
 
-
 class TestListObjects(TestCase):
     def test_basic_list_of_ints(self):
         foo = RDHList([ 1, 2, 3 ])
@@ -861,7 +967,7 @@ class TestRDHListType(TestCase):
         self.assertFalse(foo.is_self_consistent())
 
     def test_reified_extreme_type_contains_no_conflicts(self):
-        foo = RDHListType([ IntegerType() ], IntegerType()).apply_consistency_heuristic()
+        foo = apply_consistency_heiristic(RDHListType([ IntegerType() ], IntegerType()))
         self.assertTrue(foo.is_self_consistent())
 
     def test_simple_type1_has_no_conflicts(self):
@@ -889,7 +995,7 @@ class TestList(TestCase):
         foo = RDHList([ 4, 6, 8 ])
         get_manager(foo).add_composite_type(RDHListType([], IntegerType()))
 
-        with self.assertRaises(Exception):
+        with self.assertRaises(TypeError):
             foo.append("hello")
 
     def test_list_modification_right_type_ok(self):
@@ -902,14 +1008,14 @@ class TestList(TestCase):
         foo = RDHList([ 4, 6, 8 ])
         get_manager(foo).add_composite_type(RDHListType([], None))
 
-        with self.assertRaises(Exception):
+        with self.assertRaises(IndexError):
             foo.append(10)
 
     def test_mixed_type_tuple(self):
         foo = RDHList([ 4, 6, 8 ])
         get_manager(foo).add_composite_type(RDHListType([ IntegerType(), AnyType() ], None))
 
-        with self.assertRaises(Exception):
+        with self.assertRaises(TypeError):
             foo[0] = "hello"
 
         self.assertEqual(foo[0], 4)
@@ -921,9 +1027,9 @@ class TestList(TestCase):
         foo = RDHList([ 4, 6, 8 ])
         get_manager(foo).add_composite_type(RDHListType([ IntegerType(), AnyType() ], None))
 
-        with self.assertRaises(Exception):
+        with self.assertRaises(IndexError):
             foo[2]
-        with self.assertRaises(Exception):
+        with self.assertRaises(IndexError):
             foo[2] = "hello"
 
     def test_outside_tuple_access_allowed(self):
@@ -1196,3 +1302,29 @@ class TestCoreTypes(TestCase):
         self.assertFalse(BooleanType().is_copyable_from(UnitType(5)))
         self.assertFalse(IntegerType().is_copyable_from(UnitType(True)))
 
+    def test_merge_singleton_basic_types(self):
+        self.assertTrue(isinstance(merge_types([ IntegerType() ], "super"), IntegerType))
+        self.assertTrue(isinstance(merge_types([ IntegerType() ], "sub"), IntegerType))
+        self.assertTrue(isinstance(merge_types([ IntegerType() ], "exact"), IntegerType))
+
+    def test_merge_pairwise_parent_and_child_types(self):
+        self.assertTrue(isinstance(merge_types([ AnyType(), IntegerType() ], "super"), AnyType))
+        self.assertTrue(isinstance(merge_types([ AnyType(), IntegerType() ], "sub"), IntegerType))
+        self.assertTrue(isinstance(merge_types([ AnyType(), IntegerType() ], "exact"), OneOfType))
+        self.assertTrue(len(merge_types([ AnyType(), IntegerType() ], "exact").types) == 2)
+
+    def test_merge_pairwise_unrelated_types(self):
+        self.assertTrue(isinstance(merge_types([ StringType(), IntegerType() ], "super"), OneOfType))
+        self.assertTrue(len(merge_types([ StringType(), IntegerType() ], "super").types) == 2)
+        self.assertTrue(isinstance(merge_types([ StringType(), IntegerType() ], "sub"), OneOfType))
+        self.assertTrue(len(merge_types([ StringType(), IntegerType() ], "sub").types) == 2)
+        self.assertTrue(isinstance(merge_types([ StringType(), IntegerType() ], "exact"), OneOfType))
+        self.assertTrue(len(merge_types([ StringType(), IntegerType() ], "exact").types) == 2)
+
+    def test_merge_irrelevant_types(self):
+        self.assertTrue(isinstance(merge_types([ StringType(), StringType(), IntegerType() ], "super"), OneOfType))
+        self.assertTrue(len(merge_types([ StringType(), StringType(), IntegerType() ], "super").types) == 2)
+        self.assertTrue(isinstance(merge_types([ StringType(), StringType(), IntegerType() ], "sub"), OneOfType))
+        self.assertTrue(len(merge_types([ StringType(), StringType(), IntegerType() ], "sub").types) == 2)
+        self.assertTrue(isinstance(merge_types([ StringType(), StringType(), IntegerType() ], "exact"), OneOfType))
+        self.assertTrue(len(merge_types([ StringType(), IntegerType() ], "exact").types) == 2)

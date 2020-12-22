@@ -6,7 +6,7 @@ import threading
 import weakref
 
 from rdhlang5.type_system.core_types import Type, unwrap_types, OneOfType, \
-    AnyType
+    AnyType, merge_types
 from rdhlang5.type_system.exceptions import FatalError, IsNotCompositeType, \
     CompositeTypeIncompatibleWithTarget, CompositeTypeIsInconsistent
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
@@ -65,22 +65,22 @@ class CompositeType(Type):
             name="inferred<{} & {}>".format(self.name, other.name)
         )
 
-    def apply_consistency_heuristic(self):
-        # Takes an inconsistent type and hacks it to be consistent, based on our rules of thumb
-        if self.is_self_consistent():
-            return self
-
-        potential_replacement_opcodes = {}
-
-        for key, micro_op_type in self.micro_op_types.items():
-            new_micro_op = micro_op_type.apply_consistency_heuristic(self.micro_op_types)
-            if new_micro_op:
-                potential_replacement_opcodes[key] = new_micro_op
-
-        return CompositeType(
-            potential_replacement_opcodes,
-            name="reified<{}>".format(self.name)
-        )
+#     def apply_consistency_heuristic(self, other_micro_ops):
+#         # Takes an inconsistent type and hacks it to be consistent, based on our rules of thumb
+#         if self.is_self_consistent():
+#             return self
+# 
+#         potential_replacement_opcodes = {}
+# 
+#         for key, micro_op_type in self.micro_op_types.items():
+#             new_micro_op = micro_op_type.apply_consistency_heuristic(self.micro_op_types)
+#             if new_micro_op:
+#                 potential_replacement_opcodes[key] = new_micro_op
+# 
+#         return CompositeType(
+#             potential_replacement_opcodes,
+#             name="reified<{}>".format(self.name)
+#         )
 
     def get_micro_op_type(self, tag):
         return self.micro_op_types.get(tag, None)
@@ -244,7 +244,7 @@ class CompositeType(Type):
 #         return result
 
     def __repr__(self):
-        return "Composite<{}; {}>".format(", ".join([str(m) for m in self.micro_op_types.values()]))
+        return "Composite<{}>".format(", ".join([str(m) for m in self.micro_op_types.values()]))
 
     def short_str(self):
         return "Composite<{}>".format(self.name)
@@ -615,6 +615,78 @@ class CompositeObjectManager(object):
 #         attach_chain(chain)
 # 
 #     return True
+
+def apply_consistency_heiristic(composite_type, results_cache=None):
+    if composite_type.is_self_consistent():
+        return composite_type
+
+    if results_cache is None:
+        results_cache = {}
+
+    if id(composite_type) in results_cache:
+        return results_cache[id(composite_type)]
+
+    result_composite_type = CompositeType(dict(composite_type.micro_op_types), "Heiristic: {}".format(composite_type.name))
+    results_cache[id(result_composite_type)] = result_composite_type
+
+    for tag, micro_op in result_composite_type.micro_op_types.items():
+        if hasattr(micro_op, "value_type") and isinstance(micro_op.value_type, CompositeType):
+            result_composite_type.micro_op_types[tag] = micro_op.clone(
+                value_type=apply_consistency_heiristic(micro_op.value_type, results_cache)
+            )
+
+    for tag, micro_op in result_composite_type.micro_op_types.items():
+        if tag[0] == "set" and isinstance(micro_op.value_type, AnyType):
+            getter = result_composite_type.micro_op_types[("get", tag[1])]
+            result_composite_type.micro_op_types[tag] = micro_op.clone(value_type=getter.value_type)
+        if tag[0] == "set-wildcard" and isinstance(micro_op.value_type, AnyType):
+            getter = result_composite_type.micro_op_types[("get-wildcard", )]
+            result_composite_type.micro_op_types[tag] = micro_op.clone(value_type=getter.value_type)
+
+    right_shifts = []
+    left_shifts = []
+
+    for tag, micro_op in result_composite_type.micro_op_types.items():
+        if tag[0] == "insert":
+            right_shifts.append((tag[1], micro_op.value_type))
+        if tag[0] == "insert-wildcard":
+            right_shifts.append((0, micro_op.value_type))
+
+        if tag[0] == "delete":
+            left_shifts.append(tag[1])
+        if tag[0] == "delete-wildcard":
+            left_shifts.append(0)
+
+    positional_getter_micro_ops = sorted(
+        [m for t, m in result_composite_type.micro_op_types.items() if t[0] == "get" and len(t) == 2 and isinstance(t[1], int)],
+        key=lambda m: m.key
+    )
+
+    for starting_index, starting_type in right_shifts:
+        cumulative_types = [ starting_type ]
+        for getter_micro_op in positional_getter_micro_ops:
+            if getter_micro_op.key >= starting_index:
+                cumulative_types = cumulative_types + [ getter_micro_op.value_type ]
+                result_composite_type.micro_op_types[("get", getter_micro_op.key)] = getter_micro_op.clone(
+                    value_type=merge_types(cumulative_types, "super")
+                )
+
+    positional_getter_micro_ops = sorted(
+        [m for t, m in result_composite_type.micro_op_types.items() if t[0] == "get" and len(t) == 2 and isinstance(t[1], int)],
+        key=lambda m: m.key
+    )
+
+    for starting_index in left_shifts:
+        cumulative_types = []
+        for getter_micro_op in reversed(positional_getter_micro_ops):
+            if getter_micro_op.key >= starting_index:
+                cumulative_types.append(getter_micro_op.value_type)
+                result_composite_type.micro_op_types[("get", getter_micro_op.key)] = getter_micro_op.clone(
+                    value_type=merge_types(cumulative_types, "super"),
+                    key_error=True
+                )
+
+    return result_composite_type
 
 def add_composite_type(target, new_type, key_filter=None, multiplier=1):
     types_to_bind = {}

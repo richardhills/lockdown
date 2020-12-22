@@ -22,7 +22,8 @@ from rdhlang5.executor.opcodes import enrich_opcode, get_context_type, evaluate,
 from rdhlang5.executor.raw_code_factories import dynamic_dereference_op, \
     static_op, match_op, prepared_function, inferred_type
 from rdhlang5.executor.type_factories import enrich_type
-from rdhlang5.type_system.composites import CompositeType
+from rdhlang5.type_system.composites import CompositeType,\
+    apply_consistency_heiristic
 from rdhlang5.type_system.core_types import Type, NoValueType, IntegerType, \
     AnyType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
@@ -84,13 +85,22 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
         argument_type = argument_type.replace_inferred_types(suggested_argument_type)
     except InvalidInferredType:
         raise PreparationException("Invalid argument inferred types")
+
+    if isinstance(argument_type, CompositeType):
+        argument_type = apply_consistency_heiristic(argument_type)
+        if not argument_type.is_self_consistent():
+            raise FatalError()
+
     try:
         outer_type = outer_type.replace_inferred_types(suggested_outer_type)
     except InvalidInferredType:
         raise PreparationException("Invalid outer inferred types")
 
-    argument_type = argument_type.apply_consistency_heuristic()
-    outer_type = outer_type.apply_consistency_heuristic()
+    if isinstance(outer_type, CompositeType):
+        outer_type = apply_consistency_heiristic(outer_type)
+        if not outer_type.is_self_consistent():
+            raise FatalError()
+
     local_type = enrich_type(static.local)
 
     context = RDHObject({
@@ -133,13 +143,12 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
     try:
         local_type = local_type.replace_inferred_types(actual_local_type)
     except InvalidInferredType:
-        local_type = local_type.replace_inferred_types(actual_local_type)
         raise PreparationException("Invalid local inferred type")
 
-    local_type = local_type.apply_consistency_heuristic()
+    if isinstance(local_type, CompositeType):
+        local_type = apply_consistency_heiristic(local_type)
 
     if not local_type.is_copyable_from(actual_local_type):
-        local_type.is_copyable_from(actual_local_type)
         raise PreparationException("Invalid local type: {} != {}".format(local_type, actual_local_type))
 
     actual_break_types_factory.merge(local_other_break_types)

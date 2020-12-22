@@ -32,7 +32,7 @@ if runtime_type_information():
     DEFAULT_OBJECT_TYPE.micro_op_types[("set-wildcard", )] = ObjectWildcardSetterType(readonly_rich_composite_type, rich_composite_type, True, True)
 
 DEFAULT_LIST_TYPE.micro_op_types[("get-wildcard", )] = ListWildcardGetterType(rich_composite_type, True, False)
-DEFAULT_LIST_TYPE.micro_op_types[("insert", 0 )] = ListInsertType(rich_composite_type, 0, False, False)
+DEFAULT_LIST_TYPE.micro_op_types[("insert", 0 )] = ListInsertType(0, rich_composite_type, False, False)
 DEFAULT_LIST_TYPE.micro_op_types[("delete-wildcard", )] = ListWildcardDeletterType(True)
 if runtime_type_information():
     DEFAULT_LIST_TYPE.micro_op_types[("set-wildcard", )] = ListWildcardSetterType(rich_composite_type, True, True)

@@ -28,7 +28,12 @@ def spread_dict(*args, **kwargs):
     result.update(kwargs)
     return result
 
-def default(value, marker, default_if_marker):
+def default(value, *args):
+    if len(args) == 1:
+        marker = MISSING
+        default_if_marker, = args
+    else:
+        marker, default_if_marker = args
     if value is marker:
         return default_if_marker
     return value
