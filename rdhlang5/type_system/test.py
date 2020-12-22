@@ -1100,14 +1100,14 @@ class TestList(TestCase):
         self.assertEqual(list(foo), [ 2, 4, 6, 8, 10, 12, 14 ])
 
     def test_sparse_list_setting(self):
-        foo = RDHList([ 4, 6, 8 ])
+        foo = RDHList([ 4, 6, 8 ], is_sparse=True)
         get_manager(foo).add_composite_type(RDHListType([ ], IntegerType(), is_sparse=True))
 
         foo[4] = 12
         self.assertEqual(list(foo), [ 4, 6, 8, SPARSE_ELEMENT, 12 ])
 
     def test_sparse_list_inserting(self):
-        foo = RDHList([ 4, 6, 8 ])
+        foo = RDHList([ 4, 6, 8 ], is_sparse=True)
         get_manager(foo).add_composite_type(RDHListType([ ], IntegerType(), is_sparse=True))
 
         foo.insert(4, 12)
@@ -1290,6 +1290,26 @@ class TestRuntime(TestCase):
         
         self.assertEquals(len(get_manager(A).attached_types), 0)
         self.assertEquals(get_manager(A).attached_type_counts[id(At)], 0)
+
+class TestRDHInstances(TestCase):
+    def test_object_set_and_get(self):
+        foo = RDHObject({})
+        foo._set("foo", 42)
+
+        self.assertEqual(foo._get("foo"), 42)
+
+    def test_list_set_and_get(self):
+        foo = RDHList([ 123 ])
+        foo._set(0, 42)
+
+        self.assertEqual(foo._get(0), 42)
+
+    def test_list_insert(self):
+        foo = RDHList([ 123 ])
+        foo._insert(0, 42)
+
+        self.assertEqual(foo._to_list(), [ 42, 123 ])
+        
 
 class TestCoreTypes(TestCase):
     def test_ints_and_bools(self):

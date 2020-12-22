@@ -76,8 +76,10 @@ class ListWildcardGetterType(ListMicroOpType):
         if is_debug() or not shortcut_checks or self.key_error or self.type_error:
             self.raise_micro_op_invocation_conflicts(target_manager, key, allow_failure)
  
-        if key >= 0 and key < len(target_manager.get_obj()):
-            value = target_manager.get_obj().__getitem__(key, raw=True)
+        obj = target_manager.get_obj()
+ 
+        if obj._contains(key):
+            value = obj._get(key)
         else:
             default_factory = target_manager.default_factory
  
@@ -128,7 +130,7 @@ class ListWildcardGetterType(ListMicroOpType):
 
     def is_bindable_to(self, target):
         manager = get_manager(target)
-        if not bool(isinstance(target, RDHList)):
+        if not isinstance(target, RDHList):
             return False
         if not manager:
             return False
@@ -299,8 +301,10 @@ class ListGetterType(ListMicroOpType):
         if is_debug() or not shortcut_checks or self.key_error or self.type_error:
             self.raise_micro_op_invocation_conflicts(target_manager, allow_failure)
 
-        if self.key >= 0 and self.key < len(target_manager.get_obj()):
-            value = target_manager.get_obj().__getitem__(self.key, raw=True)
+        obj = target_manager.get_obj()
+
+        if obj._contains(self.key):
+            value = obj._get(self.key)
         else:
             default_factory = target_manager.default_factory
 
@@ -360,7 +364,7 @@ class ListGetterType(ListMicroOpType):
 
     def is_bindable_to(self, target):
         manager = get_manager(target)
-        if not bool(isinstance(target, RDHList)):
+        if not isinstance(target, RDHList):
             return False
         if not manager:
             return False
@@ -375,7 +379,7 @@ class ListGetterType(ListMicroOpType):
             if substitute_value is not MISSING:
                 return ([ substitute_value ], self.value_type)
             if self.key in target.wrapped:
-                return ([ target.__getitem__(self.key, raw=True) ], self.value_type)
+                return ([ target._get(self.key) ], self.value_type)
         return ([], None)
 
 #     def apply_consistency_heuristic(self, other_micro_op_types):
@@ -567,7 +571,7 @@ class ListWildcardSetterType(ListMicroOpType):
 
         unbind_key(target_manager.get_obj(), key)
 
-        target_manager.get_obj().__setitem__(key, new_value, raw=True)
+        target_manager.get_obj()._set(key, new_value)
 
         bind_key(target_manager.get_obj(), key)
 
@@ -608,9 +612,12 @@ class ListWildcardSetterType(ListMicroOpType):
 
     def is_bindable_to(self, target):
         manager = get_manager(target)
-        if not bool(isinstance(target, RDHList)):
+        if not isinstance(target, RDHList):
             return False
         if not manager:
+            return False
+
+        if not self.key_error and not target.is_sparse:
             return False
 
         return True
@@ -717,7 +724,7 @@ class ListSetterType(ListMicroOpType):
 
         unbind_key(target_manager.get_obj(), self.key)
 
-        target_manager.get_obj().__setitem__(self.key, new_value, raw=True)
+        target_manager.get_obj()._set(self.key, new_value)
 
         bind_key(target_manager.get_obj(), self.key)
 
@@ -758,9 +765,12 @@ class ListSetterType(ListMicroOpType):
 
     def is_bindable_to(self, target):
         manager = get_manager(target)
-        if not bool(isinstance(target, RDHList)):
+        if not isinstance(target, RDHList):
             return False
         if not manager:
+            return False
+
+        if not target._contains(self.key) and not self.key_error and not target.is_sparse:
             return False
 
         return True
@@ -903,7 +913,7 @@ class ListWildcardDeletterType(ListMicroOpType):
 
     def is_bindable_to(self, target):
         manager = get_manager(target)
-        if not bool(isinstance(target, RDHList)):
+        if not isinstance(target, RDHList):
             return False
         if not manager:
             return False
@@ -1007,7 +1017,7 @@ class ListDeletterType(ListMicroOpType):
 
     def is_bindable_to(self, target):
         manager = get_manager(target)
-        if not bool(isinstance(target, RDHList)):
+        if not isinstance(target, RDHList):
             return False
         if not manager:
             return False
@@ -1087,7 +1097,7 @@ class ListWildcardInsertType(ListMicroOpType):
         for after_key in range(key, len(target_manager.get_obj())):
             unbind_key(target_manager.get_obj(), after_key)
 
-        target_manager.get_obj().insert(key, new_value, raw=True)
+        target_manager.get_obj()._insert(key, new_value)
  
         for after_key in range(key, len(target_manager.get_obj())):
             bind_key(target_manager.get_obj(), after_key)
@@ -1146,7 +1156,7 @@ class ListWildcardInsertType(ListMicroOpType):
 
     def is_bindable_to(self, target):
         manager = get_manager(target)
-        if not bool(isinstance(target, RDHList)):
+        if not isinstance(target, RDHList):
             return False
         if not manager:
             return False
@@ -1239,7 +1249,7 @@ class ListInsertType(ListMicroOpType):
         for after_key in range(self.key, len(target_manager.get_obj())):
             unbind_key(target_manager.get_obj(), after_key)
 
-        target_manager.get_obj().insert(self.key, new_value, raw=True)
+        target_manager.get_obj()._insert(self.key, new_value)
 
         for after_key in range(self.key, len(target_manager.get_obj())):
             bind_key(target_manager.get_obj(), after_key)
@@ -1282,7 +1292,7 @@ class ListInsertType(ListMicroOpType):
 
     def is_bindable_to(self, target):
         manager = get_manager(target)
-        if not bool(isinstance(target, RDHList)):
+        if not isinstance(target, RDHList):
             return False
         if not manager:
             return False
@@ -1403,27 +1413,67 @@ SPARSE_ELEMENT = object()
 
 
 class RDHList(Composite, MutableSequence, object):
-    def __init__(self, initial_data, bind=None, debug_reason=None):
+    def __init__(self, initial_data, is_sparse=False, bind=None, debug_reason=None):
         self.wrapped = {
             index: value for index, value in enumerate(initial_data)
         }
         manager = get_manager(self, "RDHList")
         self.length = len(initial_data)
+        self.is_sparse = is_sparse
         manager.debug_reason = debug_reason
         if bind:
             get_manager(self).add_composite_type(bind)
 
+    def _set(self, key, value):
+        if key not in self.wrapped and not self.is_sparse:
+            raise IndexError()
+
+        self.wrapped[key] = value
+        self.length = max(self.length, key + 1)
+
+    def _get(self, key):
+        if key in self.wrapped:
+            return self.wrapped[key]
+        if self.is_sparse and key >= 0 and key < self.length:
+            return SPARSE_ELEMENT
+        raise IndexError()
+
+    def _delete(self, key):
+        del self.wrapped[key]
+        keys_above_key = sorted([k for k in self.wrapped.keys() if k > key])
+        for k in keys_above_key:
+            self.wrapped[k - 1] = self.wrapped[k]
+            del self.wrapped[k]
+        self.length -= 1
+
+    def _contains(self, key):
+        return key >= 0 and key < self.length
+
+    def _keys(self):
+        return list(range(self.length))
+
+    def _values(self):
+        return [self._get(k) for k in self._keys()]
+
+    def _insert(self, key, value):
+        # <= because  we  allow inserts after the last element in the list
+        if not (key >= 0 and key <= self.length) and not self.is_sparse:
+            raise IndexError()
+
+        keys_above_key = reversed(sorted([k for k in self.wrapped.keys() if k >= key]))
+        for k in keys_above_key:
+            self.wrapped[k + 1] = self.wrapped[k]
+            del self.wrapped[k]
+        self.wrapped[key] = value
+        self.length = max(self.length + 1, key + 1)
+
+    def _to_list(self):
+        return self._values()
+
     def __len__(self):
         return self.length
 
-    def insert(self, index, element, raw=False):
-        if raw:
-            for i in reversed(range(index, self.length)):
-                self.wrapped[i + 1] = self.wrapped[i]
-            self.wrapped[index] = element
-            self.length = max(index + 1, self.length + 1)
-            return
-
+    def insert(self, index, element):
         try:
             manager = get_manager(self)
 
@@ -1443,12 +1493,7 @@ class RDHList(Composite, MutableSequence, object):
         except InvalidAssignmentType:
             raise TypeError()
 
-    def __setitem__(self, key, value, raw=False):
-        if raw:
-            self.wrapped[key] = value
-            self.length = max(self.length, key + 1)
-            return
-
+    def __setitem__(self, key, value):
         try:
             manager = get_manager(self)
 
@@ -1467,12 +1512,7 @@ class RDHList(Composite, MutableSequence, object):
         except InvalidAssignmentType:
             raise TypeError()
 
-    def __getitem__(self, key, raw=False):
-        if raw:
-            if key < 0 or key >= self.length:
-                raise FatalError()
-            return self.wrapped.get(key, SPARSE_ELEMENT)
-
+    def __getitem__(self, key):
         try:
             manager = get_manager(self)
 
@@ -1493,13 +1533,7 @@ class RDHList(Composite, MutableSequence, object):
         except MissingMicroOp:
             raise IndexError()
 
-    def __delitem__(self, key, raw=False):
-        if raw:
-            for i in reversed(range(key, self.length)):
-                self.wrapped[i - 1] = self.wrapped[i]
-            self.length -= 1
-            return
-
+    def __delitem__(self, key):
         manager = get_manager(self)
 
         micro_op_type = manager.get_micro_op_type(("delete", key))

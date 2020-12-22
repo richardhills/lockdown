@@ -76,8 +76,10 @@ class DictWildcardGetterType(DictMicroOpType):
         if is_debug() and not self.key_type.is_copyable_from(get_type_of_value(key)):
             raise FatalError()
 
-        if key in target_manager.get_obj().wrapped:
-            value = target_manager.get_obj().__getitem__(key, raw=True)
+        obj = target_manager.get_obj()
+
+        if obj._contains(key):
+            value = obj._get(key)
         else:
             default_factory = target_manager.default_factory
 
@@ -146,11 +148,11 @@ class DictWildcardGetterType(DictMicroOpType):
         if key_filter:
             if substitute_value is not MISSING:
                 return ([ substitute_value ], self.value_type)
-            if key_filter in target.wrapped:
-                return ([ target.wrapped.get(key_filter) ], self.value_type)
+            if target._contains(key_filter):
+                return ([ target._get(key_filter) ], self.value_type)
             return ([], self.value_type)
 
-        return (target.wrapped.values(), self.value_type)
+        return (target._values(), self.value_type)
 
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, DictWildcardGetterType):
@@ -290,8 +292,10 @@ class DictGetterType(DictMicroOpType):
     def invoke(self, target_manager, **kwargs):
         self.raise_micro_op_invocation_conflicts(target_manager)
  
-        if self.key in target_manager.get_obj().wrapped:
-            value = target_manager.get_obj().wrapped[self.key]
+        obj = target_manager.get_obj()
+ 
+        if obj._contains(self.key):
+            value = obj._get(self.key)
         else:
             default_factory = target_manager.default_factory
  
@@ -347,7 +351,7 @@ class DictGetterType(DictMicroOpType):
         if not manager:
             return False
 
-        if not (self.key in target.wrapped or manager.default_factory or self.key_error):
+        if not (target._contains(self.key) or manager.default_factory or self.key_error):
             return False
 
         return True
@@ -356,8 +360,8 @@ class DictGetterType(DictMicroOpType):
         if not key_filter or key_filter == self.key:
             if substitute_value is not MISSING:
                 return ([ substitute_value ], self.value_type)
-            if self.key in target.wrapped:
-                return ([ target.wrapped[self.key] ], self.value_type)
+            if target._contains(self.key):
+                return ([ target._get(self.key) ], self.value_type)
         return ([], None)
 
     def replace_inferred_type(self, other_micro_op_type):
@@ -502,7 +506,7 @@ class DictWildcardSetterType(DictMicroOpType):
 
         unbind_key(target_manager.get_obj(), key)
 
-        target_manager.get_obj().wrapped[key] = new_value
+        target_manager.get_obj()._get(key, new_value)
 
         bind_key(target_manager.get_obj(), key)
 
@@ -628,7 +632,7 @@ class DictSetterType(DictMicroOpType):
 
         unbind_key(target_manager.get_obj(), key)
 
-        target_manager.get_obj().wrapped[self.key] = new_value
+        target_manager.get_obj()._set(self.key, new_value)
 
         bind_key(target_manager.get_obj(), key)
 
@@ -759,7 +763,7 @@ class DictWildcardDeletterType(DictMicroOpType):
 
         unbind_key(target_manager.get_obj(), key)
 
-        del target_manager.get_obj().wrapped[key]
+        target_manager.get_obj()._delete(key)
 
     def raise_micro_op_invocation_conflicts(self, target_manager, key):
         target_type = target_manager.get_effective_composite_type()
@@ -859,7 +863,7 @@ class DictDeletterType(DictMicroOpType):
 
         unbind_key(target_manager.get_obj(), self.key)
 
-        del target_manager.get_obj().wrapped[self.key]
+        target_manager.get_obj()._delete(self.key)
 
     def raise_micro_op_invocation_conflicts(self, target_manager):
         target_type = target_manager.get_effective_composite_type()
@@ -970,12 +974,27 @@ class RDHDict(Composite, DictMixin, object):
         if bind:
             get_manager(self).add_composite_type(bind)
 
-    def __getitem__(self, key, raw=False):
-        if self is self.wrapped:
-            raise FatalError()
-        if raw:
-            return self.wrapped.__getitem__(key)
+    def _get(self, key):
+        if key in self.wrapped:
+            return self.wrapped[key]
+        raise AttributeError()
 
+    def _set(self, key, value):
+        self.wrapped[key] = value
+
+    def _delete(self, key):
+        del self.wrapped[key]
+
+    def _contains(self, key):
+        return key in self.wrapped
+
+    def _keys(self):
+        return self.wrapped.keys()
+
+    def _values(self):
+        return self.wrapped.values()
+
+    def __getitem__(self, key):
         try:
             manager = get_manager(self)
 
@@ -992,14 +1011,7 @@ class RDHDict(Composite, DictMixin, object):
         except InvalidDereferenceKey:
             raise KeyError()
 
-    def __setitem__(self, key, value, raw=False):
-        if key == "out":
-            pass
-        if self is self.wrapped:
-            raise FatalError()
-        if raw:
-            return self.wrapped.__setitem__(key, value)
-
+    def __setitem__(self, key, value):
         try:
             manager = get_manager(self)
 
@@ -1016,12 +1028,7 @@ class RDHDict(Composite, DictMixin, object):
         except InvalidAssignmentKey:
             raise KeyError()
 
-    def __delitem__(self, key, raw=False):
-        if self is self.wrapped:
-            raise FatalError()
-        if raw:
-            return self.wrapped.__delitem__(key)
-
+    def __delitem__(self, key):
         try:
             manager = get_manager(self)
 
@@ -1041,4 +1048,4 @@ class RDHDict(Composite, DictMixin, object):
     def keys(self):
         if self is self.wrapped:
             raise FatalError()
-        return self.wrapped.keys()
+        return self._keys()

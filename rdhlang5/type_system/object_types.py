@@ -70,8 +70,10 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
         if is_debug() and not self.key_type.is_copyable_from(get_type_of_value(key)):
             raise FatalError()
 
-        if key in target_manager.get_obj().__dict__:
-            value = target_manager.get_obj().__dict__[key]
+        obj = target_manager.get_obj()
+
+        if obj._contains(key):
+            value = obj._get(key)
         else:
             default_factory = target_manager.default_factory
 
@@ -134,7 +136,7 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
         if not (manager.default_factory or self.key_error):
             return False
 
-        for key in target.__dict__.keys():
+        for key in target._keys():
             if not self.key_type.is_copyable_from(get_type_of_value(key)):
                 return False
 
@@ -144,10 +146,10 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
         if key_filter:
             if substitute_value is not MISSING:
                 return ([ substitute_value ], self.value_type)
-            if key_filter in target.__dict__:
-                return ([ target.__dict__[key_filter] ], self.value_type)
+            if target._contains(key_filter):
+                return ([ target._get(key_filter) ], self.value_type)
             return ([], None)
-        return (target.__dict__.values(), self.value_type)
+        return (target._values(), self.value_type)
 
     def replace_inferred_type(self, other_micro_op_type):
         if not isinstance(other_micro_op_type, ObjectWildcardGetterType):
@@ -282,8 +284,8 @@ class ObjectGetterType(ObjectMicroOpType):
         if is_debug() or self.key_error or self.type_error:
             self.raise_micro_op_invocation_conflicts(target_manager)
 
-        if self.key in target_manager.get_obj().__dict__:
-            value = target_manager.get_obj().__dict__[self.key]
+        if self.key in target_manager.get_obj()._keys():
+            value = target_manager.get_obj()._get(self.key)
         else:
             default_factory = target_manager.default_factory
 
@@ -338,7 +340,7 @@ class ObjectGetterType(ObjectMicroOpType):
         if not manager:
             return False
 
-        if not (self.key in target.__dict__ or manager.default_factory or self.key_error):
+        if not (target._contains(self.key) or manager.default_factory or self.key_error):
             return False
 
         return True
@@ -347,8 +349,8 @@ class ObjectGetterType(ObjectMicroOpType):
         if not key_filter or key_filter == self.key:
             if substitute_value is not MISSING:
                 return ([ substitute_value ], self.value_type)
-            if self.key in target.__dict__:
-                return ([ target.__dict__[self.key] ], self.value_type)
+            if target._contains(self.key):
+                return ([ target._get(self.key) ], self.value_type)
         return ([], None)
 
 #     def apply_consistency_heuristic(self, other_micro_op_types):
@@ -495,7 +497,7 @@ class ObjectWildcardSetterType(ObjectMicroOpType):
 
         unbind_key(target_manager.get_obj(), key)
 
-        target_manager.get_obj().__dict__[key] = new_value
+        target_manager.get_obj()._set(key, new_value)
 
         bind_key(target_manager.get_obj(), key)
 
@@ -631,7 +633,7 @@ class ObjectSetterType(ObjectMicroOpType):
 
         unbind_key(target_manager.get_obj(), self.key)
 
-        target_manager.get_obj().__dict__[self.key] = new_value
+        target_manager.get_obj()._set(self.key, new_value)
 
         bind_key(target_manager.get_obj(), self.key)
 
@@ -767,7 +769,7 @@ class ObjectWildcardDeletterType(ObjectMicroOpType):
 
         unbind_key(target_manager.get_obj(), key)
 
-        del target_manager.get_obj().__dict__[key]
+        target_manager.get_obj()._delete(key)
 
     def raise_micro_op_invocation_conflicts(self, target_manager, key):
         target_type = target_manager.get_effective_composite_type()
@@ -857,7 +859,7 @@ class ObjectDeletterType(ObjectMicroOpType):
 
         unbind_key(target_manager.get_obj(), self.key)
 
-        del target_manager.get_obj().__dict__[self.key]
+        target_manager.get_obj()._delete(self.key)
 
     def raise_micro_op_invocation_conflicts(self, target_manager):
         target_type = target_manager.get_effective_composite_type()
@@ -995,7 +997,7 @@ class DefaultDictType(CompositeType):
         super(DefaultDictType, self).__init__(micro_ops)
 
 class RDHObject(Composite, object):
-    def __init__(self, initial_data=None, default_factory=None, bind=None, debug_reason=None):
+    def __init__(self, initial_data=None, default_factory=None, is_sparse=True, bind=None, debug_reason=None):
         if initial_data is None:
             initial_data = {}
         for key, value in initial_data.items():
@@ -1007,6 +1009,26 @@ class RDHObject(Composite, object):
         manager.debug_reason = debug_reason
         if bind:
             manager.add_composite_type(bind)
+
+    def _get(self, key):
+        if key in self.__dict__:
+            return self.__dict__[key]
+        raise AttributeError()
+
+    def _set(self, key, value):
+        self.__dict__[key] = value
+
+    def _delete(self, key):
+        del self.__dict__[key]
+
+    def _contains(self, key):
+        return key in self.__dict__
+
+    def _keys(self):
+        return self.__dict__.keys()
+
+    def _values(self):
+        return self.__dict__.values()
 
     def __setattr__(self, key, value):
         try:
@@ -1028,7 +1050,7 @@ class RDHObject(Composite, object):
             raise TypeError()
 
     def __getattribute__(self, key):
-        if key in ("__dict__", "__class__"):
+        if key in ("__dict__", "__class__", "_contains", "_get", "_set", "_delete", "_keys", "_values"):
             return super(RDHObject, self).__getattribute__(key)
 
         try:
