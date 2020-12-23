@@ -18,7 +18,7 @@ class InferredType(Type):
     def is_copyable_from(self, other):
         raise FatalError()
 
-    def replace_inferred_types(self, other):
+    def replace_inferred_types(self, other, cache=None):
         return other
 
 
@@ -49,21 +49,34 @@ class CompositeType(Type):
         self.micro_op_types = micro_op_types
         self.name = name or "unknown"
 
-    def replace_inferred_types(self, other):
-        if not isinstance(other, CompositeType):
-            return self
+    def replace_inferred_types(self, other, cache=None):
+        if cache is None:
+            cache = {}
 
-        potential_replacement_opcodes = {}
+        if id(self) in cache:
+            previous_inferred_from, previous_result = cache[id(self)]
+            if previous_inferred_from is not other:
+                raise FatalError()
+            return previous_result
+
+        name = getattr(other, "name", "Unknown")
+        result = CompositeType({},
+            name="inferred<{} & {}>".format(self.name, name)
+        )
+
+        cache[id(self)] = (other, result)
 
         for key, micro_op_type in self.micro_op_types.items():
-            other_micro_op_type = other.micro_op_types.get(key, None)
+            if key == ("set", "_temp"):
+                pass
+            if isinstance(other, CompositeType):
+                other_micro_op_type = other.micro_op_types.get(key, None)
+            else:
+                other_micro_op_type = None
 
-            potential_replacement_opcodes[key] = micro_op_type.replace_inferred_type(other_micro_op_type)
+            result.micro_op_types[key] = micro_op_type.replace_inferred_type(other_micro_op_type, cache)
 
-        return CompositeType(
-            potential_replacement_opcodes,
-            name="inferred<{} & {}>".format(self.name, other.name)
-        )
+        return result
 
 #     def apply_consistency_heuristic(self, other_micro_ops):
 #         # Takes an inconsistent type and hacks it to be consistent, based on our rules of thumb
@@ -90,6 +103,8 @@ class CompositeType(Type):
 #             raise IncorrectObjectTypeForMicroOp()
 
     def is_self_consistent(self):
+        # TODO: what about micro ops that have composite types as
+        # value_types that are *themselves* inconsistent. Eh?
         for micro_op in self.micro_op_types.values():
             if micro_op.conflicts_with(self, self):
                 micro_op.conflicts_with(self, self)

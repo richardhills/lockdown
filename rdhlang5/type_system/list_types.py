@@ -155,12 +155,12 @@ class ListWildcardGetterType(ListMicroOpType):
 #             return ListWildcardGetterType(reified_type_to_use, self.key_error, self.type_error)
 #         return self
 
-    def replace_inferred_type(self, other_micro_op_type):
+    def replace_inferred_type(self, other_micro_op_type, cache):
         if not isinstance(other_micro_op_type, ListWildcardGetterType):
             if isinstance(self.value_type, InferredType):
                 raise FatalError()
             return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type)
+        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
         if new_type is not self.value_type:
             return ListWildcardGetterType(new_type, key_error=self.key_error, type_error=self.type_error)
         return self
@@ -254,7 +254,7 @@ class ListWildcardGetterType(ListMicroOpType):
         )
 
     def __repr__(self):
-        return micro_op_repr("get", "*", self.key_error, self.value_type, self.type_error)
+        return micro_op_repr("getL", "*", self.key_error, self.value_type, self.type_error)
 
 # class ListWildcardGetter(MicroOp):
 #     def __init__(self, target_manager, type, key_error, type_error):
@@ -388,12 +388,12 @@ class ListGetterType(ListMicroOpType):
 #             return ListGetterType(self.key, reified_type_to_use, self.key_error, self.type_error)
 #         return self
 
-    def replace_inferred_type(self, other_micro_op_type):
+    def replace_inferred_type(self, other_micro_op_type, cache):
         if not isinstance(other_micro_op_type, ListGetterType):
             if isinstance(self.value_type, InferredType):
                 raise FatalError()
             return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type)
+        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
         if new_type is not self.value_type:
             return ListGetterType(self.key, new_type, key_error=self.key_error, type_error=self.type_error)
         return self
@@ -519,7 +519,7 @@ class ListGetterType(ListMicroOpType):
         )
 
     def __repr__(self):
-        return micro_op_repr("get", self.key, self.key_error, self.value_type, self.type_error)
+        return micro_op_repr("getL", self.key, self.key_error, self.value_type, self.type_error)
 
 # class ListGetter(MicroOp):
 #     def __init__(self, target_manager, key, type, key_error, type_error):
@@ -636,12 +636,12 @@ class ListWildcardSetterType(ListMicroOpType):
 #             return ListWildcardSetterType(reified_type_to_use, self.key_error, self.type_error)
 #         return self
 
-    def replace_inferred_type(self, other_micro_op_type):
+    def replace_inferred_type(self, other_micro_op_type, cache):
         if not isinstance(other_micro_op_type, ListWildcardSetterType):
             if isinstance(self.value_type, InferredType):
                 raise FatalError()
             return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type)
+        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
         if new_type is not self.value_type:
             return ListWildcardSetterType(new_type, key_error=self.key_error, type_error=self.type_error)
         return self
@@ -676,7 +676,7 @@ class ListWildcardSetterType(ListMicroOpType):
         )
 
     def __repr__(self):
-        return micro_op_repr("set", "*", self.key_error, self.value_type, self.type_error)
+        return micro_op_repr("setL", "*", self.key_error, self.value_type, self.type_error)
 
 # class ListWildcardSetter(MicroOp):
 #     def __init__(self, target_manager, type, key_error, type_error):
@@ -789,12 +789,12 @@ class ListSetterType(ListMicroOpType):
 #             return ListSetterType(self.key, reified_type_to_use, self.key_error, self.type_error)
 #         return self
 
-    def replace_inferred_type(self, other_micro_op_type):
+    def replace_inferred_type(self, other_micro_op_type, cache):
         if not isinstance(other_micro_op_type, ListSetterType):
             if isinstance(self.value_type, InferredType):
                 raise FatalError()
             return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type)
+        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
         if new_type is not self.value_type:
             return ListSetterType(self.key, new_type, key_error=self.key_error, type_error=self.type_error)
         return self
@@ -835,7 +835,7 @@ class ListSetterType(ListMicroOpType):
         )
 
     def __repr__(self):
-        return micro_op_repr("set", self.key, self.key_error, self.value_type, self.type_error)
+        return micro_op_repr("setL", self.key, self.key_error, self.value_type, self.type_error)
 
 # class ListSetter(MicroOp):
 #     def __init__(self, target_manager, key, type, key_error, type_error):
@@ -956,7 +956,7 @@ class ListWildcardDeletterType(ListMicroOpType):
         )
 
     def __repr__(self):
-        return micro_op_repr("delete", "*", self.key_error)
+        return micro_op_repr("deleteL", "*", self.key_error)
 
 # class ListWildcardDeletter(MicroOp):
 #     def __init__(self, target_manager, key_error):
@@ -1027,12 +1027,12 @@ class ListDeletterType(ListMicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
-    def replace_inferred_type(self, other_micro_op_type):
+    def replace_inferred_type(self, other_micro_op_type, cache):
         if not isinstance(other_micro_op_type, ListDeletterType):
             if isinstance(self.value_type, InferredType):
                 raise FatalError()
             return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type)
+        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
         if new_type is not self.value_type:
             return ListDeletterType(new_type, key_error=self.key_error, type_error=self.type_error)
         return self
@@ -1065,7 +1065,7 @@ class ListDeletterType(ListMicroOpType):
         return ListDeletterType(self.key, self.can_fail or other_micro_op_type.can_fail)
 
     def __repr__(self):
-        return micro_op_repr("delete", self.key, self.key_error)
+        return micro_op_repr("deleteL", self.key, self.key_error)
 
 # class ListDeletter(MicroOp):
 #     def __init__(self, target_manager, key):
@@ -1166,14 +1166,14 @@ class ListWildcardInsertType(ListMicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
-    def replace_inferred_type(self, other_micro_op_type):
+    def replace_inferred_type(self, other_micro_op_type, cache):
         if not isinstance(other_micro_op_type, ListWildcardInsertType):
             if isinstance(self.value_type, InferredType):
                 raise FatalError()
             return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type)
+        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
         if new_type is not self.value_type:
-            return ListDeletterType(new_type, key_error=self.key_error, type_error=self.type_error)
+            return ListWildcardInsertType(new_type, key_error=self.key_error, type_error=self.type_error)
         return self
 
 #     def bind(self, source_type, key, target):
@@ -1280,12 +1280,12 @@ class ListInsertType(ListMicroOpType):
 
         return False
 
-    def replace_inferred_type(self, other_micro_op_type):
+    def replace_inferred_type(self, other_micro_op_type, cache):
         if not isinstance(other_micro_op_type, ListInsertType):
             if isinstance(self.value_type, InferredType):
                 raise FatalError()
             return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type)
+        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
         if new_type is not self.value_type:
             return ListInsertType(self.key, new_type, key_error=self.key_error, type_error=self.type_error)
         return self
@@ -1343,7 +1343,7 @@ class ListInsertType(ListMicroOpType):
         )
 
     def __repr__(self):
-        return micro_op_repr("insert", self.key, self.key_error, self.value_type, self.type_error)
+        return micro_op_repr("insertL", self.key, self.key_error, self.value_type, self.type_error)
 
 # class ListInsert(MicroOp):
 #     def __init__(self, target_manager, key, type, key_error, type_error):

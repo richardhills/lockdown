@@ -408,6 +408,9 @@ class OpenFunction(object):
             "types": readonly_rich_composite_type
         }, wildcard_value_type=AnyType(), name="code-execution-context-type")
 
+        if not self.execution_context_type.is_self_consistent():
+            raise FatalError()
+
         self.compiled_ast = None
 
     def get_type(self):

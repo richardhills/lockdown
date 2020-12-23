@@ -11,7 +11,7 @@ from rdhlang5.type_system.exceptions import FatalError, raise_if_safe, \
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.micro_ops import MicroOpType
 from rdhlang5.utils import is_debug, MISSING, micro_op_repr, \
-    runtime_type_information
+    runtime_type_information, default
 
 
 WILDCARD = object()
@@ -151,15 +151,23 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
             return ([], None)
         return (target._values(), self.value_type)
 
-    def replace_inferred_type(self, other_micro_op_type):
+    def replace_inferred_type(self, other_micro_op_type, cache):
         if not isinstance(other_micro_op_type, ObjectWildcardGetterType):
             if isinstance(self.value_type, InferredType):
                 raise InvalidInferredType()
             return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type)
+        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
         if new_type is not self.value_type:
             return ObjectWildcardGetterType(self.key_type, new_type, self.key_error, self.type_error)
         return self
+
+    def clone(self, value_type=MISSING, key_error=MISSING):
+        return ObjectWildcardGetterType(
+            self.key_type,
+            default(value_type, self.value_type),
+            default(key_error, self.key_error),
+            self.type_error
+        )
 
 #     def apply_consistency_heuristic(self, other_micro_op_types):
 #         reified_type_to_use = self.value_type.apply_consistency_heuristic(other_micro_op_types)
@@ -260,7 +268,7 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
         )
 
     def __repr__(self):
-        return micro_op_repr("get", "*", self.key_error, self.value_type, self.type_error)
+        return micro_op_repr("getO", "*", self.key_error, self.value_type, self.type_error)
 
 class ObjectGetterType(ObjectMicroOpType):
     __slots__ = [ "key", "value_type", "key_error", "type_error" ]
@@ -359,12 +367,12 @@ class ObjectGetterType(ObjectMicroOpType):
 #             return ObjectGetterType(self.key, reified_type_to_use, self.key_error, self.type_error)
 #         return self
 
-    def replace_inferred_type(self, other_micro_op_type):
+    def replace_inferred_type(self, other_micro_op_type, cache):
         if not isinstance(other_micro_op_type, ObjectGetterType):
             if isinstance(self.value_type, InferredType):
                 raise InvalidInferredType(self.key)
             return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type)
+        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
         if new_type is not self.value_type:
             return ObjectGetterType(self.key, new_type, key_error=self.key_error, type_error=self.type_error)
         return self
@@ -471,7 +479,7 @@ class ObjectGetterType(ObjectMicroOpType):
         )
 
     def __repr__(self):
-        return micro_op_repr("get", self.key, self.key_error, self.value_type, self.type_error)
+        return micro_op_repr("getO", self.key, self.key_error, self.value_type, self.type_error)
 
 class ObjectWildcardSetterType(ObjectMicroOpType):
     __slots__ = [ "key_type", "value_type", "key_error", "type_error" ]
@@ -560,12 +568,12 @@ class ObjectWildcardSetterType(ObjectMicroOpType):
 #             return ObjectWildcardSetterType(self.key_type, reified_type_to_use, self.key_error, self.type_error)
 #         return self
 
-    def replace_inferred_type(self, other_micro_op_type):
+    def replace_inferred_type(self, other_micro_op_type, cache):
         if not isinstance(other_micro_op_type, ObjectWildcardSetterType):
             if isinstance(self.value_type, InferredType):
                 raise InvalidInferredType()
             return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type)
+        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
         if new_type is not self.value_type:
             return ObjectWildcardSetterType(new_type, key_error=self.key_error, type_error=self.type_error)
         return self
@@ -603,7 +611,7 @@ class ObjectWildcardSetterType(ObjectMicroOpType):
         )
 
     def __repr__(self):
-        return micro_op_repr("set", "*", self.key_error, self.value_type, self.type_error)
+        return micro_op_repr("setO", "*", self.key_error, self.value_type, self.type_error)
 
 class ObjectSetterType(ObjectMicroOpType):
     __slots__ = [ "key", "value_type", "key_error", "type_error" ]
@@ -682,12 +690,12 @@ class ObjectSetterType(ObjectMicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
-    def replace_inferred_type(self, other_micro_op_type):
+    def replace_inferred_type(self, other_micro_op_type, cache):
         if not isinstance(other_micro_op_type, ObjectSetterType):
             if isinstance(self.value_type, InferredType):
                 raise InvalidInferredType()
             return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type)
+        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
         if new_type is not self.value_type:
             return ObjectSetterType(self.key, new_type, key_error=self.key_error, type_error=self.type_error)
         return self
@@ -750,7 +758,7 @@ class ObjectSetterType(ObjectMicroOpType):
         )
 
     def __repr__(self):
-        return micro_op_repr("set", self.key, self.key_error, self.value_type, self.type_error)
+        return micro_op_repr("setO", self.key, self.key_error, self.value_type, self.type_error)
 
 
 class InvalidDeletion(Exception):
@@ -814,7 +822,7 @@ class ObjectWildcardDeletterType(ObjectMicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
-    def replace_inferred_type(self, other_micro_op_type):
+    def replace_inferred_type(self, other_micro_op_type, cache):
         return self
 
 #     def bind(self, source_type, key, target):
@@ -903,12 +911,12 @@ class ObjectDeletterType(ObjectMicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
-    def replace_inferred_type(self, other_micro_op_type):
+    def replace_inferred_type(self, other_micro_op_type, cache):
         if not isinstance(other_micro_op_type, ObjectDeletterType):
             if isinstance(self.value_type, InferredType):
                 raise InvalidInferredType()
             return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type)
+        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
         if new_type is not self.value_type:
             return ObjectDeletterType(new_type, key_error=self.key_error, type_error=self.type_error)
         return self

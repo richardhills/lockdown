@@ -4,7 +4,7 @@ from rdhlang5.executor.ast_utils import compile_expression
 
 
 class MicroOpType(object):
-    def replace_inferred_type(self, other_micro_op_type):
+    def replace_inferred_type(self, other_micro_op_type, cache):
         raise NotImplementedError(self)
 
 #    def apply_consistency_heuristic(self, other_micro_op_types):
