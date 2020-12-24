@@ -2,8 +2,7 @@ from unittest import main
 from unittest.case import TestCase
 
 from rdhlang5.type_system.composites import CompositeType, InferredType, \
-    apply_consistency_heiristic, replace_inferred_types, \
-    check_dangling_inferred_types
+    check_dangling_inferred_types, prepare_lhs_type
 from rdhlang5.type_system.core_types import IntegerType, UnitType, StringType, \
     AnyType, Const, OneOfType, BooleanType, merge_types
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
@@ -11,7 +10,7 @@ from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
 from rdhlang5.type_system.dict_types import DictGetterType, \
     RDHDict
 from rdhlang5.type_system.exceptions import CompositeTypeIncompatibleWithTarget, \
-    CompositeTypeIsInconsistent, FatalError
+    CompositeTypeIsInconsistent, FatalError, DanglingInferredType
 from rdhlang5.type_system.list_types import RDHListType, RDHList, SPARSE_ELEMENT, \
     ListGetterType, ListSetterType, ListInsertType, ListDeletterType
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
@@ -241,11 +240,11 @@ class TestRevConstType(TestCase):
             ("set", "foo"): ObjectSetterType("foo", StringType(), False, False)
         })
 
-        rev_const_type = apply_consistency_heiristic(rev_const_type)
+        rev_const_type = prepare_lhs_type(rev_const_type, None)
 
         self.assertTrue(isinstance(rev_const_type.micro_op_types[("set", "foo")].value_type, StringType))
 
-        self.assertTrue(normal_broad_type.is_copyable_from(apply_consistency_heiristic(rev_const_type)))
+        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type))
 
     def test_rev_const_wildcard(self):
         rev_const_type = CompositeType({
@@ -258,11 +257,11 @@ class TestRevConstType(TestCase):
             ("set", "foo"): ObjectWildcardSetterType(StringType(), StringType(), False, False)
         })
 
-        rev_const_type = apply_consistency_heiristic(rev_const_type)
+        rev_const_type = prepare_lhs_type(rev_const_type, None)
 
         self.assertTrue(isinstance(rev_const_type.micro_op_types[("set-wildcard",)].value_type, StringType))
 
-        self.assertTrue(normal_broad_type.is_copyable_from(apply_consistency_heiristic(rev_const_type)))
+        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type))
 
     def test_rev_const_flatten_tuple(self):
         rev_const_type = CompositeType({
@@ -275,11 +274,11 @@ class TestRevConstType(TestCase):
             ("set", 0): ListSetterType(0, StringType(), False, False)
         })
 
-        rev_const_type = apply_consistency_heiristic(rev_const_type)
+        rev_const_type = prepare_lhs_type(rev_const_type, None)
 
         self.assertTrue(isinstance(rev_const_type.micro_op_types[("set", 0)].value_type, StringType))
 
-        self.assertTrue(normal_broad_type.is_copyable_from(apply_consistency_heiristic(rev_const_type)))
+        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type))
 
     def test_rev_const_flatten_list(self):
         rev_const_type = CompositeType({
@@ -294,7 +293,7 @@ class TestRevConstType(TestCase):
             ("insert", 0): ListInsertType(0, IntegerType(), False, False),
         })
 
-        rev_const_type = apply_consistency_heiristic(rev_const_type)
+        rev_const_type = prepare_lhs_type(rev_const_type, None)
 
         self.assertTrue(rev_const_type.is_self_consistent())
 
@@ -321,7 +320,7 @@ class TestRevConstType(TestCase):
             ("insert", 0): ListInsertType(0, StringType(), False, False),
         })
 
-        rev_const_type = apply_consistency_heiristic(rev_const_type)
+        rev_const_type = prepare_lhs_type(rev_const_type, None)
 
         self.assertTrue(rev_const_type.is_self_consistent())
 
@@ -348,7 +347,7 @@ class TestRevConstType(TestCase):
             ("delete", 0): ListDeletterType(0, False),
         })
 
-        rev_const_type = apply_consistency_heiristic(rev_const_type)
+        rev_const_type = prepare_lhs_type(rev_const_type, None)
 
         self.assertTrue(rev_const_type.is_self_consistent())
 
@@ -968,7 +967,7 @@ class TestRDHListType(TestCase):
         self.assertFalse(foo.is_self_consistent())
 
     def test_reified_extreme_type_contains_no_conflicts(self):
-        foo = apply_consistency_heiristic(RDHListType([ IntegerType() ], IntegerType()))
+        foo = prepare_lhs_type(RDHListType([ IntegerType() ], IntegerType()), None)
         self.assertTrue(foo.is_self_consistent())
 
     def test_simple_type1_has_no_conflicts(self):
@@ -1131,14 +1130,14 @@ class TestList(TestCase):
 class TestInferredTypes(TestCase):
     def test_basic(self):
         foo = InferredType()
-        foo = replace_inferred_types(foo, IntegerType())
+        foo = prepare_lhs_type(foo, IntegerType())
         self.assertIsInstance(foo, IntegerType)
 
     def test_basic_object(self):
         foo = RDHObjectType({
             "bar": InferredType()
         })
-        foo = replace_inferred_types(foo, RDHObjectType({
+        foo = prepare_lhs_type(foo, RDHObjectType({
             "bar": IntegerType()
         }))
         self.assertIsInstance(foo.micro_op_types[("get", "bar")].value_type, IntegerType)
@@ -1147,7 +1146,7 @@ class TestInferredTypes(TestCase):
         foo = RDHObjectType({
             "bar": StringType()
         })
-        foo = replace_inferred_types(foo, RDHObjectType({
+        foo = prepare_lhs_type(foo, RDHObjectType({
             "bar": IntegerType()
         }))
         self.assertIsInstance(foo.micro_op_types[("get", "bar")].value_type, StringType)
@@ -1156,7 +1155,7 @@ class TestInferredTypes(TestCase):
         foo = RDHObjectType({
             "bar": InferredType()
         })
-        foo = replace_inferred_types(foo, RDHObjectType({
+        foo = prepare_lhs_type(foo, RDHObjectType({
             "bar": IntegerType(),
             "bam": StringType()
         }))
@@ -1166,9 +1165,10 @@ class TestInferredTypes(TestCase):
         foo = RDHObjectType({
             "bar": InferredType()
         })
-        foo = replace_inferred_types(foo, RDHObjectType({
-            "bam": StringType()
-        }))
+        with self.assertRaises(DanglingInferredType):
+            foo = prepare_lhs_type(foo, RDHObjectType({
+                "bam": StringType()
+            }))
         check_dangling_inferred_types(foo)
 
     def test_double_nested(self):
@@ -1177,7 +1177,7 @@ class TestInferredTypes(TestCase):
                 "bam": InferredType()
             })
         })
-        foo = replace_inferred_types(foo, RDHObjectType({
+        foo = prepare_lhs_type(foo, RDHObjectType({
             "bar": RDHObjectType({
                 "bam": IntegerType()
             })
@@ -1188,7 +1188,7 @@ class TestInferredTypes(TestCase):
         foo = RDHObjectType({
             "bar": InferredType()
         })
-        foo = replace_inferred_types(foo, RDHObjectType({
+        foo = prepare_lhs_type(foo, RDHObjectType({
             "bar": RDHObjectType({
                 "bam": IntegerType()
             })

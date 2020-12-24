@@ -1180,6 +1180,13 @@ class ListWildcardInsertType(ListMicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
+    def clone(self, value_type=MISSING, key_error=MISSING):
+        return ListWildcardInsertType(
+            default(value_type, self.value_type),
+            default(key_error, self.key_error),
+            self.type_error
+        )
+
 #     def replace_inferred_type(self, other_micro_op_type, cache):
 #         if not isinstance(other_micro_op_type, ListWildcardInsertType):
 #             if isinstance(self.value_type, InferredType):

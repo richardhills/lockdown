@@ -22,9 +22,8 @@ from rdhlang5.executor.opcodes import enrich_opcode, get_context_type, evaluate,
 from rdhlang5.executor.raw_code_factories import dynamic_dereference_op, \
     static_op, match_op, prepared_function, inferred_type
 from rdhlang5.executor.type_factories import enrich_type
-from rdhlang5.type_system.composites import CompositeType, \
-    apply_consistency_heiristic, replace_inferred_types, \
-    check_dangling_inferred_types
+from rdhlang5.type_system.composites import prepare_lhs_type, \
+    check_dangling_inferred_types, CompositeType, InferredType
 from rdhlang5.type_system.core_types import Type, NoValueType, IntegerType, \
     AnyType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
@@ -38,22 +37,22 @@ from rdhlang5.type_system.object_types import RDHObject, RDHObjectType
 from rdhlang5.utils import MISSING, is_debug, runtime_type_information, raise_from, \
     spread_dict
 
-def prepare_piece_of_context(declared_type, suggested_type):
-    if suggested_type is None:
-        suggested_type = NoValueType()
 
-    if not isinstance(suggested_type, Type):
+def prepare_piece_of_context(declared_type, suggested_type):
+    if suggested_type and not isinstance(suggested_type, Type):
         raise FatalError()
 
+    final_type = prepare_lhs_type(declared_type, suggested_type)
+
 # To sort out: merge or heiristic first??
-
-    if isinstance(suggested_type, CompositeType):
-        suggested_type = apply_consistency_heiristic(suggested_type)
-
-    final_type = replace_inferred_types(declared_type, suggested_type)
-
-    if isinstance(final_type, CompositeType):
-        final_type = apply_consistency_heiristic(final_type)
+# 
+#     if isinstance(suggested_type, CompositeType):
+#         suggested_type = apply_consistency_heiristic(suggested_type)
+# 
+#     final_type = replace_inferred_types(declared_type, suggested_type)
+# 
+#     if isinstance(final_type, CompositeType):
+#         final_type = apply_consistency_heiristic(final_type)
 
     if not check_dangling_inferred_types(final_type):
         raise PreparationException("Invalid inferred types")
@@ -95,6 +94,9 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
     if immediate_context:
         suggested_argument_type = immediate_context.get("suggested_argument_type", None)
         suggested_outer_type = immediate_context.get("suggested_outer_type", None)
+
+    if suggested_outer_type is None:
+        suggested_outer_type = NoValueType()
 
     argument_type = prepare_piece_of_context(argument_type, suggested_argument_type)
     outer_type = prepare_piece_of_context(outer_type, suggested_outer_type)
@@ -199,18 +201,23 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
                 actual_out = actual_break_type["out"]
                 actual_in = actual_break_type.get("in", None)
 
-                declared_out = replace_inferred_types(declared_out, actual_out)
+                final_out = prepare_lhs_type(declared_out, actual_out)
                 if declared_in is not None:
-                    declared_in = replace_inferred_types(declared_in, actual_in)
+                    if isinstance(declared_in, InferredType) and actual_in is None:
+                        final_in = None
+                    else:
+                        final_in = prepare_lhs_type(declared_in, actual_in)
+                else:
+                    final_in = declared_in
 
-                if declared_in is not None and actual_in is None:
-                    continue
+#                 if declared_in is not None and actual_in is None:
+#                     continue
 
-                out_is_compatible = declared_out.is_copyable_from(actual_out)
-                in_is_compatible = declared_in is None or actual_in.is_copyable_from(declared_in)
+                out_is_compatible = final_out.is_copyable_from(actual_out)
+                in_is_compatible = final_in is None or actual_in.is_copyable_from(final_in)
 
                 if out_is_compatible and in_is_compatible:
-                    final_declared_break_types.add(mode, declared_out, declared_in)
+                    final_declared_break_types.add(mode, final_out, final_in)
                     break
             else:
                 raise PreparationException("""Nothing declared for {}, {}.\nFunction declares break types {}.\nBut local_initialization breaks {}, code breaks {}""".format(

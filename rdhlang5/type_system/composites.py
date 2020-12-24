@@ -1,5 +1,3 @@
-from __builtin__ import True, False
-from audioop import mul
 from collections import defaultdict
 from contextlib import contextmanager
 import threading
@@ -659,22 +657,28 @@ def check_dangling_inferred_types(type, results_cache=None):
 
     return True
 
-def replace_inferred_types(type, other_type, results_cache=None):
+def prepare_lhs_type(type, guide_type, results_cache=None):
+    if isinstance(type, InferredType):
+        if guide_type is None:
+            raise DanglingInferredType()
+        return prepare_lhs_type(guide_type, None, results_cache=results_cache)
+
     if isinstance(type, CompositeType):
-        return replace_composite_inferred_types(type, other_type, results_cache)
-    elif isinstance(type, InferredType):
-        return other_type
-    elif isinstance(type, OneOfType):
+        return prepare_composite_lhs_type(type, guide_type, results_cache)
+
+    if isinstance(type, OneOfType):
+        if guide_type is None:
+            return type
         # TODO
         raise FatalError()
-    else:
-        return type
 
-def replace_composite_inferred_types(composite_type, other_type, results_cache=None):
+    return type
+
+def prepare_composite_lhs_type(composite_type, guide_type, results_cache=None):
     if results_cache is None:
         results_cache = {}
 
-    cache_key = (id(composite_type), id(other_type))
+    cache_key = (id(composite_type), id(guide_type))
 
     if cache_key in results_cache:
         return results_cache[cache_key]
@@ -684,61 +688,42 @@ def replace_composite_inferred_types(composite_type, other_type, results_cache=N
         name="Inferred<{}>".format(composite_type.name)
     )
 
-    for key, micro_op_type in composite_type.micro_op_types.items():
-        value_type = getattr(micro_op_type, "value_type", None)
-
-        if not value_type:
-            continue
-
-        if not isinstance(other_type, CompositeType):
-            continue
-
-        other_micro_op_type = other_type.micro_op_types.get(key, None)
-
-        other_value_type = getattr(other_micro_op_type, "value_type", None)
-
-        if other_value_type is None:
-            continue
-
-        result.micro_op_types[key] = micro_op_type.clone(
-            value_type=replace_inferred_types(value_type, other_value_type, results_cache)
-        )
-
     results_cache[cache_key] = result
 
-    return result
+    for tag, micro_op in result.micro_op_types.items():
+        getter = None
+        if hasattr(micro_op, "value_type") and isinstance(micro_op.value_type, (AnyType, InferredType)):
+            if tag[0] == "set":
+                getter = result.get_micro_op_type(("get", tag[1]))
+            if tag[0] == "set-wildcard":
+                getter = result.get_micro_op_type(("get-wildcard", ))
+        if getter:
+            result.micro_op_types[tag] = micro_op.clone(value_type=getter.value_type)
 
-def apply_consistency_heiristic(composite_type, results_cache=None):
-#    if composite_type.is_self_consistent():
-#        return composite_type
+    for tag, micro_op in result.micro_op_types.items():
+        if hasattr(micro_op, "value_type"):
+            guide_micro_op_type = None
 
-    if results_cache is None:
-        results_cache = {}
+            if isinstance(guide_type, CompositeType):
+                guide_op = guide_type.get_micro_op_type(tag)
 
-    if id(composite_type) in results_cache:
-        return results_cache[id(composite_type)]
+                if hasattr(guide_op, "value_type") and isinstance(guide_op.value_type, AnyType):
+                    if tag[0] == "set":
+                        guide_op = guide_type.get_micro_op_type(( "get", tag[1] ))
+                    if tag[0] == "set-wildcard":
+                        guide_op = guide_type.get_micro_op_type(( "get-wildcard" ))
 
-    result_composite_type = CompositeType(dict(composite_type.micro_op_types), "Heiristic: {}".format(composite_type.name))
-    results_cache[id(result_composite_type)] = result_composite_type
+                if hasattr(guide_op, "value_type"):
+                    guide_micro_op_type = guide_op.value_type
 
-    for tag, micro_op in result_composite_type.micro_op_types.items():
-        if hasattr(micro_op, "value_type") and isinstance(micro_op.value_type, CompositeType):
-            result_composite_type.micro_op_types[tag] = micro_op.clone(
-                value_type=apply_consistency_heiristic(micro_op.value_type, results_cache)
+            result.micro_op_types[tag] = micro_op.clone(
+                value_type=prepare_lhs_type(micro_op.value_type, guide_micro_op_type, results_cache)
             )
-
-    for tag, micro_op in result_composite_type.micro_op_types.items():
-        if tag[0] == "set" and isinstance(micro_op.value_type, (AnyType, InferredType)):
-            getter = result_composite_type.micro_op_types[("get", tag[1])]
-            result_composite_type.micro_op_types[tag] = micro_op.clone(value_type=getter.value_type)
-        if tag[0] == "set-wildcard" and isinstance(micro_op.value_type, (AnyType, InferredType)):
-            getter = result_composite_type.micro_op_types[("get-wildcard", )]
-            result_composite_type.micro_op_types[tag] = micro_op.clone(value_type=getter.value_type)
 
     right_shifts = []
     left_shifts = []
 
-    for tag, micro_op in result_composite_type.micro_op_types.items():
+    for tag, micro_op in result.micro_op_types.items():
         if tag[0] == "insert":
             right_shifts.append((tag[1], micro_op.value_type))
         if tag[0] == "insert-wildcard":
@@ -750,7 +735,7 @@ def apply_consistency_heiristic(composite_type, results_cache=None):
             left_shifts.append(0)
 
     positional_getter_micro_ops = sorted(
-        [m for t, m in result_composite_type.micro_op_types.items() if t[0] == "get" and len(t) == 2 and isinstance(t[1], int)],
+        [m for t, m in result.micro_op_types.items() if t[0] == "get" and len(t) == 2 and isinstance(t[1], int)],
         key=lambda m: m.key
     )
 
@@ -759,12 +744,12 @@ def apply_consistency_heiristic(composite_type, results_cache=None):
         for getter_micro_op in positional_getter_micro_ops:
             if getter_micro_op.key >= starting_index:
                 cumulative_types = cumulative_types + [ getter_micro_op.value_type ]
-                result_composite_type.micro_op_types[("get", getter_micro_op.key)] = getter_micro_op.clone(
+                result.micro_op_types[("get", getter_micro_op.key)] = getter_micro_op.clone(
                     value_type=merge_types(cumulative_types, "super")
                 )
 
     positional_getter_micro_ops = sorted(
-        [m for t, m in result_composite_type.micro_op_types.items() if t[0] == "get" and len(t) == 2 and isinstance(t[1], int)],
+        [m for t, m in result.micro_op_types.items() if t[0] == "get" and len(t) == 2 and isinstance(t[1], int)],
         key=lambda m: m.key
     )
 
@@ -773,12 +758,158 @@ def apply_consistency_heiristic(composite_type, results_cache=None):
         for getter_micro_op in reversed(positional_getter_micro_ops):
             if getter_micro_op.key >= starting_index:
                 cumulative_types.append(getter_micro_op.value_type)
-                result_composite_type.micro_op_types[("get", getter_micro_op.key)] = getter_micro_op.clone(
+                result.micro_op_types[("get", getter_micro_op.key)] = getter_micro_op.clone(
                     value_type=merge_types(cumulative_types, "super"),
                     key_error=True
                 )
 
-    return result_composite_type
+    return result
+
+# 
+# 
+#     for key, micro_op_type in composite_type.micro_op_types.items():
+# 
+#         value_type = getattr(micro_op_type, "value_type", None)
+# 
+#         if not value_type:
+#             continue
+# 
+#         if not isinstance(other_type, CompositeType):
+#             continue
+# 
+#         other_micro_op_type = other_type.micro_op_types.get(key, None)
+# 
+#         other_value_type = getattr(other_micro_op_type, "value_type", None)
+# 
+#         if other_value_type is None:
+#             continue
+# 
+#         result.micro_op_types[key] = micro_op_type.clone(
+#             value_type=replace_inferred_types(value_type, other_value_type, results_cache)
+#         )
+#
+#    return result
+
+# def replace_inferred_types(type, other_type, results_cache=None):
+#     if isinstance(type, CompositeType):
+#         return replace_composite_inferred_types(type, other_type, results_cache)
+#     elif isinstance(type, InferredType):
+#         return other_type
+#     elif isinstance(type, OneOfType):
+#         # TODO
+#         raise FatalError()
+#     else:
+#         return type
+# 
+# def replace_composite_inferred_types(composite_type, other_type, results_cache=None):
+#     if results_cache is None:
+#         results_cache = {}
+# 
+#     cache_key = (id(composite_type), id(other_type))
+# 
+#     if cache_key in results_cache:
+#         return results_cache[cache_key]
+# 
+#     result = CompositeType(
+#         dict(composite_type.micro_op_types),
+#         name="Inferred<{}>".format(composite_type.name)
+#     )
+# 
+#     for key, micro_op_type in composite_type.micro_op_types.items():
+#         value_type = getattr(micro_op_type, "value_type", None)
+# 
+#         if not value_type:
+#             continue
+# 
+#         if not isinstance(other_type, CompositeType):
+#             continue
+# 
+#         other_micro_op_type = other_type.micro_op_types.get(key, None)
+# 
+#         other_value_type = getattr(other_micro_op_type, "value_type", None)
+# 
+#         if other_value_type is None:
+#             continue
+# 
+#         result.micro_op_types[key] = micro_op_type.clone(
+#             value_type=replace_inferred_types(value_type, other_value_type, results_cache)
+#         )
+# 
+#     results_cache[cache_key] = result
+# 
+#     return result
+# 
+# def apply_consistency_heiristic(composite_type, results_cache=None):
+# #    if composite_type.is_self_consistent():
+# #        return composite_type
+# 
+#     if results_cache is None:
+#         results_cache = {}
+# 
+#     if id(composite_type) in results_cache:
+#         return results_cache[id(composite_type)]
+# 
+#     result_composite_type = CompositeType(dict(composite_type.micro_op_types), "Heiristic: {}".format(composite_type.name))
+#     results_cache[id(result_composite_type)] = result_composite_type
+# 
+#     for tag, micro_op in result_composite_type.micro_op_types.items():
+#         if hasattr(micro_op, "value_type") and isinstance(micro_op.value_type, CompositeType):
+#             result_composite_type.micro_op_types[tag] = micro_op.clone(
+#                 value_type=apply_consistency_heiristic(micro_op.value_type, results_cache)
+#             )
+# 
+#     for tag, micro_op in result_composite_type.micro_op_types.items():
+#         if tag[0] == "set" and isinstance(micro_op.value_type, (AnyType, InferredType)):
+#             getter = result_composite_type.micro_op_types[("get", tag[1])]
+#             result_composite_type.micro_op_types[tag] = micro_op.clone(value_type=getter.value_type)
+#         if tag[0] == "set-wildcard" and isinstance(micro_op.value_type, (AnyType, InferredType)):
+#             getter = result_composite_type.micro_op_types[("get-wildcard", )]
+#             result_composite_type.micro_op_types[tag] = micro_op.clone(value_type=getter.value_type)
+# 
+#     right_shifts = []
+#     left_shifts = []
+# 
+#     for tag, micro_op in result_composite_type.micro_op_types.items():
+#         if tag[0] == "insert":
+#             right_shifts.append((tag[1], micro_op.value_type))
+#         if tag[0] == "insert-wildcard":
+#             right_shifts.append((0, micro_op.value_type))
+# 
+#         if tag[0] == "delete":
+#             left_shifts.append(tag[1])
+#         if tag[0] == "delete-wildcard":
+#             left_shifts.append(0)
+# 
+#     positional_getter_micro_ops = sorted(
+#         [m for t, m in result_composite_type.micro_op_types.items() if t[0] == "get" and len(t) == 2 and isinstance(t[1], int)],
+#         key=lambda m: m.key
+#     )
+# 
+#     for starting_index, starting_type in right_shifts:
+#         cumulative_types = [ starting_type ]
+#         for getter_micro_op in positional_getter_micro_ops:
+#             if getter_micro_op.key >= starting_index:
+#                 cumulative_types = cumulative_types + [ getter_micro_op.value_type ]
+#                 result_composite_type.micro_op_types[("get", getter_micro_op.key)] = getter_micro_op.clone(
+#                     value_type=merge_types(cumulative_types, "super")
+#                 )
+# 
+#     positional_getter_micro_ops = sorted(
+#         [m for t, m in result_composite_type.micro_op_types.items() if t[0] == "get" and len(t) == 2 and isinstance(t[1], int)],
+#         key=lambda m: m.key
+#     )
+# 
+#     for starting_index in left_shifts:
+#         cumulative_types = []
+#         for getter_micro_op in reversed(positional_getter_micro_ops):
+#             if getter_micro_op.key >= starting_index:
+#                 cumulative_types.append(getter_micro_op.value_type)
+#                 result_composite_type.micro_op_types[("get", getter_micro_op.key)] = getter_micro_op.clone(
+#                     value_type=merge_types(cumulative_types, "super"),
+#                     key_error=True
+#                 )
+# 
+#     return result_composite_type
 
 def add_composite_type(target, new_type, key_filter=None, multiplier=1):
     types_to_bind = {}
