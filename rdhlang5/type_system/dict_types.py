@@ -154,15 +154,15 @@ class DictWildcardGetterType(DictMicroOpType):
 
         return (target._values(), self.value_type)
 
-    def replace_inferred_type(self, other_micro_op_type, cache):
-        if not isinstance(other_micro_op_type, DictWildcardGetterType):
-            if isinstance(self.value_type, InferredType):
-                raise FatalError()
-            return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
-        if new_type is not self.value_type:
-            return DictWildcardGetterType(new_type, key_error=self.key_error, type_error=self.type_error)
-        return self
+#     def replace_inferred_type(self, other_micro_op_type, cache):
+#         if not isinstance(other_micro_op_type, DictWildcardGetterType):
+#             if isinstance(self.value_type, InferredType):
+#                 raise FatalError()
+#             return self
+#         new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
+#         if new_type is not self.value_type:
+#             return DictWildcardGetterType(new_type, key_error=self.key_error, type_error=self.type_error)
+#         return self
 
 #     def bind(self, source_type, key, target_manager):
 #         if key is not None:
@@ -364,15 +364,15 @@ class DictGetterType(DictMicroOpType):
                 return ([ target._get(self.key) ], self.value_type)
         return ([], None)
 
-    def replace_inferred_type(self, other_micro_op_type, cache):
-        if not isinstance(other_micro_op_type, DictGetterType):
-            if isinstance(self.value_type, InferredType):
-                raise FatalError()
-            return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
-        if new_type is not self.value_type:
-            return DictGetterType(new_type, key_error=self.key_error, type_error=self.type_error)
-        return self
+#     def replace_inferred_type(self, other_micro_op_type, cache):
+#         if not isinstance(other_micro_op_type, DictGetterType):
+#             if isinstance(self.value_type, InferredType):
+#                 raise FatalError()
+#             return self
+#         new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
+#         if new_type is not self.value_type:
+#             return DictGetterType(new_type, key_error=self.key_error, type_error=self.type_error)
+#         return self
 
 #     def bind(self, source_type, key, target_manager):
 #         if key is not None and key != self.key:
@@ -554,15 +554,15 @@ class DictWildcardSetterType(DictMicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
-    def replace_inferred_type(self, other_micro_op_type, cache):
-        if not isinstance(other_micro_op_type, DictWildcardSetterType):
-            if isinstance(self.value_type, InferredType):
-                raise FatalError()
-            return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
-        if new_type is not self.value_type:
-            return DictWildcardSetterType(new_type, key_error=self.key_error, type_error=self.type_error)
-        return self
+#     def replace_inferred_type(self, other_micro_op_type, cache):
+#         if not isinstance(other_micro_op_type, DictWildcardSetterType):
+#             if isinstance(self.value_type, InferredType):
+#                 raise FatalError()
+#             return self
+#         new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
+#         if new_type is not self.value_type:
+#             return DictWildcardSetterType(new_type, key_error=self.key_error, type_error=self.type_error)
+#         return self
 
 #     def bind(self, source_type, key, target):
 #         pass
@@ -679,15 +679,15 @@ class DictSetterType(DictMicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
-    def replace_inferred_type(self, other_micro_op_type, cache):
-        if not isinstance(other_micro_op_type, DictSetterType):
-            if isinstance(self.value_type, InferredType):
-                raise FatalError()
-            return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
-        if new_type is not self.value_type:
-            return DictSetterType(new_type, key_error=self.key_error, type_error=self.type_error)
-        return self
+#     def replace_inferred_type(self, other_micro_op_type, cache):
+#         if not isinstance(other_micro_op_type, DictSetterType):
+#             if isinstance(self.value_type, InferredType):
+#                 raise FatalError()
+#             return self
+#         new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
+#         if new_type is not self.value_type:
+#             return DictSetterType(new_type, key_error=self.key_error, type_error=self.type_error)
+#         return self
 
     def bind(self, source_type, key, target):
         pass
@@ -807,8 +807,8 @@ class DictWildcardDeletterType(DictMicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
-    def replace_inferred_type(self, other_micro_op_type, cache):
-        return self
+#     def replace_inferred_type(self, other_micro_op_type, cache):
+#         return self
 
     def bind(self, source_type, key, target):
         pass
@@ -906,8 +906,8 @@ class DictDeletterType(DictMicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
-    def replace_inferred_type(self, other_micro_op_type, cache):
-        return self
+#     def replace_inferred_type(self, other_micro_op_type, cache):
+#         return self
 
 #     def bind(self, key, target):
 #         pass

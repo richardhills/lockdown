@@ -2,7 +2,8 @@ from unittest import main
 from unittest.case import TestCase
 
 from rdhlang5.type_system.composites import CompositeType, InferredType, \
-    apply_consistency_heiristic
+    apply_consistency_heiristic, replace_inferred_types, \
+    check_dangling_inferred_types
 from rdhlang5.type_system.core_types import IntegerType, UnitType, StringType, \
     AnyType, Const, OneOfType, BooleanType, merge_types
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
@@ -1130,14 +1131,14 @@ class TestList(TestCase):
 class TestInferredTypes(TestCase):
     def test_basic(self):
         foo = InferredType()
-        foo = foo.replace_inferred_types(IntegerType())
+        foo = replace_inferred_types(foo, IntegerType())
         self.assertIsInstance(foo, IntegerType)
 
     def test_basic_object(self):
         foo = RDHObjectType({
             "bar": InferredType()
         })
-        foo = foo.replace_inferred_types(RDHObjectType({
+        foo = replace_inferred_types(foo, RDHObjectType({
             "bar": IntegerType()
         }))
         self.assertIsInstance(foo.micro_op_types[("get", "bar")].value_type, IntegerType)
@@ -1146,7 +1147,7 @@ class TestInferredTypes(TestCase):
         foo = RDHObjectType({
             "bar": StringType()
         })
-        foo = foo.replace_inferred_types(RDHObjectType({
+        foo = replace_inferred_types(foo, RDHObjectType({
             "bar": IntegerType()
         }))
         self.assertIsInstance(foo.micro_op_types[("get", "bar")].value_type, StringType)
@@ -1155,7 +1156,7 @@ class TestInferredTypes(TestCase):
         foo = RDHObjectType({
             "bar": InferredType()
         })
-        foo = foo.replace_inferred_types(RDHObjectType({
+        foo = replace_inferred_types(foo, RDHObjectType({
             "bar": IntegerType(),
             "bam": StringType()
         }))
@@ -1165,10 +1166,10 @@ class TestInferredTypes(TestCase):
         foo = RDHObjectType({
             "bar": InferredType()
         })
-        with self.assertRaises(Exception):
-            foo = foo.replace_inferred_types(RDHObjectType({
-                "bam": StringType()
-            }))
+        foo = replace_inferred_types(foo, RDHObjectType({
+            "bam": StringType()
+        }))
+        check_dangling_inferred_types(foo)
 
     def test_double_nested(self):
         foo = RDHObjectType({
@@ -1176,7 +1177,7 @@ class TestInferredTypes(TestCase):
                 "bam": InferredType()
             })
         })
-        foo = foo.replace_inferred_types(RDHObjectType({
+        foo = replace_inferred_types(foo, RDHObjectType({
             "bar": RDHObjectType({
                 "bam": IntegerType()
             })
@@ -1187,7 +1188,7 @@ class TestInferredTypes(TestCase):
         foo = RDHObjectType({
             "bar": InferredType()
         })
-        foo = foo.replace_inferred_types(RDHObjectType({
+        foo = replace_inferred_types(foo, RDHObjectType({
             "bar": RDHObjectType({
                 "bam": IntegerType()
             })

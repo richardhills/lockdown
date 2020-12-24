@@ -229,9 +229,6 @@ class ObjectTemplateOp(Opcode):
             key_type, other_key_break_types = get_expression_break_types(key_opcode, context, frame_manager, immediate_context=immediate_context)
             break_types.merge(other_key_break_types)
 
-            value_type, other_value_break_types = get_expression_break_types(value_opcode, context, frame_manager, immediate_context=immediate_context)
-            break_types.merge(other_value_break_types)
-
             if key_type is MISSING:
                 continue
 
@@ -246,7 +243,14 @@ class ObjectTemplateOp(Opcode):
                 pass
 
             if key is None:
-                continue
+                continue6
+
+            if key == "bar":
+                pass
+
+            value_type, other_value_break_types = get_expression_break_types(value_opcode, context, frame_manager, immediate_context=immediate_context)
+            break_types.merge(other_value_break_types)
+
 
             if value_type is MISSING:
                 continue

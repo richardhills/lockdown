@@ -4,7 +4,7 @@ from _collections import defaultdict
 from collections import OrderedDict
 
 from rdhlang5.type_system.composites import InferredType, CompositeType, \
-    Composite, unbind_key, bind_key, check_can_composite_type_be_added
+    Composite, unbind_key, bind_key, can_add_composite_type_with_filter
 from rdhlang5.type_system.core_types import merge_types, Const, NoValueType, \
     IntegerType, Type
 from rdhlang5.type_system.exceptions import FatalError, raise_if_safe, \
@@ -149,21 +149,28 @@ class ListWildcardGetterType(ListMicroOpType):
             return ([], None)
         return (target.wrapped.values(), self.value_type)
 
+    def clone(self, value_type=MISSING, key_error=MISSING):
+        return ListWildcardGetterType(
+            default(value_type, self.value_type),
+            default(key_error, self.key_error),
+            self.type_error
+        )
+
 #     def apply_consistency_heuristic(self, other_micro_op_types):
 #         reified_type_to_use = self.value_type.apply_consistency_heuristic(other_micro_op_types)
 #         if reified_type_to_use != self.value_type:
 #             return ListWildcardGetterType(reified_type_to_use, self.key_error, self.type_error)
 #         return self
 
-    def replace_inferred_type(self, other_micro_op_type, cache):
-        if not isinstance(other_micro_op_type, ListWildcardGetterType):
-            if isinstance(self.value_type, InferredType):
-                raise FatalError()
-            return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
-        if new_type is not self.value_type:
-            return ListWildcardGetterType(new_type, key_error=self.key_error, type_error=self.type_error)
-        return self
+#     def replace_inferred_type(self, other_micro_op_type, cache):
+#         if not isinstance(other_micro_op_type, ListWildcardGetterType):
+#             if isinstance(self.value_type, InferredType):
+#                 raise FatalError()
+#             return self
+#         new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
+#         if new_type is not self.value_type:
+#             return ListWildcardGetterType(new_type, key_error=self.key_error, type_error=self.type_error)
+#         return self
 
 #     def bind(self, source_type, key, target_manager):
 #         if key is not None:
@@ -388,15 +395,15 @@ class ListGetterType(ListMicroOpType):
 #             return ListGetterType(self.key, reified_type_to_use, self.key_error, self.type_error)
 #         return self
 
-    def replace_inferred_type(self, other_micro_op_type, cache):
-        if not isinstance(other_micro_op_type, ListGetterType):
-            if isinstance(self.value_type, InferredType):
-                raise FatalError()
-            return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
-        if new_type is not self.value_type:
-            return ListGetterType(self.key, new_type, key_error=self.key_error, type_error=self.type_error)
-        return self
+#     def replace_inferred_type(self, other_micro_op_type, cache):
+#         if not isinstance(other_micro_op_type, ListGetterType):
+#             if isinstance(self.value_type, InferredType):
+#                 raise FatalError()
+#             return self
+#         new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
+#         if new_type is not self.value_type:
+#             return ListGetterType(self.key, new_type, key_error=self.key_error, type_error=self.type_error)
+#         return self
 
     def clone(self, value_type=MISSING, key_error=MISSING):
         return ListGetterType(
@@ -577,7 +584,7 @@ class ListWildcardSetterType(ListMicroOpType):
 
     def raise_micro_op_invocation_conflicts(self, target_manager, key, new_value, allow_failure):
         target_type = target_manager.get_effective_composite_type()
-        if not check_can_composite_type_be_added(target_manager.get_obj(), target_type, key_filter=key, substitute_value=new_value):
+        if not can_add_composite_type_with_filter(target_manager.get_obj(), target_type, key, new_value):
             raise_if_safe(InvalidAssignmentType, self.type_error or allow_failure)
 
 #         target_type = target_manager.get_effective_composite_type()
@@ -625,6 +632,13 @@ class ListWildcardSetterType(ListMicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
+    def clone(self, value_type=MISSING, key_error=MISSING):
+        return ListWildcardSetterType(
+            default(value_type, self.value_type),
+            default(key_error, self.key_error),
+            self.type_error
+        )
+
 #     def apply_consistency_heuristic(self, other_micro_op_types):
 #         getter = other_micro_op_types.get(("get-wildcard",), None)
 #         type_to_use = self.value_type
@@ -636,15 +650,15 @@ class ListWildcardSetterType(ListMicroOpType):
 #             return ListWildcardSetterType(reified_type_to_use, self.key_error, self.type_error)
 #         return self
 
-    def replace_inferred_type(self, other_micro_op_type, cache):
-        if not isinstance(other_micro_op_type, ListWildcardSetterType):
-            if isinstance(self.value_type, InferredType):
-                raise FatalError()
-            return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
-        if new_type is not self.value_type:
-            return ListWildcardSetterType(new_type, key_error=self.key_error, type_error=self.type_error)
-        return self
+#     def replace_inferred_type(self, other_micro_op_type, cache):
+#         if not isinstance(other_micro_op_type, ListWildcardSetterType):
+#             if isinstance(self.value_type, InferredType):
+#                 raise FatalError()
+#             return self
+#         new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
+#         if new_type is not self.value_type:
+#             return ListWildcardSetterType(new_type, key_error=self.key_error, type_error=self.type_error)
+#         return self
 
 #     def bind(self, source_type, key, target):
 #         pass
@@ -730,7 +744,7 @@ class ListSetterType(ListMicroOpType):
 
     def raise_micro_op_invocation_conflicts(self, target_manager, new_value, allow_failure):
         target_type = target_manager.get_effective_composite_type()
-        if not check_can_composite_type_be_added(target_manager.get_obj(), target_type, key_filter=self.key, substitute_value=new_value):
+        if not can_add_composite_type_with_filter(target_manager.get_obj(), target_type, self.key, new_value):
             raise_if_safe(InvalidAssignmentType, self.type_error or allow_failure)
 
 #         target_type = target_manager.get_effective_composite_type()
@@ -789,15 +803,15 @@ class ListSetterType(ListMicroOpType):
 #             return ListSetterType(self.key, reified_type_to_use, self.key_error, self.type_error)
 #         return self
 
-    def replace_inferred_type(self, other_micro_op_type, cache):
-        if not isinstance(other_micro_op_type, ListSetterType):
-            if isinstance(self.value_type, InferredType):
-                raise FatalError()
-            return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
-        if new_type is not self.value_type:
-            return ListSetterType(self.key, new_type, key_error=self.key_error, type_error=self.type_error)
-        return self
+#     def replace_inferred_type(self, other_micro_op_type, cache):
+#         if not isinstance(other_micro_op_type, ListSetterType):
+#             if isinstance(self.value_type, InferredType):
+#                 raise FatalError()
+#             return self
+#         new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
+#         if new_type is not self.value_type:
+#             return ListSetterType(self.key, new_type, key_error=self.key_error, type_error=self.type_error)
+#         return self
 
     def clone(self, value_type):
         return ListSetterType(self.key, value_type, self.key_error, self.type_error)
@@ -923,8 +937,8 @@ class ListWildcardDeletterType(ListMicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
-    def replace_inferred_type(self, other_micro_op_type):
-        return self
+#     def replace_inferred_type(self, other_micro_op_type, cache):
+#         return self
 
 #     def apply_consistency_heuristic(self, other_micro_op_types):
 #         for tag in other_micro_op_types.keys():
@@ -1027,15 +1041,15 @@ class ListDeletterType(ListMicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
-    def replace_inferred_type(self, other_micro_op_type, cache):
-        if not isinstance(other_micro_op_type, ListDeletterType):
-            if isinstance(self.value_type, InferredType):
-                raise FatalError()
-            return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
-        if new_type is not self.value_type:
-            return ListDeletterType(new_type, key_error=self.key_error, type_error=self.type_error)
-        return self
+#     def replace_inferred_type(self, other_micro_op_type, cache):
+#         if not isinstance(other_micro_op_type, ListDeletterType):
+#             if isinstance(self.value_type, InferredType):
+#                 raise FatalError()
+#             return self
+#         new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
+#         if new_type is not self.value_type:
+#             return ListDeletterType(new_type, key_error=self.key_error, type_error=self.type_error)
+#         return self
 
 #     def bind(self, source_type, key, target):
 #         pass
@@ -1106,11 +1120,11 @@ class ListWildcardInsertType(ListMicroOpType):
         target_type = target_manager.get_effective_composite_type()
         target = target_manager.get_obj()
 
-        if not check_can_composite_type_be_added(target, target_type, key, new_value):
+        if not can_add_composite_type_with_filter(target, target_type, key, new_value):
             raise_if_safe(InvalidAssignmentType, self.type_error or allow_failure)
 
         for after_key in range(key + 1, len(target_manager.get_obj()) + 1):            
-            if not check_can_composite_type_be_added(target_manager.get_obj(), target_type, key_filter=after_key, substitute_value=target_manager.get_obj().wrapped[after_key - 1]):
+            if not can_add_composite_type_with_filter(target_manager.get_obj(), target_type, after_key, target_manager.get_obj().wrapped[after_key - 1]):
                 raise_if_safe(InvalidAssignmentType, self.type_error or allow_failure)
 
 #         wildcard_getter = target_type.get_micro_op_type(("get-wildcard",))
@@ -1166,15 +1180,15 @@ class ListWildcardInsertType(ListMicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
-    def replace_inferred_type(self, other_micro_op_type, cache):
-        if not isinstance(other_micro_op_type, ListWildcardInsertType):
-            if isinstance(self.value_type, InferredType):
-                raise FatalError()
-            return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
-        if new_type is not self.value_type:
-            return ListWildcardInsertType(new_type, key_error=self.key_error, type_error=self.type_error)
-        return self
+#     def replace_inferred_type(self, other_micro_op_type, cache):
+#         if not isinstance(other_micro_op_type, ListWildcardInsertType):
+#             if isinstance(self.value_type, InferredType):
+#                 raise FatalError()
+#             return self
+#         new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
+#         if new_type is not self.value_type:
+#             return ListWildcardInsertType(new_type, key_error=self.key_error, type_error=self.type_error)
+#         return self
 
 #     def bind(self, source_type, key, target):
 #         pass
@@ -1257,7 +1271,7 @@ class ListInsertType(ListMicroOpType):
     def raise_micro_op_invocation_conflicts(self, target_manager, new_value, allow_failure):
         target_type = target_manager.get_effective_composite_type()
         for after_key in range(self.key + 1, len(target_manager.get_obj())):            
-            if not check_can_composite_type_be_added(target_manager.get_obj(), target_type, key_filter=after_key, substitute_value=target_manager.get_obj().wrapped[after_key - 1]):
+            if not can_add_composite_type_with_filter(target_manager.get_obj(), target_type, after_key, target_manager.get_obj().wrapped[after_key - 1]):
                 raise_if_safe(InvalidAssignmentType, self.type_error)
 
     def is_derivable_from(self, other_type):
@@ -1280,15 +1294,15 @@ class ListInsertType(ListMicroOpType):
 
         return False
 
-    def replace_inferred_type(self, other_micro_op_type, cache):
-        if not isinstance(other_micro_op_type, ListInsertType):
-            if isinstance(self.value_type, InferredType):
-                raise FatalError()
-            return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
-        if new_type is not self.value_type:
-            return ListInsertType(self.key, new_type, key_error=self.key_error, type_error=self.type_error)
-        return self
+#     def replace_inferred_type(self, other_micro_op_type, cache):
+#         if not isinstance(other_micro_op_type, ListInsertType):
+#             if isinstance(self.value_type, InferredType):
+#                 raise FatalError()
+#             return self
+#         new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
+#         if new_type is not self.value_type:
+#             return ListInsertType(self.key, new_type, key_error=self.key_error, type_error=self.type_error)
+#         return self
 
     def is_bindable_to(self, target):
         manager = get_manager(target)
@@ -1307,6 +1321,14 @@ class ListInsertType(ListMicroOpType):
 # 
 #     def unbind(self, source_type, key, target):
 #         pass
+
+    def clone(self, value_type=MISSING, key_error=MISSING):
+        return ListInsertType(
+            self.key,
+            default(value_type, self.value_type),
+            default(key_error, self.key_error),
+            self.type_error
+        )
 
     def check_for_new_micro_op_type_conflict(self, other_micro_op_type, other_micro_op_types):
         if isinstance(other_micro_op_type, (ListGetterType, ListWildcardGetterType)):

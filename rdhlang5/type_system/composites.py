@@ -8,7 +8,8 @@ import weakref
 from rdhlang5.type_system.core_types import Type, unwrap_types, OneOfType, \
     AnyType, merge_types
 from rdhlang5.type_system.exceptions import FatalError, IsNotCompositeType, \
-    CompositeTypeIncompatibleWithTarget, CompositeTypeIsInconsistent
+    CompositeTypeIncompatibleWithTarget, CompositeTypeIsInconsistent, \
+    DanglingInferredType
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.micro_ops import merge_composite_types, MicroOpType
 from rdhlang5.utils import MISSING
@@ -21,6 +22,8 @@ class InferredType(Type):
     def replace_inferred_types(self, other, cache=None):
         return other
 
+    def __repr__(self):
+        return "Inferred"
 
 composite_type_is_copyable_cache = threading.local()
 
@@ -53,18 +56,17 @@ class CompositeType(Type):
         if cache is None:
             cache = {}
 
-        if id(self) in cache:
-            previous_inferred_from, previous_result = cache[id(self)]
-            if previous_inferred_from is not other:
-                raise FatalError()
-            return previous_result
+        cache_key = (id(self), id(other))
+
+        if cache_key in cache:
+            return cache[cache_key]
 
         name = getattr(other, "name", "Unknown")
         result = CompositeType({},
             name="inferred<{} & {}>".format(self.name, name)
         )
 
-        cache[id(self)] = (other, result)
+        cache[cache_key] = result
 
         for key, micro_op_type in self.micro_op_types.items():
             if key == ("set", "_temp"):
@@ -74,7 +76,10 @@ class CompositeType(Type):
             else:
                 other_micro_op_type = None
 
-            result.micro_op_types[key] = micro_op_type.replace_inferred_type(other_micro_op_type, cache)
+            if other_micro_op_type:
+                result.micro_op_types[key] = micro_op_type.replace_inferred_type(other_micro_op_type, cache)
+            else:
+                result.micro_op_types[key] = micro_op_type
 
         return result
 
@@ -631,9 +636,81 @@ class CompositeObjectManager(object):
 # 
 #     return True
 
+def check_dangling_inferred_types(type, results_cache=None):
+    if results_cache is None:
+        results_cache = {}
+
+    cache_key = id(type)
+
+    if cache_key in results_cache:
+        return results_cache[cache_key]
+
+    results_cache[cache_key] = True
+
+    if isinstance(type, InferredType):
+        return False
+
+    if isinstance(type, CompositeType):
+        for key, micro_op_type in type.micro_op_types.items():
+            value_type = getattr(micro_op_type, "value_type", None)
+            if value_type:
+                if not check_dangling_inferred_types(value_type):
+                    return False
+
+    return True
+
+def replace_inferred_types(type, other_type, results_cache=None):
+    if isinstance(type, CompositeType):
+        return replace_composite_inferred_types(type, other_type, results_cache)
+    elif isinstance(type, InferredType):
+        return other_type
+    elif isinstance(type, OneOfType):
+        # TODO
+        raise FatalError()
+    else:
+        return type
+
+def replace_composite_inferred_types(composite_type, other_type, results_cache=None):
+    if results_cache is None:
+        results_cache = {}
+
+    cache_key = (id(composite_type), id(other_type))
+
+    if cache_key in results_cache:
+        return results_cache[cache_key]
+
+    result = CompositeType(
+        dict(composite_type.micro_op_types),
+        name="Inferred<{}>".format(composite_type.name)
+    )
+
+    for key, micro_op_type in composite_type.micro_op_types.items():
+        value_type = getattr(micro_op_type, "value_type", None)
+
+        if not value_type:
+            continue
+
+        if not isinstance(other_type, CompositeType):
+            continue
+
+        other_micro_op_type = other_type.micro_op_types.get(key, None)
+
+        other_value_type = getattr(other_micro_op_type, "value_type", None)
+
+        if other_value_type is None:
+            continue
+
+        result.micro_op_types[key] = micro_op_type.clone(
+            value_type=replace_inferred_types(value_type, other_value_type, results_cache)
+        )
+
+    results_cache[cache_key] = result
+
+    return result
+
 def apply_consistency_heiristic(composite_type, results_cache=None):
-    if composite_type.is_self_consistent():
-        return composite_type
+#    if composite_type.is_self_consistent():
+#        return composite_type
 
     if results_cache is None:
         results_cache = {}
@@ -651,10 +728,10 @@ def apply_consistency_heiristic(composite_type, results_cache=None):
             )
 
     for tag, micro_op in result_composite_type.micro_op_types.items():
-        if tag[0] == "set" and isinstance(micro_op.value_type, AnyType):
+        if tag[0] == "set" and isinstance(micro_op.value_type, (AnyType, InferredType)):
             getter = result_composite_type.micro_op_types[("get", tag[1])]
             result_composite_type.micro_op_types[tag] = micro_op.clone(value_type=getter.value_type)
-        if tag[0] == "set-wildcard" and isinstance(micro_op.value_type, AnyType):
+        if tag[0] == "set-wildcard" and isinstance(micro_op.value_type, (AnyType, InferredType)):
             getter = result_composite_type.micro_op_types[("get-wildcard", )]
             result_composite_type.micro_op_types[tag] = micro_op.clone(value_type=getter.value_type)
 
@@ -722,9 +799,11 @@ def remove_composite_type(target, remove_type, key_filter=None, multiplier=1):
     for _, type, target in types_to_bind.values():
         get_manager(target).detach_type(type, multiplier=multiplier)
 
-def check_can_composite_type_be_added(target, new_type, key_filter=None, substitute_value=MISSING):
+def can_add_composite_type_with_filter(target, new_type, key_filter, substitute_value):
     return build_binding_map_for_type(None, new_type, target, key_filter, substitute_value, {}, {})
 
+def is_type_bindable_to_value(value, type):
+    return build_binding_map_for_type(None, type, value, None, MISSING, {}, {})
 
 def bind_key(target, key_filter):
     manager = get_manager(target)
@@ -848,7 +927,7 @@ def build_binding_map_for_type(source_micro_op, new_type, target, key_filter, su
                 if not micro_op.is_bindable_to(target):
                     micro_ops_checks_worked = False
                     break
-                    
+
                 if micro_op.conflicts_with(sub_type, target_effective_type):
                     micro_ops_checks_worked = False
                     break

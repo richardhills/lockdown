@@ -22,8 +22,9 @@ from rdhlang5.executor.opcodes import enrich_opcode, get_context_type, evaluate,
 from rdhlang5.executor.raw_code_factories import dynamic_dereference_op, \
     static_op, match_op, prepared_function, inferred_type
 from rdhlang5.executor.type_factories import enrich_type
-from rdhlang5.type_system.composites import CompositeType,\
-    apply_consistency_heiristic
+from rdhlang5.type_system.composites import CompositeType, \
+    apply_consistency_heiristic, replace_inferred_types, \
+    check_dangling_inferred_types
 from rdhlang5.type_system.core_types import Type, NoValueType, IntegerType, \
     AnyType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
@@ -37,6 +38,30 @@ from rdhlang5.type_system.object_types import RDHObject, RDHObjectType
 from rdhlang5.utils import MISSING, is_debug, runtime_type_information, raise_from, \
     spread_dict
 
+def prepare_piece_of_context(declared_type, suggested_type):
+    if suggested_type is None:
+        suggested_type = NoValueType()
+
+    if not isinstance(suggested_type, Type):
+        raise FatalError()
+
+# To sort out: merge or heiristic first??
+
+    if isinstance(suggested_type, CompositeType):
+        suggested_type = apply_consistency_heiristic(suggested_type)
+
+    final_type = replace_inferred_types(declared_type, suggested_type)
+
+    if isinstance(final_type, CompositeType):
+        final_type = apply_consistency_heiristic(final_type)
+
+    if not check_dangling_inferred_types(final_type):
+        raise PreparationException("Invalid inferred types")
+
+    if isinstance(final_type, CompositeType) and not final_type.is_self_consistent():
+        raise FatalError()
+
+    return final_type
 
 def prepare(data, outer_context, frame_manager, immediate_context=None):
     if not isinstance(data, RDHObject):
@@ -71,35 +96,8 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
         suggested_argument_type = immediate_context.get("suggested_argument_type", None)
         suggested_outer_type = immediate_context.get("suggested_outer_type", None)
 
-    if suggested_argument_type is None:
-        suggested_argument_type = NoValueType()
-    if suggested_outer_type is None:
-        suggested_outer_type = NoValueType()
-
-    if not isinstance(suggested_argument_type, Type):
-        raise FatalError()
-    if not isinstance(suggested_outer_type, Type):
-        raise FatalError()
-
-    try:
-        argument_type = argument_type.replace_inferred_types(suggested_argument_type)
-    except InvalidInferredType:
-        raise PreparationException("Invalid argument inferred types")
-
-    if isinstance(argument_type, CompositeType):
-        argument_type = apply_consistency_heiristic(argument_type)
-        if not argument_type.is_self_consistent():
-            raise FatalError()
-
-    try:
-        outer_type = outer_type.replace_inferred_types(suggested_outer_type)
-    except InvalidInferredType:
-        raise PreparationException("Invalid outer inferred types")
-
-    if isinstance(outer_type, CompositeType):
-        outer_type = apply_consistency_heiristic(outer_type)
-        if not outer_type.is_self_consistent():
-            raise FatalError()
+    argument_type = prepare_piece_of_context(argument_type, suggested_argument_type)
+    outer_type = prepare_piece_of_context(outer_type, suggested_outer_type)
 
     local_type = enrich_type(static.local)
 
@@ -140,13 +138,13 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
 
     actual_local_type = flatten_out_types(actual_local_type)
 
-    try:
-        local_type = local_type.replace_inferred_types(actual_local_type)
-    except InvalidInferredType:
-        raise PreparationException("Invalid local inferred type")
 
-    if isinstance(local_type, CompositeType):
-        local_type = apply_consistency_heiristic(local_type)
+    if isinstance(actual_local_type, CompositeType):
+        if ("get", "bar") in actual_local_type.micro_op_types:
+            pass
+
+
+    local_type = prepare_piece_of_context(local_type, actual_local_type)
 
     if not local_type.is_copyable_from(actual_local_type):
         raise PreparationException("Invalid local type: {} != {}".format(local_type, actual_local_type))
@@ -201,9 +199,9 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
                 actual_out = actual_break_type["out"]
                 actual_in = actual_break_type.get("in", None)
 
-                declared_out = declared_out.replace_inferred_types(actual_out)
+                declared_out = replace_inferred_types(declared_out, actual_out)
                 if declared_in is not None:
-                    declared_in = declared_in.replace_inferred_types(actual_in)
+                    declared_in = replace_inferred_types(declared_in, actual_in)
 
                 if declared_in is not None and actual_in is None:
                     continue

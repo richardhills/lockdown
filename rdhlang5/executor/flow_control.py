@@ -6,8 +6,8 @@ from _collections import defaultdict
 
 from rdhlang5.type_system.core_types import Type
 from rdhlang5.type_system.exceptions import FatalError
-from rdhlang5.type_system.managers import get_type_of_value
 from rdhlang5.utils import MISSING, InternalMarker, is_debug
+from rdhlang5.type_system.composites import is_type_bindable_to_value
 
 
 class BreakException(Exception):
@@ -268,10 +268,9 @@ class Frame(object):
 
         if is_debug() and isinstance(exc_value, BreakException) and self.target.break_types:
             break_types = self.target.break_types.get(exc_value.mode, MISSING)
-            type_of_value = get_type_of_value(exc_value.value)
 
             if break_types is MISSING:
-                raise FatalError("Can not unwind {} with type {}, target {} allowed {}".format(exc_value.mode, type_of_value, self.target, break_types))
+                raise FatalError("Can not unwind {} with type {}, target {} allowed {}".format(exc_value.mode, exc_value.value, self.target, break_types))
 
             failures = []
 
@@ -279,7 +278,7 @@ class Frame(object):
                 allowed_out = allowed_break_type["out"]
                 allowed_in = allowed_break_type.get("in", None)
 
-                out_is_compatible = allowed_out.is_copyable_from(type_of_value)
+                out_is_compatible = is_type_bindable_to_value(exc_value.value, allowed_out)
                 in_is_compatible = allowed_in is None or (
                     exc_value.restart_type is not None and exc_value.restart_type.is_copyable_from(allowed_in)
                 )

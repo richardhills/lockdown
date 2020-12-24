@@ -18,8 +18,8 @@ class Type(object):
     def get_allowed_values(self):
         raise AllowedValuesNotAvailable(self)
 
-    def replace_inferred_types(self, other, cache=None):
-        return self
+#     def replace_inferred_types(self, other, cache=None):
+#         return self
 
 #     def apply_consistency_heuristic(self, other_micro_op_types):
 #         return self

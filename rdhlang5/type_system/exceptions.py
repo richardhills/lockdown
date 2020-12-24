@@ -53,9 +53,10 @@ class InvalidAssignmentType(Exception):
  
 class InvalidInferredType(Exception):
     pass
-# 
-# 
-# 
+
+class DanglingInferredType(FatalError):
+    pass
+
 class IsNotCopyable(object):
     def __bool__(self):
         return False

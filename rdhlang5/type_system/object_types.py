@@ -2,7 +2,7 @@ from collections import OrderedDict
 
 from rdhlang5.executor.ast_utils import compile_statement, compile_expression
 from rdhlang5.type_system.composites import InferredType, CompositeType, \
-    Composite, unbind_key, bind_key, check_can_composite_type_be_added
+    Composite, unbind_key, bind_key, can_add_composite_type_with_filter
 from rdhlang5.type_system.core_types import merge_types, Type, Const, OneOfType, \
     AnyType, StringType, NoValueType
 from rdhlang5.type_system.exceptions import FatalError, raise_if_safe, \
@@ -151,15 +151,15 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
             return ([], None)
         return (target._values(), self.value_type)
 
-    def replace_inferred_type(self, other_micro_op_type, cache):
-        if not isinstance(other_micro_op_type, ObjectWildcardGetterType):
-            if isinstance(self.value_type, InferredType):
-                raise InvalidInferredType()
-            return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
-        if new_type is not self.value_type:
-            return ObjectWildcardGetterType(self.key_type, new_type, self.key_error, self.type_error)
-        return self
+#     def replace_inferred_type(self, other_micro_op_type, cache):
+#         if not isinstance(other_micro_op_type, ObjectWildcardGetterType):
+#             if isinstance(self.value_type, InferredType):
+#                 raise InvalidInferredType()
+#             return self
+#         new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
+#         if new_type is not self.value_type:
+#             return ObjectWildcardGetterType(self.key_type, new_type, self.key_error, self.type_error)
+#         return self
 
     def clone(self, value_type=MISSING, key_error=MISSING):
         return ObjectWildcardGetterType(
@@ -367,15 +367,15 @@ class ObjectGetterType(ObjectMicroOpType):
 #             return ObjectGetterType(self.key, reified_type_to_use, self.key_error, self.type_error)
 #         return self
 
-    def replace_inferred_type(self, other_micro_op_type, cache):
-        if not isinstance(other_micro_op_type, ObjectGetterType):
-            if isinstance(self.value_type, InferredType):
-                raise InvalidInferredType(self.key)
-            return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
-        if new_type is not self.value_type:
-            return ObjectGetterType(self.key, new_type, key_error=self.key_error, type_error=self.type_error)
-        return self
+#     def replace_inferred_type(self, other_micro_op_type, cache):
+#         if not isinstance(other_micro_op_type, ObjectGetterType):
+#             if isinstance(self.value_type, InferredType):
+#                 raise InvalidInferredType(self.key)
+#             return self
+#         new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
+#         if new_type is not self.value_type:
+#             return ObjectGetterType(self.key, new_type, key_error=self.key_error, type_error=self.type_error)
+#         return self
 
     def clone(self, value_type=None):
         return ObjectGetterType(self.key, value_type, self.key_error, self.type_error)
@@ -511,7 +511,7 @@ class ObjectWildcardSetterType(ObjectMicroOpType):
 
     def raise_micro_op_invocation_conflicts(self, target_manager, key, new_value, allow_failure):
         target_type = target_manager.get_effective_composite_type()
-        if not check_can_composite_type_be_added(target_manager.get_obj(), target_type, key_filter=key, substitute_value=new_value):
+        if not can_add_composite_type_with_filter(target_manager.get_obj(), target_type, key, new_value):
             raise_if_safe(InvalidAssignmentType, self.type_error or allow_failure)
 
 #         target_type = target_manager.get_effective_composite_type()
@@ -568,15 +568,15 @@ class ObjectWildcardSetterType(ObjectMicroOpType):
 #             return ObjectWildcardSetterType(self.key_type, reified_type_to_use, self.key_error, self.type_error)
 #         return self
 
-    def replace_inferred_type(self, other_micro_op_type, cache):
-        if not isinstance(other_micro_op_type, ObjectWildcardSetterType):
-            if isinstance(self.value_type, InferredType):
-                raise InvalidInferredType()
-            return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
-        if new_type is not self.value_type:
-            return ObjectWildcardSetterType(new_type, key_error=self.key_error, type_error=self.type_error)
-        return self
+#     def replace_inferred_type(self, other_micro_op_type, cache):
+#         if not isinstance(other_micro_op_type, ObjectWildcardSetterType):
+#             if isinstance(self.value_type, InferredType):
+#                 raise InvalidInferredType()
+#             return self
+#         new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
+#         if new_type is not self.value_type:
+#             return ObjectWildcardSetterType(new_type, key_error=self.key_error, type_error=self.type_error)
+#         return self
 
     def clone(self, value_type=None):
         return ObjectWildcardSetterType(self.key_type, value_type, self.key_error, self.type_error)
@@ -647,7 +647,7 @@ class ObjectSetterType(ObjectMicroOpType):
 
     def raise_micro_op_invocation_conflicts(self, target_manager, new_value, allow_failure):
         target_type = target_manager.get_effective_composite_type()
-        if not check_can_composite_type_be_added(target_manager.get_obj(), target_type, key_filter=self.key, substitute_value=new_value):
+        if not can_add_composite_type_with_filter(target_manager.get_obj(), target_type, self.key, new_value):
             raise_if_safe(InvalidAssignmentType, self.type_error or allow_failure)
 
 #         wildcard_getter = target_type.get_micro_op_type(("get-wildcard", ))
@@ -690,15 +690,15 @@ class ObjectSetterType(ObjectMicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
-    def replace_inferred_type(self, other_micro_op_type, cache):
-        if not isinstance(other_micro_op_type, ObjectSetterType):
-            if isinstance(self.value_type, InferredType):
-                raise InvalidInferredType()
-            return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
-        if new_type is not self.value_type:
-            return ObjectSetterType(self.key, new_type, key_error=self.key_error, type_error=self.type_error)
-        return self
+#     def replace_inferred_type(self, other_micro_op_type, cache):
+#         if not isinstance(other_micro_op_type, ObjectSetterType):
+#             if isinstance(self.value_type, InferredType):
+#                 raise InvalidInferredType()
+#             return self
+#         new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
+#         if new_type is not self.value_type:
+#             return ObjectSetterType(self.key, new_type, key_error=self.key_error, type_error=self.type_error)
+#         return self
 
     def clone(self, value_type=None):
         return ObjectSetterType(self.key, value_type, self.key_error, self.type_error)
@@ -822,8 +822,8 @@ class ObjectWildcardDeletterType(ObjectMicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
-    def replace_inferred_type(self, other_micro_op_type, cache):
-        return self
+#     def replace_inferred_type(self, other_micro_op_type, cache):
+#         return self
 
 #     def bind(self, source_type, key, target):
 #         pass
@@ -911,15 +911,15 @@ class ObjectDeletterType(ObjectMicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
-    def replace_inferred_type(self, other_micro_op_type, cache):
-        if not isinstance(other_micro_op_type, ObjectDeletterType):
-            if isinstance(self.value_type, InferredType):
-                raise InvalidInferredType()
-            return self
-        new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
-        if new_type is not self.value_type:
-            return ObjectDeletterType(new_type, key_error=self.key_error, type_error=self.type_error)
-        return self
+#     def replace_inferred_type(self, other_micro_op_type, cache):
+#         if not isinstance(other_micro_op_type, ObjectDeletterType):
+#             if isinstance(self.value_type, InferredType):
+#                 raise InvalidInferredType()
+#             return self
+#         new_type = self.value_type.replace_inferred_types(other_micro_op_type.value_type, cache)
+#         if new_type is not self.value_type:
+#             return ObjectDeletterType(new_type, key_error=self.key_error, type_error=self.type_error)
+#         return self
 
 #     def bind(self, source_type, key, target):
 #         pass
