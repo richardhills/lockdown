@@ -143,7 +143,7 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
         return True
 
     def prepare_bind(self, target, key_filter, substitute_value):
-        if key_filter:
+        if key_filter is not None:
             if substitute_value is not MISSING:
                 return ([ substitute_value ], self.value_type)
             if target._contains(key_filter):

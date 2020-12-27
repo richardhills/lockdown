@@ -390,6 +390,8 @@ class CompositeObjectManager(object):
     def detach_type(self, remove_type, multiplier=1):
         self.cached_effective_composite_type = None
         remove_type_id = id(remove_type)
+        if remove_type_id not in self.attached_type_counts:
+            raise FatalError()
         self.attached_type_counts[remove_type_id] -= multiplier
         if self.attached_type_counts[remove_type_id] < 0:
             raise FatalError()
