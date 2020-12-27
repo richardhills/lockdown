@@ -128,7 +128,7 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
 
     def is_bindable_to(self, target):
         manager = get_manager(target)
-        if not bool(isinstance(target, RDHObject)):
+        if not isinstance(target, RDHObject):
             return False
         if not manager:
             return False
@@ -260,6 +260,7 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
 #         return False
 
     def merge(self, other_micro_op_type):
+#        print "{}, {}".format(id(self.value_type), id(other_micro_op_type.value_type))
         return ObjectWildcardGetterType(
             self.key_type,
             merge_types([ self.value_type, other_micro_op_type.value_type ], "sub"),
@@ -343,7 +344,7 @@ class ObjectGetterType(ObjectMicroOpType):
 
     def is_bindable_to(self, target):
         manager = get_manager(target)
-        if not bool(isinstance(target, RDHObject)):
+        if not isinstance(target, RDHObject):
             return False
         if not manager:
             return False
@@ -547,7 +548,7 @@ class ObjectWildcardSetterType(ObjectMicroOpType):
 
     def is_bindable_to(self, target):
         manager = get_manager(target)
-        if not bool(isinstance(target, RDHObject)):
+        if not isinstance(target, RDHObject):
             return False
         if not manager:
             return False
@@ -680,7 +681,7 @@ class ObjectSetterType(ObjectMicroOpType):
 
     def is_bindable_to(self, target):
         manager = get_manager(target)
-        if not bool(isinstance(target, RDHObject)):
+        if not isinstance(target, RDHObject):
             return False
         if not manager:
             return False
@@ -809,7 +810,7 @@ class ObjectWildcardDeletterType(ObjectMicroOpType):
 
     def is_bindable_to(self, target):
         manager = get_manager(target)
-        if not bool(isinstance(target, RDHObject)):
+        if not isinstance(target, RDHObject):
             return False
         if not manager:
             return False
@@ -898,7 +899,7 @@ class ObjectDeletterType(ObjectMicroOpType):
 
     def is_bindable_to(self, target):
         manager = get_manager(target)
-        if not bool(isinstance(target, RDHObject)):
+        if not isinstance(target, RDHObject):
             return False
         if not manager:
             return False

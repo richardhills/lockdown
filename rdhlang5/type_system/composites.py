@@ -11,6 +11,7 @@ from rdhlang5.type_system.exceptions import FatalError, IsNotCompositeType, \
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.micro_ops import merge_composite_types, MicroOpType
 from rdhlang5.utils import MISSING
+from __builtin__ import True
 
 
 class InferredType(Type):
@@ -49,6 +50,7 @@ class CompositeType(Type):
 
         self.micro_op_types = micro_op_types
         self.name = name or "unknown"
+        self._is_self_consistent = None
 
     def replace_inferred_types(self, other, cache=None):
         if cache is None:
@@ -106,13 +108,13 @@ class CompositeType(Type):
 #             raise IncorrectObjectTypeForMicroOp()
 
     def is_self_consistent(self):
-        # TODO: what about micro ops that have composite types as
-        # value_types that are *themselves* inconsistent. Eh?
-        for micro_op in self.micro_op_types.values():
-            if micro_op.conflicts_with(self, self):
-                micro_op.conflicts_with(self, self)
-                return False
-        return True
+        if self._is_self_consistent is None:
+            self._is_self_consistent = True
+            for micro_op in self.micro_op_types.values():
+                if micro_op.conflicts_with(self, self):
+                    self._is_self_consistent = False
+                    break
+        return self._is_self_consistent
 
 #     def internal_is_copyable_from(self, other):
 #         raise ValueError()
@@ -157,33 +159,26 @@ class CompositeType(Type):
         try:
             cache_initialized_here = False
             if getattr(composite_type_is_copyable_cache, "_is_copyable_from_cache", None) is None:
-                composite_type_is_copyable_cache._is_copyable_from_cache = defaultdict(lambda: defaultdict(lambda: None))
+                composite_type_is_copyable_cache._is_copyable_from_cache = {}
                 cache_initialized_here = True
             cache = composite_type_is_copyable_cache._is_copyable_from_cache
 
-            result = cache[id(self)][id(other)]
-            if result is not None:
-                return result
+            result_key = (id(self), id(other))
 
-            result = True
+            if result_key in cache:
+                return cache[result_key]
 
-            cache[id(self)][id(other)] = result
-            cache[id(other)][id(self)] = result
+            cache[result_key] = True
 
             for micro_op_type in self.micro_op_types.values():
                 if not micro_op_type.is_derivable_from(other):
-                    result = False
+                    cache[result_key] = False
                     break
-
-            cache[id(self)][id(other)] = result
-            cache[id(other)][id(self)] = result
-
-            return result
         finally:
             if cache_initialized_here:
                 composite_type_is_copyable_cache._is_copyable_from_cache = None
 
-        return True
+        return cache[result_key]
 
 #     def old_is_copyable_from(self, other):
 #         raise ValueError()
@@ -353,7 +348,6 @@ class Composite(object):
 # 
 #     references[key][id(source_type)] = []
 
-
 class CompositeObjectManager(object):
     def __init__(self, obj, on_gc_callback):
         self.obj_ref = weakref.ref(obj, self.obj_gced)
@@ -364,7 +358,9 @@ class CompositeObjectManager(object):
 #         self.child_value_type_references = defaultdict(lambda: defaultdict(list))
         self.on_gc_callback = on_gc_callback
 
-        self.cached_effective_composite_type = None
+        from rdhlang5.type_system.default_composite_types import EMPTY_COMPOSITE_TYPE
+
+        self.cached_effective_composite_type = EMPTY_COMPOSITE_TYPE
 
         self.default_factory = None
         self.debug_reason = None
@@ -382,13 +378,15 @@ class CompositeObjectManager(object):
         return self.cached_effective_composite_type
 
     def attach_type(self, new_type, multiplier=1):
-        self.cached_effective_composite_type = None
         new_type_id = id(new_type)
+
+        if self.attached_type_counts[new_type_id] == 0:
+            self.cached_effective_composite_type = None
+
         self.attached_types[new_type_id] = new_type
         self.attached_type_counts[new_type_id] += multiplier
 
     def detach_type(self, remove_type, multiplier=1):
-        self.cached_effective_composite_type = None
         remove_type_id = id(remove_type)
         if remove_type_id not in self.attached_type_counts:
             raise FatalError()
@@ -396,6 +394,7 @@ class CompositeObjectManager(object):
         if self.attached_type_counts[remove_type_id] < 0:
             raise FatalError()
         if self.attached_type_counts[remove_type_id] == 0:
+            self.cached_effective_composite_type = None
             del self.attached_types[remove_type_id]
             del self.attached_type_counts[remove_type_id]
 
@@ -677,6 +676,9 @@ def prepare_lhs_type(type, guide_type, results_cache=None):
     return type
 
 def prepare_composite_lhs_type(composite_type, guide_type, results_cache=None):
+    if hasattr(composite_type, "_prepared_lhs_type"):
+        return composite_type
+
     if results_cache is None:
         results_cache = {}
 
@@ -687,10 +689,13 @@ def prepare_composite_lhs_type(composite_type, guide_type, results_cache=None):
 
     result = CompositeType(
         dict(composite_type.micro_op_types),
-        name="Inferred<{}>".format(composite_type.name)
+        name="LHSPrepared<{}>".format(composite_type.name)
     )
 
+    result._prepared_lhs_type = True
+
     results_cache[cache_key] = result
+    something_changed = False
 
     for tag, micro_op in result.micro_op_types.items():
         getter = None
@@ -700,7 +705,9 @@ def prepare_composite_lhs_type(composite_type, guide_type, results_cache=None):
             if tag[0] == "set-wildcard":
                 getter = result.get_micro_op_type(("get-wildcard", ))
         if getter:
-            result.micro_op_types[tag] = micro_op.clone(value_type=getter.value_type)
+            if micro_op.value_type is not getter.value_type:
+                result.micro_op_types[tag] = micro_op.clone(value_type=getter.value_type)
+                something_changed = True
 
     for tag, micro_op in result.micro_op_types.items():
         if hasattr(micro_op, "value_type"):
@@ -718,9 +725,13 @@ def prepare_composite_lhs_type(composite_type, guide_type, results_cache=None):
                 if hasattr(guide_op, "value_type"):
                     guide_micro_op_type = guide_op.value_type
 
-            result.micro_op_types[tag] = micro_op.clone(
-                value_type=prepare_lhs_type(micro_op.value_type, guide_micro_op_type, results_cache)
-            )
+            new_value_type = prepare_lhs_type(micro_op.value_type, guide_micro_op_type, results_cache)
+
+            if micro_op.value_type is not new_value_type:
+                result.micro_op_types[tag] = micro_op.clone(
+                    value_type=prepare_lhs_type(micro_op.value_type, guide_micro_op_type, results_cache)
+                )
+                something_changed = True
 
     right_shifts = []
     left_shifts = []
@@ -749,6 +760,7 @@ def prepare_composite_lhs_type(composite_type, guide_type, results_cache=None):
                 result.micro_op_types[("get", getter_micro_op.key)] = getter_micro_op.clone(
                     value_type=merge_types(cumulative_types, "super")
                 )
+                something_changed = True
 
     positional_getter_micro_ops = sorted(
         [m for t, m in result.micro_op_types.items() if t[0] == "get" and len(t) == 2 and isinstance(t[1], int)],
@@ -764,6 +776,10 @@ def prepare_composite_lhs_type(composite_type, guide_type, results_cache=None):
                     value_type=merge_types(cumulative_types, "super"),
                     key_error=True
                 )
+                something_changed = True
+
+    if not something_changed:
+        result.micro_op_types = composite_type.micro_op_types
 
     return result
 
@@ -916,6 +932,8 @@ def prepare_composite_lhs_type(composite_type, guide_type, results_cache=None):
 def add_composite_type(target, new_type, key_filter=None, multiplier=1):
     types_to_bind = {}
     succeeded = build_binding_map_for_type(None, new_type, target, key_filter, MISSING, {}, types_to_bind)
+    if len(types_to_bind) > 100:
+        pass
     if not succeeded:
         raise CompositeTypeIncompatibleWithTarget()
 
@@ -926,6 +944,8 @@ def add_composite_type(target, new_type, key_filter=None, multiplier=1):
 def remove_composite_type(target, remove_type, key_filter=None, multiplier=1):
     types_to_bind = {}
     succeeded = build_binding_map_for_type(None, remove_type, target, key_filter, MISSING, {}, types_to_bind)
+    if len(types_to_bind) > 100:
+        pass
     if not succeeded:
         raise CompositeTypeIncompatibleWithTarget()
 
@@ -1041,18 +1061,31 @@ def build_binding_map_for_type(source_micro_op, new_type, target, key_filter, su
     if result_key in results:
         return results[result_key]
 
+#    print "{}:{}:{}".format(id(source_micro_op), id(new_type), id(target))
+
     results[result_key] = True
 
     extra_types_to_bind = {}
 
+    target_is_composite = isinstance(target, Composite)
+    manager = get_manager(target)
+    target_effective_type = None
+    if manager:
+        target_effective_type = manager.get_effective_composite_type()
+
+#     if isinstance(new_type, CompositeType) and manager:
+#         output = "{} => {}".format(new_type.name, manager.debug_reason)
+#         if "LHSPrepared<declared-object-type> => object-template" in output:
+#             pass
+#         print output
+
+#    print "{} => {}".format(new_type, type(target))
+
     atleast_one_sub_type_worked = False
     for sub_type in unwrap_types(new_type):
-        if isinstance(sub_type, CompositeType) and isinstance(target, Composite):
+        if isinstance(sub_type, CompositeType) and target_is_composite:
             if not sub_type.is_self_consistent():
                 raise CompositeTypeIsInconsistent()
-
-            manager = get_manager(target)
-            target_effective_type = manager.get_effective_composite_type()
 
             micro_ops_checks_worked = True
 
@@ -1067,12 +1100,7 @@ def build_binding_map_for_type(source_micro_op, new_type, target, key_filter, su
 
                 next_targets, next_new_type = micro_op.prepare_bind(target, key_filter, substitute_value)
 
-                if not isinstance(next_targets, list):
-                    raise FatalError()
-
                 for next_target in next_targets:
-                    if next_target is MISSING:
-                        raise FatalError()
                     if not build_binding_map_for_type(
                         micro_op, next_new_type, next_target, None, MISSING, results, extra_types_to_bind
                     ):
@@ -1087,7 +1115,7 @@ def build_binding_map_for_type(source_micro_op, new_type, target, key_filter, su
         if isinstance(sub_type, AnyType):
             atleast_one_sub_type_worked = True
 
-        if not isinstance(sub_type, CompositeType) and not isinstance(target, Composite):
+        if not isinstance(sub_type, CompositeType) and not target_is_composite:
             if sub_type.is_copyable_from(get_type_of_value(target)):
                 atleast_one_sub_type_worked = True
 

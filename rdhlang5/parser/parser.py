@@ -20,7 +20,8 @@ from rdhlang5.executor.raw_code_factories import function_lit, nop, comma_op, \
 from rdhlang5.parser.grammar.langLexer import langLexer
 from rdhlang5.parser.grammar.langParser import langParser
 from rdhlang5.parser.grammar.langVisitor import langVisitor
-from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE
+from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE,\
+    READONLY_DEFAULT_DICT_TYPE, READONLY_DEFAULT_OBJECT_TYPE
 from rdhlang5.type_system.dict_types import RDHDict
 from rdhlang5.type_system.exceptions import FatalError
 from rdhlang5.type_system.managers import get_manager
@@ -35,7 +36,7 @@ class RDHLang5Visitor(langVisitor):
             pair = self.visit(pair)
             result[pair[0]] = pair[1]
 
-        return RDHObject(result, bind=DEFAULT_OBJECT_TYPE)
+        return RDHObject(result, bind=READONLY_DEFAULT_OBJECT_TYPE)
 
     def visitPair(self, ctx):
         return [ ctx.STRING().getText()[1:-1], self.visit(ctx.value()) ]
@@ -806,6 +807,7 @@ def parse(code, debug=False):
     visitor = RDHLang5Visitor()
     ast = visitor.visit(ast)
     if debug:
-        get_manager(ast, "parse-code").add_composite_type(DEFAULT_OBJECT_TYPE)
-        ast.raw_code = code
+        ast._set("raw_code", code)
+#        get_manager(ast, "parse-code").add_composite_type(DEFAULT_OBJECT_TYPE)
+#        ast.raw_code = code
     return ast

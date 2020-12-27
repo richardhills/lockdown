@@ -103,7 +103,6 @@ def raise_micro_op_conflicts(micro_op, args, other_micro_op_types):
 
 
 def merge_composite_types(types, name=None):
-#    print "Merge {}".format([id(t) for t in types])
     from rdhlang5.type_system.composites import CompositeType
 
 #    python_object_type_checker = None
@@ -114,10 +113,10 @@ def merge_composite_types(types, name=None):
 #             raise FatalError()
 #         if type.python_object_type_checker:
 #             python_object_type_checker = type.python_object_type_checker
-# 
+
     # Optimization - remove any composite types that are empty.
     types_with_opcodes = [t for t in types if t.micro_op_types]
-# 
+ 
 #     # Optimization - use a global static type if safe to do so
 #     if len(types_with_opcodes) == 0 and not initial_data:
 #         from rdhlang5.type_system.dict_types import is_dict_checker
@@ -133,8 +132,16 @@ def merge_composite_types(types, name=None):
 #             from rdhlang5.type_system.default_composite_types import EMPTY_DICT_TYPE
 #             return EMPTY_DICT_TYPE
 
+    from rdhlang5.type_system.default_composite_types import EMPTY_COMPOSITE_TYPE
+
+    if len(types_with_opcodes) == 0:
+        return EMPTY_COMPOSITE_TYPE
     if len(types_with_opcodes) == 1:
         return CompositeType(types_with_opcodes[0].micro_op_types, name=name) 
+
+#    print " + ".join([t.name for t in types])
+
+#    print ";".join([s.name for s in types])
 
     result = {}
     for type in types_with_opcodes:

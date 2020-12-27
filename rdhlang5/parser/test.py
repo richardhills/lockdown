@@ -589,14 +589,14 @@ class TestParserMisc(TestCase):
 
 class TestSpeed(TestCase):
     def test_loops(self):
-        return miss_test() # because it's far too slow atm
+        #return miss_test() # because it's far too slow atm
         start = time()
         code = parse("""
             function() {
                 int i = 0, j = 0;
-                while(i < 100) {
+                while(i < 40) {
                     j = 0;
-                    while(j < 100) {
+                    while(j < 40) {
                         int foo = i * j;
                         int bar = i * j;
                         int baz = i * j;

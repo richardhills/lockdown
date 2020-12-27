@@ -1,6 +1,6 @@
 from UserDict import DictMixin
 
-from rdhlang5.type_system.composites import InferredType, CompositeType, \
+from rdhlang5.type_system.composites import CompositeType, \
     Composite, unbind_key, bind_key
 from rdhlang5.type_system.core_types import Type, merge_types
 from rdhlang5.type_system.exceptions import FatalError, raise_if_safe, \

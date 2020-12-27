@@ -320,11 +320,11 @@ class UnboundDereferenceBinder(object):
                 new_dereference = dereference_op(bound_countext_op, literal_op(reference), True, **debug_info)
                 if is_static:
                     new_dereference = static_op(new_dereference)
-                get_manager(new_dereference).add_composite_type(DEFAULT_OBJECT_TYPE)
+                get_manager(new_dereference).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
                 return new_dereference
             else:
                 new_dereference = dynamic_dereference_op(reference, **debug_info)
-                get_manager(new_dereference).add_composite_type(DEFAULT_OBJECT_TYPE)
+                get_manager(new_dereference).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
                 return new_dereference
 
         if getattr(expression, "opcode", None) == "unbound_assignment":
@@ -333,7 +333,7 @@ class UnboundDereferenceBinder(object):
 
             if bound_countext_op:
                 new_assignment = assignment_op(bound_countext_op, literal_op(reference), expression.rvalue, **debug_info)
-                get_manager(new_assignment).add_composite_type(DEFAULT_OBJECT_TYPE)
+                get_manager(new_assignment).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
                 return new_assignment
             else:
                 raise FatalError()  # TODO, dynamic assignment
@@ -363,7 +363,7 @@ def type_conditional_converter(expression):
             )
         ]
     )
-    get_manager(new_match).add_composite_type(DEFAULT_OBJECT_TYPE)
+    get_manager(new_match).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
     return new_match
 
 def combine(*funcs):
@@ -401,16 +401,16 @@ class OpenFunction(object):
         self.local_initialization_context_type = RDHObjectType({
             "outer": self.outer_type,
             "argument": self.argument_type,
-            "types": readonly_rich_composite_type
+#            "types": readonly_rich_composite_type
         }, wildcard_value_type=AnyType(), name="local-initialization-context-type")
 
         self.execution_context_type = RDHObjectType({
-            "prepare": readonly_rich_composite_type,
+#            "prepare": readonly_rich_composite_type,
             "outer": self.outer_type,
             "argument": self.argument_type,
-            "static": readonly_rich_composite_type,
+#            "static": readonly_rich_composite_type,
             "local": self.local_type,
-            "types": readonly_rich_composite_type
+#            "types": readonly_rich_composite_type
         }, wildcard_value_type=AnyType(), name="code-execution-context-type")
 
         if not self.execution_context_type.is_self_consistent():
