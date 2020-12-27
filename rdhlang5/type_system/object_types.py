@@ -504,11 +504,11 @@ class ObjectWildcardSetterType(ObjectMicroOpType):
 #             if not self.value_type.is_copyable_from(new_value_type):
 #                 raise FatalError()
 
-        unbind_key(target_manager.get_obj(), key)
+        unbind_key(target_manager, key)
 
         target_manager.get_obj()._set(key, new_value)
 
-        bind_key(target_manager.get_obj(), key)
+        bind_key(target_manager, key)
 
     def raise_micro_op_invocation_conflicts(self, target_manager, key, new_value, allow_failure):
         target_type = target_manager.get_effective_composite_type()
@@ -640,11 +640,11 @@ class ObjectSetterType(ObjectMicroOpType):
 #             if not self.value_type.is_copyable_from(new_value_type):
 #                 raise FatalError()
 
-        unbind_key(target_manager.get_obj(), self.key)
+        unbind_key(target_manager, self.key)
 
         target_manager.get_obj()._set(self.key, new_value)
 
-        bind_key(target_manager.get_obj(), self.key)
+        bind_key(target_manager, self.key)
 
     def raise_micro_op_invocation_conflicts(self, target_manager, new_value, allow_failure):
         target_type = target_manager.get_effective_composite_type()
@@ -776,7 +776,7 @@ class ObjectWildcardDeletterType(ObjectMicroOpType):
         if is_debug() or self.key_error:
             self.raise_micro_op_invocation_conflicts(target_manager, key)
 
-        unbind_key(target_manager.get_obj(), key)
+        unbind_key(target_manager, key)
 
         target_manager.get_obj()._delete(key)
 
@@ -866,7 +866,7 @@ class ObjectDeletterType(ObjectMicroOpType):
         if self.key_error:
             self.raise_micro_op_invocation_conflicts(target_manager)
 
-        unbind_key(target_manager.get_obj(), self.key)
+        unbind_key(target_manager, self.key)
 
         target_manager.get_obj()._delete(self.key)
 

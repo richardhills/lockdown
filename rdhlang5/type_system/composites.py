@@ -404,11 +404,11 @@ class CompositeObjectManager(object):
 
     def add_composite_type(self, new_type):
         # TODO: remove
-        add_composite_type(self.get_obj(), new_type)
+        add_composite_type(self, new_type)
 
     def remove_composite_type(self, remove_type):
         # TODO: remove
-        remove_composite_type(self.get_obj(), remove_type)
+        remove_composite_type(self, remove_type)
 
 #     def check_for_runtime_data_conflicts(self, type):
 #         if isinstance(type, AnyType):
@@ -929,9 +929,9 @@ def prepare_composite_lhs_type(composite_type, guide_type, results_cache=None):
 # 
 #     return result_composite_type
 
-def add_composite_type(target, new_type, key_filter=None, multiplier=1):
+def add_composite_type(target_manager, new_type, key_filter=None, multiplier=1):
     types_to_bind = {}
-    succeeded = build_binding_map_for_type(None, new_type, target, key_filter, MISSING, {}, types_to_bind)
+    succeeded = build_binding_map_for_type(None, new_type, target_manager.get_obj(), target_manager, key_filter, MISSING, {}, types_to_bind)
     if len(types_to_bind) > 100:
         pass
     if not succeeded:
@@ -941,9 +941,9 @@ def add_composite_type(target, new_type, key_filter=None, multiplier=1):
         get_manager(target).attach_type(type, multiplier=multiplier)
 
 
-def remove_composite_type(target, remove_type, key_filter=None, multiplier=1):
+def remove_composite_type(target_manager, remove_type, key_filter=None, multiplier=1):
     types_to_bind = {}
-    succeeded = build_binding_map_for_type(None, remove_type, target, key_filter, MISSING, {}, types_to_bind)
+    succeeded = build_binding_map_for_type(None, remove_type, target_manager.get_obj(), target_manager, key_filter, MISSING, {}, types_to_bind)
     if len(types_to_bind) > 100:
         pass
     if not succeeded:
@@ -953,27 +953,25 @@ def remove_composite_type(target, remove_type, key_filter=None, multiplier=1):
         get_manager(target).detach_type(type, multiplier=multiplier)
 
 def can_add_composite_type_with_filter(target, new_type, key_filter, substitute_value):
-    return build_binding_map_for_type(None, new_type, target, key_filter, substitute_value, {}, {})
+    return build_binding_map_for_type(None, new_type, target, get_manager(target), key_filter, substitute_value, {}, {})
 
 def is_type_bindable_to_value(value, type):
-    return build_binding_map_for_type(None, type, value, None, MISSING, {}, {})
+    return build_binding_map_for_type(None, type, value, get_manager(value), None, MISSING, {}, {})
 
-def bind_key(target, key_filter):
-    manager = get_manager(target)
+def bind_key(manager, key_filter):
     for attached_type in manager.attached_types.values():
         add_composite_type(
-            target,
+            manager,
             attached_type,
             key_filter=key_filter,
             multiplier=manager.attached_type_counts[id(attached_type)]
         )
 
 
-def unbind_key(target, key_filter):
-    manager = get_manager(target)
+def unbind_key(manager, key_filter):
     for attached_type in manager.attached_types.values():
         remove_composite_type(
-            target,
+            manager,
             attached_type,
             key_filter=key_filter,
             multiplier=manager.attached_type_counts[id(attached_type)]
@@ -1055,7 +1053,7 @@ def unbind_key(target, key_filter):
 #     return True
 
 
-def build_binding_map_for_type(source_micro_op, new_type, target, key_filter, substitute_value, results, types_to_bind):
+def build_binding_map_for_type(source_micro_op, new_type, target, target_manager, key_filter, substitute_value, results, types_to_bind):
     result_key = (id(source_micro_op), id(new_type), id(target))
 
     if result_key in results:
@@ -1068,10 +1066,9 @@ def build_binding_map_for_type(source_micro_op, new_type, target, key_filter, su
     extra_types_to_bind = {}
 
     target_is_composite = isinstance(target, Composite)
-    manager = get_manager(target)
     target_effective_type = None
-    if manager:
-        target_effective_type = manager.get_effective_composite_type()
+    if target_manager:
+        target_effective_type = target_manager.get_effective_composite_type()
 
 #     if isinstance(new_type, CompositeType) and manager:
 #         output = "{} => {}".format(new_type.name, manager.debug_reason)
@@ -1102,7 +1099,7 @@ def build_binding_map_for_type(source_micro_op, new_type, target, key_filter, su
 
                 for next_target in next_targets:
                     if not build_binding_map_for_type(
-                        micro_op, next_new_type, next_target, None, MISSING, results, extra_types_to_bind
+                        micro_op, next_new_type, next_target, get_manager(next_target), None, MISSING, results, extra_types_to_bind
                     ):
                         micro_ops_checks_worked = False
                         break

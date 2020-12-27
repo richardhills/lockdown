@@ -589,14 +589,13 @@ class TestParserMisc(TestCase):
 
 class TestSpeed(TestCase):
     def test_loops(self):
-        #return miss_test() # because it's far too slow atm
         start = time()
         code = parse("""
             function() {
                 int i = 0, j = 0;
-                while(i < 40) {
+                while(i < 20) {
                     j = 0;
-                    while(j < 40) {
+                    while(j < 20) {
                         int foo = i * j;
                         int bar = i * j;
                         int baz = i * j;
@@ -608,9 +607,9 @@ class TestSpeed(TestCase):
             }
         """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True, measure=True)
-        self.assertEquals(result.value, 100 * 100)
+        self.assertEquals(result.value, 20 * 20)
         end = time()
-        self.assertLess(end - start, 25)
+        self.assertLess(end - start, 10)
 
     def test_loop_faster(self):
         return miss_test() # Because the to_py stuff is completely broken atm

@@ -504,11 +504,11 @@ class DictWildcardSetterType(DictMicroOpType):
         if not self.value_type.is_copyable_from(new_value_type):
             raise FatalError()
 
-        unbind_key(target_manager.get_obj(), key)
+        unbind_key(target_manager, key)
 
         target_manager.get_obj()._get(key, new_value)
 
-        bind_key(target_manager.get_obj(), key)
+        bind_key(target_manager, key)
 
     def raise_micro_op_invocation_conflicts(self, target_manager, key, new_value):
         target_type = target_manager.get_effective_composite_type()
@@ -630,11 +630,11 @@ class DictSetterType(DictMicroOpType):
         if not self.value_type.is_copyable_from(new_value_type):
             raise FatalError()
 
-        unbind_key(target_manager.get_obj(), key)
+        unbind_key(target_manager, self.key)
 
         target_manager.get_obj()._set(self.key, new_value)
 
-        bind_key(target_manager.get_obj(), key)
+        bind_key(target_manager, self.key)
 
     def raise_micro_op_invocation_conflicts(self, target_manager, new_value):
         target_type = target_manager.get_effective_composite_type()

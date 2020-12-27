@@ -576,11 +576,11 @@ class ListWildcardSetterType(ListMicroOpType):
             if self.key_error:
                 raise InvalidAssignmentKey()
 
-        unbind_key(target_manager.get_obj(), key)
+        unbind_key(target_manager, key)
 
         target_manager.get_obj()._set(key, new_value)
 
-        bind_key(target_manager.get_obj(), key)
+        bind_key(target_manager, key)
 
     def raise_micro_op_invocation_conflicts(self, target_manager, key, new_value, allow_failure):
         target_type = target_manager.get_effective_composite_type()
@@ -736,11 +736,11 @@ class ListSetterType(ListMicroOpType):
         if self.key < 0 or self.key > len(target_manager.get_obj()):
             raise_if_safe(InvalidAssignmentKey, self.key_error)
 
-        unbind_key(target_manager.get_obj(), self.key)
+        unbind_key(target_manager, self.key)
 
         target_manager.get_obj()._set(self.key, new_value)
 
-        bind_key(target_manager.get_obj(), self.key)
+        bind_key(target_manager, self.key)
 
     def raise_micro_op_invocation_conflicts(self, target_manager, new_value, allow_failure):
         target_type = target_manager.get_effective_composite_type()
@@ -885,12 +885,12 @@ class ListWildcardDeletterType(ListMicroOpType):
             self.raise_micro_op_invocation_conflicts(target_manager, key, allow_failure)
 
         for after_key in range(key, len(target_manager.get_obj())):
-            unbind_key(target_manager.get_obj(), after_key)
+            unbind_key(target_manager, after_key)
 
         target_manager.get_obj().__delitem__(key, raw=True)
 
         for after_key in range(key, len(target_manager.get_obj())):
-            bind_key(target_manager.get_obj(), after_key)
+            bind_key(target_manager, after_key)
 
     def raise_micro_op_invocation_conflicts(self, target_manager, key, allow_failure):
         target_type = target_manager.get_effective_composite_type()
@@ -995,12 +995,12 @@ class ListDeletterType(ListMicroOpType):
             self.raise_micro_op_invocation_conflicts(target_manager, allow_failure)
 
         for after_key in range(self.key, len(target_manager.get_obj())):
-            unbind_key(target_manager.get_obj(), after_key)
+            unbind_key(target_manager, after_key)
 
         target_manager.get_obj().__delitem__(self.key, raw=True)
 
         for after_key in range(self.key, len(target_manager.get_obj())):
-            bind_key(target_manager.get_obj(), after_key)
+            bind_key(target_manager, after_key)
 
     def raise_micro_op_invocation_conflicts(self, target_manager, allow_failure):
         target_type = target_manager.get_effective_composite_type()
@@ -1109,12 +1109,12 @@ class ListWildcardInsertType(ListMicroOpType):
 #             raise FatalError()
  
         for after_key in range(key, len(target_manager.get_obj())):
-            unbind_key(target_manager.get_obj(), after_key)
+            unbind_key(target_manager, after_key)
 
         target_manager.get_obj()._insert(key, new_value)
  
         for after_key in range(key, len(target_manager.get_obj())):
-            bind_key(target_manager.get_obj(), after_key)
+            bind_key(target_manager, after_key)
 
     def raise_micro_op_invocation_conflicts(self, target_manager, key, new_value, allow_failure):
         target_type = target_manager.get_effective_composite_type()
@@ -1268,12 +1268,12 @@ class ListInsertType(ListMicroOpType):
 #             raise FatalError()
  
         for after_key in range(self.key, len(target_manager.get_obj())):
-            unbind_key(target_manager.get_obj(), after_key)
+            unbind_key(target_manager, after_key)
 
         target_manager.get_obj()._insert(self.key, new_value)
 
         for after_key in range(self.key, len(target_manager.get_obj())):
-            bind_key(target_manager.get_obj(), after_key)
+            bind_key(target_manager, after_key)
 
     def raise_micro_op_invocation_conflicts(self, target_manager, new_value, allow_failure):
         target_type = target_manager.get_effective_composite_type()
