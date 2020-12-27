@@ -34,6 +34,9 @@ class BootstrapException(Exception):
 def get_default_global_context():
     return RDHObject({
         "static": RDHObject({
+            "any": RDHObject({
+                "type": "Any"
+            }, debug_reason="default-global-context"),
             "int": RDHObject({
                 "type": "Integer"
             }, debug_reason="default-global-context"),

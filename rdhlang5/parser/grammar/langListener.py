@@ -481,6 +481,15 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#dynamicInsertion.
+    def enterDynamicInsertion(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#dynamicInsertion.
+    def exitDynamicInsertion(self, ctx):
+        pass
+
+
     # Enter a parse tree produced by langParser#toFunctionExpression.
     def enterToFunctionExpression(self, ctx):
         pass

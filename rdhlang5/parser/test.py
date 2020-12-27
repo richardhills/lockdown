@@ -276,11 +276,10 @@ class TestBasicFunction(TestCase):
         self.assertEquals(result.value, 9)
 
     def test_insert_into_list(self):
-        return miss_test() # because on-object functions like .insert don't work
         code = parse("""
             function() {
                 List<int> foo = [ 1, 2, 3 ];
-                foo.insert(0, 4);
+                foo[0] << 4;
                 return foo[0];
             }
         """)
@@ -289,11 +288,10 @@ class TestBasicFunction(TestCase):
         self.assertEquals(result.value, 4)
 
     def test_insert_object_into_list(self):
-        return miss_test() # because on-object functions like .insert don't work
         code = parse("""
             function() {
                 List<Object { bar: int }> foo = [ { bar: 2 }, { bar: 3 } ];
-                foo.insert(0, { bar: 6 });
+                foo[0] << { bar: 6 };
                 return foo[0].bar;
             }
         """)
@@ -576,14 +574,12 @@ class TestLoops(TestCase):
         result = bootstrap_function(code, check_safe_exit=True)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 1 + 2 + 3 + 4)
-        
 
-class TestMisc(TestCase):
+class TestParserMisc(TestCase):
     def test_invalid_list_assignment(self):
         code = parse("""
             function() {
                 List<int> foo = [ { bar: 2 }, { bar: 3 } ];
-                foo.insert([ 0, { bar: 6 } ]);
                 return foo[0].bar;
             }
         """)
@@ -593,7 +589,7 @@ class TestMisc(TestCase):
 
 class TestSpeed(TestCase):
     def test_loops(self):
-        return miss_test()
+        return miss_test() # because it's far too slow atm
         start = time()
         code = parse("""
             function() {

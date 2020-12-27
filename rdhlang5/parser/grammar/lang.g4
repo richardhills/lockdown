@@ -142,6 +142,7 @@ expression
    | SYMBOL '=' expression  # immediateAssignment
    | expression '.' SYMBOL '=' expression  # staticAssignment
    | expression '[' expression ']' '=' expression # dynamicAssignment
+   | expression '[' expression ']' '<<' expression # dynamicInsertion
    | expression '?' expression ':' expression #ternary
    | 'return' expression    # returnStatement
    | 'continue' expression  # continueStatement

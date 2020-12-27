@@ -16,7 +16,7 @@ from rdhlang5.executor.raw_code_factories import function_lit, nop, comma_op, \
     loop_op, condition_op, binary_integer_op, equality_op, dereference, \
     local_function, reset_op, inferred_type, prepare_function_lit, transform, \
     continue_op, check_is_opcode, is_op, function_type, dict_template_op, \
-    composite_type, static_op, map_op
+    composite_type, static_op, map_op, insert_op
 from rdhlang5.parser.grammar.langLexer import langLexer
 from rdhlang5.parser.grammar.langParser import langParser
 from rdhlang5.parser.grammar.langVisitor import langVisitor
@@ -422,6 +422,15 @@ class RDHLang5Visitor(langVisitor):
         reference = self.visit(reference)
         rvalue = self.visit(rvalue)
         return assignment_op(
+            of, reference, rvalue
+        )
+
+    def visitDynamicInsertion(self, ctx):
+        of, reference, rvalue = ctx.expression()
+        of = self.visit(of)
+        reference = self.visit(reference)
+        rvalue = self.visit(rvalue)
+        return insert_op(
             of, reference, rvalue
         )
 

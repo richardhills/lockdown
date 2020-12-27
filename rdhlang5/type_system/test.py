@@ -844,7 +844,7 @@ class TestListObjects(TestCase):
             get_manager(foo).add_composite_type(RDHListType([ IntegerType(), IntegerType(), IntegerType() ], None))
 
 
-class TestMisc(TestCase):
+class TestTypeSystemMisc(TestCase):
     # Tests for random things that were broken
     def test_misc1(self):
         # Came up testing rdhlang5 local variable binding

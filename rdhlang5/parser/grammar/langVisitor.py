@@ -270,6 +270,11 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#dynamicInsertion.
+    def visitDynamicInsertion(self, ctx):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#toFunctionExpression.
     def visitToFunctionExpression(self, ctx):
         return self.visitChildren(ctx)
