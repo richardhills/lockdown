@@ -716,7 +716,6 @@ class TestEuler(TestCase):
         self.assertEquals(result.value, 6857)
 
     def test_4(self):
-        return miss_test()
         code = parse("""
             function() {
                 int bestResult = 0;

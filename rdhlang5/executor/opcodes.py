@@ -18,7 +18,8 @@ from rdhlang5.executor.flow_control import BreakTypesFactory, BreakException
 from rdhlang5.executor.function_type import OpenFunctionType, ClosedFunctionType
 from rdhlang5.executor.type_factories import enrich_type
 
-from rdhlang5.type_system.composites import CompositeType, temporary_bind
+from rdhlang5.type_system.composites import CompositeType, temporary_bind,\
+    does_value_fit_through_type, is_type_bindable_to_value
 from rdhlang5.type_system.core_types import AnyType, Type, merge_types, Const, \
     UnitType, NoValueType, AllowedValuesNotAvailable, unwrap_types, IntegerType, \
     BooleanType, remove_type
@@ -242,12 +243,6 @@ class ObjectTemplateOp(Opcode):
                 if len(allowed_keys) == 1:
                     key = allowed_keys[0]
             except AllowedValuesNotAvailable:
-                pass
-
-            if key is None:
-                continue6
-
-            if key == "bar":
                 pass
 
             if value_type is MISSING:
@@ -709,7 +704,7 @@ class AssignmentOp(Opcode):
                 if not micro_op_type:
                     return frame.exception(self.INVALID_LVALUE())
 
-                if (is_debug() or self.invalid_rvalue_error) and not micro_op_type.value_type.is_copyable_from(get_type_of_value(rvalue)):
+                if (is_debug() or self.invalid_rvalue_error) and not is_type_bindable_to_value(rvalue, micro_op_type.value_type):
                     return frame.exception(self.INVALID_RVALUE())
 
                 if direct:

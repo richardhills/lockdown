@@ -692,6 +692,9 @@ def prepare_composite_lhs_type(composite_type, guide_type, results_cache=None):
         name="LHSPrepared<{}>".format(composite_type.name)
     )
 
+    if ("get", "best_result") in composite_type.micro_op_types:
+        pass
+
     result._prepared_lhs_type = True
 
     results_cache[cache_key] = result
@@ -958,6 +961,9 @@ def can_add_composite_type_with_filter(target, new_type, key_filter, substitute_
 def is_type_bindable_to_value(value, type):
     return build_binding_map_for_type(None, type, value, get_manager(value), None, MISSING, {}, {})
 
+def does_value_fit_through_type(value, type):
+    return build_binding_map_for_type(None, type, value, get_manager(value), None, MISSING, {}, None, build_binding_map=False)
+
 def bind_key(manager, key_filter):
     for attached_type in manager.attached_types.values():
         add_composite_type(
@@ -1053,15 +1059,15 @@ def unbind_key(manager, key_filter):
 #     return True
 
 
-def build_binding_map_for_type(source_micro_op, new_type, target, target_manager, key_filter, substitute_value, results, types_to_bind):
+def build_binding_map_for_type(source_micro_op, new_type, target, target_manager, key_filter, substitute_value, cache, types_to_bind, build_binding_map=True):
     result_key = (id(source_micro_op), id(new_type), id(target))
 
-    if result_key in results:
-        return results[result_key]
+    if result_key in cache:
+        return cache[result_key]
 
 #    print "{}:{}:{}".format(id(source_micro_op), id(new_type), id(target))
 
-    results[result_key] = True
+    cache[result_key] = True
 
     extra_types_to_bind = {}
 
@@ -1081,7 +1087,7 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
     atleast_one_sub_type_worked = False
     for sub_type in unwrap_types(new_type):
         if isinstance(sub_type, CompositeType) and target_is_composite:
-            if not sub_type.is_self_consistent():
+            if build_binding_map and not sub_type.is_self_consistent():
                 raise CompositeTypeIsInconsistent()
 
             micro_ops_checks_worked = True
@@ -1099,13 +1105,13 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
 
                 for next_target in next_targets:
                     if not build_binding_map_for_type(
-                        micro_op, next_new_type, next_target, get_manager(next_target), None, MISSING, results, extra_types_to_bind
+                        micro_op, next_new_type, next_target, get_manager(next_target), None, MISSING, cache, extra_types_to_bind, build_binding_map=build_binding_map
                     ):
                         micro_ops_checks_worked = False
                         break
 
             if micro_ops_checks_worked:
-                if key_filter is None:
+                if key_filter is None and build_binding_map:
                     extra_types_to_bind[result_key] = (source_micro_op, sub_type, target)
                 atleast_one_sub_type_worked = True
 
@@ -1116,10 +1122,10 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
             if sub_type.is_copyable_from(get_type_of_value(target)):
                 atleast_one_sub_type_worked = True
 
-    if atleast_one_sub_type_worked:
+    if atleast_one_sub_type_worked and build_binding_map:
         types_to_bind.update(extra_types_to_bind)
     if not atleast_one_sub_type_worked:
-        results[result_key] = False
+        cache[result_key] = False
 
     return atleast_one_sub_type_worked
 

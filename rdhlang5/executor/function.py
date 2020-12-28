@@ -23,7 +23,8 @@ from rdhlang5.executor.raw_code_factories import dynamic_dereference_op, \
     static_op, match_op, prepared_function, inferred_type
 from rdhlang5.executor.type_factories import enrich_type
 from rdhlang5.type_system.composites import prepare_lhs_type, \
-    check_dangling_inferred_types, CompositeType, InferredType
+    check_dangling_inferred_types, CompositeType, InferredType, \
+    is_type_bindable_to_value
 from rdhlang5.type_system.core_types import Type, NoValueType, IntegerType, \
     AnyType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
@@ -422,7 +423,7 @@ class OpenFunction(object):
         return OpenFunctionType(self.argument_type, self.outer_type, self.break_types)
 
     def close(self, outer_context):
-        if is_debug() and not self.outer_type.is_copyable_from(get_type_of_value(outer_context)):
+        if is_debug() and not is_type_bindable_to_value(outer_context, self.outer_type):
             raise FatalError()
 
         return ClosedFunction(self, outer_context)
@@ -592,7 +593,7 @@ class ClosedFunction(RDHFunction):
 
     def invoke(self, argument, frame_manager):
         logger.debug("ClosedFunction")
-        if is_debug() and not self.open_function.argument_type.is_copyable_from(get_type_of_value(argument)):
+        if is_debug() and not is_type_bindable_to_value(argument, self.open_function.argument_type):
             raise FatalError()
         logger.debug("ClosedFunction:argument_check")
 
@@ -621,8 +622,7 @@ class ClosedFunction(RDHFunction):
                 frame.step("remove_local_initialization_context_type", lambda: get_manager(new_context).remove_composite_type(self.open_function.local_initialization_context_type))
 
             logger.debug("ClosedFunction:local_check")
-            if is_debug() and not self.open_function.local_type.is_copyable_from(get_type_of_value(local)):
-                self.open_function.local_type.is_copyable_from(get_type_of_value(local))
+            if is_debug() and not is_type_bindable_to_value(local, self.open_function.local_type):
                 raise FatalError()
 
             logger.debug("ClosedFunction:code_context")
