@@ -97,6 +97,7 @@ def get_type_of_value(value):
     if manager:
         # TODO: let's ditch this. We're getting the type of a composite value to check
         # if it's copyable, but we really should be checking whether it's bindable
+#        raise FatalError()
         return manager.get_effective_composite_type()
 
     raise InvalidData(type(value), value)

@@ -2,7 +2,8 @@ from collections import OrderedDict
 
 from rdhlang5.executor.ast_utils import compile_statement, compile_expression
 from rdhlang5.type_system.composites import InferredType, CompositeType, \
-    Composite, unbind_key, bind_key, can_add_composite_type_with_filter
+    Composite, unbind_key, bind_key, can_add_composite_type_with_filter,\
+    does_value_fit_through_type
 from rdhlang5.type_system.core_types import merge_types, Type, Const, OneOfType, \
     AnyType, StringType, NoValueType
 from rdhlang5.type_system.exceptions import FatalError, raise_if_safe, \
@@ -83,8 +84,7 @@ class ObjectWildcardGetterType(ObjectMicroOpType):
             value = default_factory(target_manager, key)
 
         if is_debug() or self.type_error:
-            type_of_value = get_type_of_value(value)
-            if not self.value_type.is_copyable_from(type_of_value):
+            if not does_value_fit_through_type(value, self.value_type):
                 raise raise_if_safe(InvalidDereferenceType, self.type_error)
 
         return value

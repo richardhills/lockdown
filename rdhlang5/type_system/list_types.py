@@ -4,7 +4,8 @@ from _collections import defaultdict
 from collections import OrderedDict
 
 from rdhlang5.type_system.composites import InferredType, CompositeType, \
-    Composite, unbind_key, bind_key, can_add_composite_type_with_filter
+    Composite, unbind_key, bind_key, can_add_composite_type_with_filter,\
+    does_value_fit_through_type
 from rdhlang5.type_system.core_types import merge_types, Const, NoValueType, \
     IntegerType, Type
 from rdhlang5.type_system.exceptions import FatalError, raise_if_safe, \
@@ -90,8 +91,7 @@ class ListWildcardGetterType(ListMicroOpType):
  
         if value is not SPARSE_ELEMENT:
             if is_debug() or self.type_error:
-                type_of_value = get_type_of_value(value)
-                if not self.value_type.is_copyable_from(type_of_value):
+                if not does_value_fit_through_type(value, self.value_type):
                     raise raise_if_safe(InvalidDereferenceType, self.type_error)
  
         return value
