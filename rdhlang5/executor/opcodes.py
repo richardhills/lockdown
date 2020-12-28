@@ -17,8 +17,7 @@ from rdhlang5.executor.exceptions import PreparationException
 from rdhlang5.executor.flow_control import BreakTypesFactory, BreakException
 from rdhlang5.executor.function_type import OpenFunctionType, ClosedFunctionType
 from rdhlang5.executor.type_factories import enrich_type
-
-from rdhlang5.type_system.composites import CompositeType, temporary_bind,\
+from rdhlang5.type_system.composites import CompositeType, temporary_bind, \
     does_value_fit_through_type, is_type_bindable_to_value
 from rdhlang5.type_system.core_types import AnyType, Type, merge_types, Const, \
     UnitType, NoValueType, AllowedValuesNotAvailable, unwrap_types, IntegerType, \
@@ -176,13 +175,12 @@ class LiteralOp(Opcode):
     def __init__(self, data, visitor):
         super(LiteralOp, self).__init__(data, visitor)
         self.value = data.value
-        self.type = get_type_of_value(self.value)
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         if self.value == 42:
             pass
         break_types = BreakTypesFactory(self)
-        break_types.add("value", self.type)
+        break_types.add("value", get_type_of_value(self.value))
         return break_types.build()
 
     def jump(self, context, frame_manager, immediate_context=None):
@@ -1546,7 +1544,7 @@ class CloseOp(Opcode):
             if not isinstance(open_function, OpenFunction):
                 return frame.exception(self.INVALID_FUNCTION())
 
-            if (is_debug() or self.outer_context_type_error) and not open_function.outer_type.is_copyable_from(get_type_of_value(outer_context)):
+            if (is_debug() or self.outer_context_type_error) and not does_value_fit_through_type(outer_context, open_function.outer_type):
                 return frame.exception(self.INVALID_OUTER_CONTEXT())
 
             return frame.value(open_function.close(outer_context))
@@ -1740,11 +1738,10 @@ class MatchOp(Opcode):
     def jump(self, context, frame_manager, immediate_context=None):
         with frame_manager.get_next_frame(self) as frame:
             value = frame.step("value", lambda: evaluate(self.value, context, frame_manager))
-            value_type = get_type_of_value(value)
 
             for index, matcher in enumerate(self.matchers):
                 matcher_function = frame.step(index, lambda: evaluate(matcher, context, frame_manager))
-                if matcher_function.get_type().argument_type.is_copyable_from(value_type):
+                if is_type_bindable_to_value(value, matcher_function.get_type().argument_type):
                     return matcher_function.invoke(value, frame_manager)
             else:
                 return frame.exception(self.NO_MATCH())

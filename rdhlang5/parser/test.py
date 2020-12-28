@@ -609,7 +609,7 @@ class TestSpeed(TestCase):
         result = bootstrap_function(code, check_safe_exit=True, measure=True)
         self.assertEquals(result.value, 20 * 20)
         end = time()
-        self.assertLess(end - start, 10)
+        self.assertLess(end - start, 15)
 
     def test_loop_faster(self):
         return miss_test() # Because the to_py stuff is completely broken atm

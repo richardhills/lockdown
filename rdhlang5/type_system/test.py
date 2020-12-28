@@ -455,7 +455,8 @@ class TestRDHObjectType(TestCase):
         get_manager(foo).add_composite_type(
             RDHObjectType({ "bar": StringType() })
         )
-        object_type = get_type_of_value(foo)
+
+        object_type = get_manager(foo).get_effective_composite_type()
 
         RDHObjectType({
             "foo": IntegerType(),

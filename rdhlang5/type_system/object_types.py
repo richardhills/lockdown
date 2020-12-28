@@ -304,9 +304,7 @@ class ObjectGetterType(ObjectMicroOpType):
             value = default_factory(target_manager, self.key)
 
         if is_debug() or self.type_error:
-            type_of_value = get_type_of_value(value)
-
-            if not self.value_type.is_copyable_from(type_of_value):
+            if not does_value_fit_through_type(value, self.value_type):
                 raise raise_if_safe(InvalidDereferenceType, self.type_error)
 
         return value
