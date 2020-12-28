@@ -150,9 +150,6 @@ class Opcode(object):
             context_name, dependency_builder, return_value_jump=self.return_value_jump
         )
 
-    def to_code(self):
-        return str(type(self))
-
 
 class Nop(Opcode):
     def get_break_types(self, context, frame_manager, immediate_context=None):
@@ -166,10 +163,6 @@ class Nop(Opcode):
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         return compile_expression("NoValue", context_name, dependency_builder)
-
-    def to_code(self):
-        return "nop"
-
 
 class LiteralOp(Opcode):
     def __init__(self, data, visitor):
@@ -196,9 +189,6 @@ class LiteralOp(Opcode):
 
     def __str__(self):
         return "LiteralOp<{}>".format(self.value)
-
-    def to_code(self):
-        return self.value
 
 
 class ObjectTemplateOp(Opcode):
@@ -431,9 +421,6 @@ class ContextOp(Opcode):
     def __str__(self):
         return "Context"
 
-    def to_code(self):
-        return "Context"
-
 
 class DereferenceOp(Opcode):
     INVALID_DEREFERENCE = TypeErrorFactory("DereferenceOp: invalid_dereference {reference}")
@@ -581,9 +568,6 @@ class DereferenceOp(Opcode):
 
     def __str__(self):
         return "{}.{}".format(self.of, self.reference)
-
-    def to_code(self):
-        return "{}.{}".format(self.of.to_code(), self.reference.to_code())
 
 
 class DynamicDereferenceOp(Opcode):
@@ -752,17 +736,6 @@ class AssignmentOp(Opcode):
             self.of.to_ast(context_name, dependency_builder),
             *args
         )
-
-#         return compile_statement("""
-# {of}.__dict__[{reference}] = {rvalue}
-#             """, context_name, dependency_builder,
-#             of=self.of.to_ast(context_name, dependency_builder),
-#             reference=self.reference.to_ast(context_name, dependency_builder),
-#             rvalue=self.rvalue.to_ast(context_name, dependency_builder)
-#         )
-
-    def to_code(self):
-        return "{}.{} = {}".format(self.of.to_code(), self.reference.to_code(), self.rvalue.to_code())
 
 
 class InsertOp(Opcode):
@@ -1013,9 +986,6 @@ def BinaryOp(name, symbol, func, argument_type, result_type, number_op=None, cmp
 
             return Opcode.to_ast(self, context_name, dependency_builder)
 
-        def to_code(self):
-            return "{} {} {}".format(self.lvalue.to_code(), symbol, self.rvalue.to_code())
-
     return _BinaryOp
 
 
@@ -1115,10 +1085,6 @@ def TransformOpTryCatcher{opcode_id}({context_name}, _frame_manager):
                 )
         else:
             return super(TransformOp, self).to_ast(context_name)
-
-    def to_code(self):
-        return "transform({} -> {}\n {}\n)".format(self.input, self.output, self.expression.to_code())
-
 
 class ShiftOp(Opcode):
     def __init__(self, data, visitor):
@@ -1330,10 +1296,6 @@ class CommaOp(Opcode):
                 context_name, dependency_builder, comma_function=comma_function
             )
 
-    def to_code(self):
-        return ";\n".join([ o.to_code() for o in self.opcodes ])
-
-
 class LoopOp(Opcode):
     def __init__(self, data, visitor):
         self.code = enrich_opcode(data.code, visitor)
@@ -1387,9 +1349,6 @@ while(True):
             dependency_builder,
             expression=self.code.to_ast(context_name, dependency_builder, will_ignore_return_value=True)
         )
-
-    def to_code(self):
-        return "Loop {{ {} }}".format(self.code.to_code())
 
 
 class ConditionalOp(Opcode):
@@ -1557,9 +1516,6 @@ class CloseOp(Opcode):
             outer_context=self.outer_context.to_ast(context_name, dependency_builder)
         )
 
-    def to_code(self):
-        return "Closed_{}".format(self.function.to_code())
-
 
 class StaticOp(Opcode):
     def __init__(self, data, visitor):
@@ -1598,11 +1554,6 @@ class StaticOp(Opcode):
             )
         else:
             return super(StaticOp, self).to_ast(context_name, dependency_builder)
-
-    def to_code(self):
-        if not self.valObjectGetFunctionTypeue:
-            raise FatalError()
-        return self.value.to_code()
 
 
 class InvokeOp(Opcode):
@@ -1691,9 +1642,6 @@ class InvokeOp(Opcode):
             function=self.function.to_ast(context_name, dependency_builder),
             argument=self.argument.to_ast(context_name, dependency_builder)
         )
-
-    def to_code(self):
-        return "invoke({},\n{}\n)".format(self.argument.to_code(), self.function.to_code())
 
 
 class MatchOp(Opcode):

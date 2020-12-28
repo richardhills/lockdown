@@ -612,7 +612,6 @@ class TestSpeed(TestCase):
         self.assertLess(end - start, 15)
 
     def test_loop_faster(self):
-        return miss_test() # Because the to_py stuff is completely broken atm
         start = time()
         code = parse("""
             function() {

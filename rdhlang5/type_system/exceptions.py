@@ -16,22 +16,6 @@ class CompositeTypeIncompatibleWithTarget(Exception):
 class CompositeTypeIsInconsistent(Exception):
     pass
 
-# class MicroOpCannotBeDerived(Exception):
-#     pass
-# 
-# class MicroOpCannotBeBound(Exception):
-#     pass
-# 
-# class MicroOpTypeConflict(Exception):
-#     pass
-# 
-# class IncorrectObjectTypeForMicroOp(MicroOpTypeConflict):
-#     pass
-# 
-# class MicroOpConflict(Exception):
-#     pass
-# 
-
 class MissingMicroOp(Exception):
     pass
  

@@ -565,13 +565,6 @@ class {open_function_id}(object):
 
         return compile_ast_function_def(combined_ast, open_function_id, dependencies)
 
-    def to_code(self):
-        break_types_code = ";".join(["{}: [{}]".format(mode, ",".join([format_break_type(b) for b in break_types])) for mode, break_types in self.break_types.items()])
-        return "OpenFunction({} => {}\nOuter:{}\nLocal:{}\n{{\n{}\n}}\n)".format(
-            self.argument_type.to_code(), break_types_code, self.outer_type.to_code(), self.local_type.to_code(), self.code.to_code()
-        )
-
-
 class ClosedFunction(RDHFunction):
     def __init__(self, open_function, outer_context):
         self.open_function = open_function
@@ -653,12 +646,6 @@ class ClosedFunction(RDHFunction):
 
             return frame.value(result)
 
-    def to_code(self):
-        break_types_code = ";".join(["{}: [{}]".format(mode, ",".join([format_break_type(b) for b in break_types])) for mode, break_types in self.open_function.break_types.items()])
-        return "ClosedFunction({} => {}\n{{\n{}\n}}\n)".format(
-            self.open_function.argument_type.to_code(), break_types_code, self.open_function.code.to_code()
-        )
-
 
 class WrappedFunction(RDHFunction):
     def __init__(self, wrapped):
@@ -719,11 +706,4 @@ class Continuation(RDHFunction):
         if self.frame_manager.fully_wound():
             self.frame_manager.prepare_restart(self.frames, restart_value)
         return self.callback()
-
-
-def format_break_type(break_type):
-    if "in" in break_type:
-        return "{ out: {}, in: {} }".format(break_type["out"].to_code(), break_type["in"].to_code())
-    else:
-        return break_type["out"].to_code()
 

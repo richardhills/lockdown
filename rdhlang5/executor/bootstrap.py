@@ -212,8 +212,6 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False,
 
         closed_function = open_function.close(context)
 
-#        print closed_function.to_code()
-
         if transpile:
             closed_function = closed_function.transpile()
 

@@ -18,20 +18,11 @@ class Type(object):
     def get_allowed_values(self):
         raise AllowedValuesNotAvailable(self)
 
-#     def replace_inferred_types(self, other, cache=None):
-#         return self
-
-#     def apply_consistency_heuristic(self, other_micro_op_types):
-#         return self
-
     def __str__(self):
         return repr(self)
 
     def short_str(self):
         return str(self)
-
-    def to_code(self):
-        return self.short_str()
 
 class AnyType(Type):
     def is_copyable_from(self, other):
@@ -62,11 +53,6 @@ class UnitType(Type):
         if not isinstance(other, UnitType):
             return False
         return other.value == self.value
-
-#     def apply_consistency_heuristic(self, other_micro_op_types):
-#         if isinstance(self.value, int):
-#             return IntegerType()
-#         return self
 
     def get_allowed_values(self):
         return [ self.value ]
@@ -169,19 +155,6 @@ class OneOfType(Type):
             if not other.is_copyable_from(t):
                 return False
         return True
-        
-
-#     def apply_consistency_heuristic(self, other_micro_ops):
-#         new_types = []
-#         requires_change = False
-#         for type in self.types:
-#             new_type = type.apply_consistency_heuristic(other_micro_ops)
-#             new_types.append(new_type)
-#             requires_change = requires_change or new_type is not type
-#         if requires_change:
-#             return OneOfType(new_types)
-#         else:
-#             return self
 
     def __repr__(self, *args, **kwargs):
         return "OneOfType<{}>".format(", ".join(t.short_str() for t in self.types))
