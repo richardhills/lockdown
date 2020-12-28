@@ -22,21 +22,46 @@ from rdhlang5.executor.opcodes import enrich_opcode, get_context_type, evaluate,
 from rdhlang5.executor.raw_code_factories import dynamic_dereference_op, \
     static_op, match_op, prepared_function, inferred_type
 from rdhlang5.executor.type_factories import enrich_type
-from rdhlang5.type_system.composites import CompositeType
+from rdhlang5.type_system.composites import prepare_lhs_type, \
+    check_dangling_inferred_types, CompositeType, InferredType, \
+    is_type_bindable_to_value
 from rdhlang5.type_system.core_types import Type, NoValueType, IntegerType, \
-    TopType, AnyType
+    AnyType
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     DEFAULT_DICT_TYPE, READONLY_DEFAULT_OBJECT_TYPE, \
     readonly_rich_composite_type
 from rdhlang5.type_system.dict_types import RDHDict
-from rdhlang5.type_system.exceptions import FatalError, InvalidInferredType, \
-    MicroOpTypeConflict, IncorrectObjectTypeForMicroOp
+from rdhlang5.type_system.exceptions import FatalError, InvalidInferredType
 from rdhlang5.type_system.list_types import RDHList
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType
-from rdhlang5.utils import MISSING, is_debug, bind_runtime_contexts, raise_from, \
+from rdhlang5.utils import MISSING, is_debug, runtime_type_information, raise_from, \
     spread_dict
 
+
+def prepare_piece_of_context(declared_type, suggested_type):
+    if suggested_type and not isinstance(suggested_type, Type):
+        raise FatalError()
+
+    final_type = prepare_lhs_type(declared_type, suggested_type)
+
+# To sort out: merge or heiristic first??
+# 
+#     if isinstance(suggested_type, CompositeType):
+#         suggested_type = apply_consistency_heiristic(suggested_type)
+# 
+#     final_type = replace_inferred_types(declared_type, suggested_type)
+# 
+#     if isinstance(final_type, CompositeType):
+#         final_type = apply_consistency_heiristic(final_type)
+
+    if not check_dangling_inferred_types(final_type):
+        raise PreparationException("Invalid inferred types")
+
+    if isinstance(final_type, CompositeType) and not final_type.is_self_consistent():
+        raise FatalError()
+
+    return final_type
 
 def prepare(data, outer_context, frame_manager, immediate_context=None):
     if not isinstance(data, RDHObject):
@@ -71,27 +96,12 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
         suggested_argument_type = immediate_context.get("suggested_argument_type", None)
         suggested_outer_type = immediate_context.get("suggested_outer_type", None)
 
-    if suggested_argument_type is None:
-        suggested_argument_type = NoValueType()
     if suggested_outer_type is None:
         suggested_outer_type = NoValueType()
 
-    if not isinstance(suggested_argument_type, Type):
-        raise FatalError()
-    if not isinstance(suggested_outer_type, Type):
-        raise FatalError()
+    argument_type = prepare_piece_of_context(argument_type, suggested_argument_type)
+    outer_type = prepare_piece_of_context(outer_type, suggested_outer_type)
 
-    try:
-        argument_type = argument_type.replace_inferred_types(suggested_argument_type)
-    except InvalidInferredType:
-        raise PreparationException("Invalid argument inferred types")
-    try:
-        outer_type = outer_type.replace_inferred_types(suggested_outer_type)
-    except InvalidInferredType:
-        raise PreparationException("Invalid outer inferred types")
-
-    argument_type = argument_type.reify_revconst_types()
-    outer_type = outer_type.reify_revconst_types()
     local_type = enrich_type(static.local)
 
     context = RDHObject({
@@ -104,7 +114,6 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
         }, debug_reason="local-prepare-context")
     },
         bind=READONLY_DEFAULT_OBJECT_TYPE,
-        instantiator_has_verified_bind=True,
         debug_reason="local-prepare-context"
     )
 
@@ -132,16 +141,15 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
 
     actual_local_type = flatten_out_types(actual_local_type)
 
-    try:
-        local_type = local_type.replace_inferred_types(actual_local_type)
-    except InvalidInferredType:
-        local_type = local_type.replace_inferred_types(actual_local_type)
-        raise PreparationException("Invalid local inferred type")
 
-    local_type = local_type.reify_revconst_types()
+    if isinstance(actual_local_type, CompositeType):
+        if ("get", "bar") in actual_local_type.micro_op_types:
+            pass
+
+
+    local_type = prepare_piece_of_context(local_type, actual_local_type)
 
     if not local_type.is_copyable_from(actual_local_type):
-        local_type.is_copyable_from(actual_local_type)
         raise PreparationException("Invalid local type: {} != {}".format(local_type, actual_local_type))
 
     actual_break_types_factory.merge(local_other_break_types)
@@ -162,7 +170,6 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
         }, debug_reason="code-prepare-context")
     },
         bind=READONLY_DEFAULT_OBJECT_TYPE,
-        instantiator_has_verified_bind=True,
         debug_reason="code-prepare-context"
     )
 
@@ -195,18 +202,23 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
                 actual_out = actual_break_type["out"]
                 actual_in = actual_break_type.get("in", None)
 
-                declared_out = declared_out.replace_inferred_types(actual_out)
+                final_out = prepare_lhs_type(declared_out, actual_out)
                 if declared_in is not None:
-                    declared_in = declared_in.replace_inferred_types(actual_in)
+                    if isinstance(declared_in, InferredType) and actual_in is None:
+                        final_in = None
+                    else:
+                        final_in = prepare_lhs_type(declared_in, actual_in)
+                else:
+                    final_in = declared_in
 
-                if declared_in is not None and actual_in is None:
-                    continue
+#                 if declared_in is not None and actual_in is None:
+#                     continue
 
-                out_is_compatible = declared_out.is_copyable_from(actual_out)
-                in_is_compatible = declared_in is None or actual_in.is_copyable_from(declared_in)
+                out_is_compatible = final_out.is_copyable_from(actual_out)
+                in_is_compatible = final_in is None or actual_in.is_copyable_from(final_in)
 
                 if out_is_compatible and in_is_compatible:
-                    final_declared_break_types.add(mode, declared_out, declared_in)
+                    final_declared_break_types.add(mode, final_out, final_in)
                     break
             else:
                 raise PreparationException("""Nothing declared for {}, {}.\nFunction declares break types {}.\nBut local_initialization breaks {}, code breaks {}""".format(
@@ -309,11 +321,11 @@ class UnboundDereferenceBinder(object):
                 new_dereference = dereference_op(bound_countext_op, literal_op(reference), True, **debug_info)
                 if is_static:
                     new_dereference = static_op(new_dereference)
-                get_manager(new_dereference).add_composite_type(DEFAULT_OBJECT_TYPE)
+                get_manager(new_dereference).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
                 return new_dereference
             else:
                 new_dereference = dynamic_dereference_op(reference, **debug_info)
-                get_manager(new_dereference).add_composite_type(DEFAULT_OBJECT_TYPE)
+                get_manager(new_dereference).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
                 return new_dereference
 
         if getattr(expression, "opcode", None) == "unbound_assignment":
@@ -322,7 +334,7 @@ class UnboundDereferenceBinder(object):
 
             if bound_countext_op:
                 new_assignment = assignment_op(bound_countext_op, literal_op(reference), expression.rvalue, **debug_info)
-                get_manager(new_assignment).add_composite_type(DEFAULT_OBJECT_TYPE)
+                get_manager(new_assignment).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
                 return new_assignment
             else:
                 raise FatalError()  # TODO, dynamic assignment
@@ -352,7 +364,7 @@ def type_conditional_converter(expression):
             )
         ]
     )
-    get_manager(new_match).add_composite_type(DEFAULT_OBJECT_TYPE)
+    get_manager(new_match).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
     return new_match
 
 def combine(*funcs):
@@ -390,17 +402,20 @@ class OpenFunction(object):
         self.local_initialization_context_type = RDHObjectType({
             "outer": self.outer_type,
             "argument": self.argument_type,
-            "types": readonly_rich_composite_type
+#            "types": readonly_rich_composite_type
         }, wildcard_value_type=AnyType(), name="local-initialization-context-type")
 
         self.execution_context_type = RDHObjectType({
-            "prepare": readonly_rich_composite_type,
+#            "prepare": readonly_rich_composite_type,
             "outer": self.outer_type,
             "argument": self.argument_type,
-            "static": readonly_rich_composite_type,
+#            "static": readonly_rich_composite_type,
             "local": self.local_type,
-            "types": readonly_rich_composite_type
+#            "types": readonly_rich_composite_type
         }, wildcard_value_type=AnyType(), name="code-execution-context-type")
+
+        if not self.execution_context_type.is_self_consistent():
+            raise FatalError()
 
         self.compiled_ast = None
 
@@ -408,7 +423,7 @@ class OpenFunction(object):
         return OpenFunctionType(self.argument_type, self.outer_type, self.break_types)
 
     def close(self, outer_context):
-        if is_debug() and not self.outer_type.is_copyable_from(get_type_of_value(outer_context)):
+        if is_debug() and not is_type_bindable_to_value(outer_context, self.outer_type):
             raise FatalError()
 
         return ClosedFunction(self, outer_context)
@@ -550,13 +565,6 @@ class {open_function_id}(object):
 
         return compile_ast_function_def(combined_ast, open_function_id, dependencies)
 
-    def to_code(self):
-        break_types_code = ";".join(["{}: [{}]".format(mode, ",".join([format_break_type(b) for b in break_types])) for mode, break_types in self.break_types.items()])
-        return "OpenFunction({} => {}\nOuter:{}\nLocal:{}\n{{\n{}\n}}\n)".format(
-            self.argument_type.to_code(), break_types_code, self.outer_type.to_code(), self.local_type.to_code(), self.code.to_code()
-        )
-
-
 class ClosedFunction(RDHFunction):
     def __init__(self, open_function, outer_context):
         self.open_function = open_function
@@ -578,7 +586,7 @@ class ClosedFunction(RDHFunction):
 
     def invoke(self, argument, frame_manager):
         logger.debug("ClosedFunction")
-        if is_debug() and not self.open_function.argument_type.is_copyable_from(get_type_of_value(argument)):
+        if is_debug() and not is_type_bindable_to_value(argument, self.open_function.argument_type):
             raise FatalError()
         logger.debug("ClosedFunction:argument_check")
 
@@ -591,12 +599,11 @@ class ClosedFunction(RDHFunction):
                         "static": self.open_function.static,
                         "types": self.open_function.types_context
                     },
-                        bind=self.open_function.local_initialization_context_type if bind_runtime_contexts() else None,
-                        instantiator_has_verified_bind=True,
+                        bind=self.open_function.local_initialization_context_type if runtime_type_information() else None,
                         debug_reason="local-initialization-context"
                     )
                 )
-            except MicroOpTypeConflict as e:
+            except Exception as e:
                 raise_from(FatalError, e)
 
             get_manager(new_context)._context_type = self.open_function.local_initialization_context_type
@@ -604,12 +611,11 @@ class ClosedFunction(RDHFunction):
             logger.debug("ClosedFunction:local_initializer")
             local = frame.step("local", lambda: evaluate(self.open_function.local_initializer, new_context, frame_manager))
 
-            if bind_runtime_contexts():
+            if runtime_type_information():
                 frame.step("remove_local_initialization_context_type", lambda: get_manager(new_context).remove_composite_type(self.open_function.local_initialization_context_type))
 
             logger.debug("ClosedFunction:local_check")
-            if is_debug() and not self.open_function.local_type.is_copyable_from(get_type_of_value(local)):
-                self.open_function.local_type.is_copyable_from(get_type_of_value(local))
+            if is_debug() and not is_type_bindable_to_value(local, self.open_function.local_type):
                 raise FatalError()
 
             logger.debug("ClosedFunction:code_context")
@@ -622,12 +628,11 @@ class ClosedFunction(RDHFunction):
                         "local": local,
                         "types": self.open_function.types_context
                     },
-                        bind=self.open_function.execution_context_type if bind_runtime_contexts() else None,
-                        instantiator_has_verified_bind=True,
+                        bind=self.open_function.execution_context_type if runtime_type_information() else None,
                         debug_reason="code-execution-context"
                     )
                 )
-            except MicroOpTypeConflict as e:
+            except Exception as e:
                 raise raise_from(FatalError, e)
 
             # In conjunction with get_context_type, for performance
@@ -636,16 +641,10 @@ class ClosedFunction(RDHFunction):
             logger.debug("ClosedFunction:code_execute")
             result = frame.step("code", lambda: evaluate(self.open_function.code, new_context, frame_manager))
 
-            if bind_runtime_contexts():
+            if runtime_type_information():
                 frame.step("remove_code_execution_context_type", lambda: get_manager(new_context).remove_composite_type(self.open_function.execution_context_type))
 
             return frame.value(result)
-
-    def to_code(self):
-        break_types_code = ";".join(["{}: [{}]".format(mode, ",".join([format_break_type(b) for b in break_types])) for mode, break_types in self.open_function.break_types.items()])
-        return "ClosedFunction({} => {}\n{{\n{}\n}}\n)".format(
-            self.open_function.argument_type.to_code(), break_types_code, self.open_function.code.to_code()
-        )
 
 
 class WrappedFunction(RDHFunction):
@@ -682,8 +681,6 @@ class Continuation(RDHFunction):
     __slots__ = [ "frame_manager", "frames", "callback", "restart_type", "break_types" ]
 
     def __init__(self, frame_manager, frames, callback, restart_type, break_types):
-        if isinstance(restart_type, TopType):
-            pass
         if not isinstance(frame_manager, FrameManager):
             raise FatalError()
         self.frame_manager = frame_manager
@@ -709,11 +706,4 @@ class Continuation(RDHFunction):
         if self.frame_manager.fully_wound():
             self.frame_manager.prepare_restart(self.frames, restart_value)
         return self.callback()
-
-
-def format_break_type(break_type):
-    if "in" in break_type:
-        return "{ out: {}, in: {} }".format(break_type["out"].to_code(), break_type["in"].to_code())
-    else:
-        return break_type["out"].to_code()
 

@@ -1,12 +1,13 @@
 from rdhlang5.type_system.composites import CompositeType
-from rdhlang5.type_system.core_types import OneOfType, AnyType
+from rdhlang5.type_system.core_types import OneOfType, AnyType, StringType
 from rdhlang5.type_system.dict_types import RDHDictType, DictWildcardGetterType, \
-    DictWildcardSetterType, DictWildcardDeletterType, is_dict_checker
+    DictWildcardSetterType, DictWildcardDeletterType
 from rdhlang5.type_system.list_types import RDHListType, ListWildcardGetterType, \
     ListWildcardSetterType, ListInsertType, ListWildcardDeletterType, \
-    ListWildcardInsertType, is_list_checker
+    ListWildcardInsertType
 from rdhlang5.type_system.object_types import RDHObjectType, \
-    ObjectWildcardGetterType, ObjectWildcardSetterType, is_object_checker
+    ObjectWildcardGetterType, ObjectWildcardSetterType
+from rdhlang5.utils import runtime_type_information
 
 
 READONLY_DEFAULT_OBJECT_TYPE = RDHObjectType(name="readonly-default-object-type")
@@ -15,7 +16,7 @@ READONLY_DEFAULT_DICT_TYPE = RDHDictType()
 
 readonly_rich_composite_type = OneOfType([ READONLY_DEFAULT_OBJECT_TYPE, READONLY_DEFAULT_LIST_TYPE, READONLY_DEFAULT_DICT_TYPE, AnyType() ])
 
-READONLY_DEFAULT_OBJECT_TYPE.micro_op_types[("get-wildcard", )] = ObjectWildcardGetterType(readonly_rich_composite_type, readonly_rich_composite_type, True, False)
+READONLY_DEFAULT_OBJECT_TYPE.micro_op_types[("get-wildcard", )] = ObjectWildcardGetterType(StringType(), readonly_rich_composite_type, True, False)
 READONLY_DEFAULT_LIST_TYPE.micro_op_types[("get-wildcard", )] = ListWildcardGetterType(readonly_rich_composite_type, True, False)
 READONLY_DEFAULT_DICT_TYPE.micro_op_types[("get-wildcard", )] = DictWildcardGetterType(readonly_rich_composite_type, readonly_rich_composite_type, True, False)
 
@@ -26,20 +27,21 @@ DEFAULT_DICT_TYPE = RDHDictType()
 
 rich_composite_type = OneOfType([ DEFAULT_OBJECT_TYPE, DEFAULT_LIST_TYPE, DEFAULT_DICT_TYPE, AnyType() ])
 
-DEFAULT_OBJECT_TYPE.micro_op_types[("get-wildcard", )] = ObjectWildcardGetterType(readonly_rich_composite_type, rich_composite_type, True, False)
-DEFAULT_OBJECT_TYPE.micro_op_types[("set-wildcard", )] = ObjectWildcardSetterType(readonly_rich_composite_type, rich_composite_type, True, True)
+DEFAULT_OBJECT_TYPE.micro_op_types[("get-wildcard", )] = ObjectWildcardGetterType(StringType(), rich_composite_type, True, False)
+if runtime_type_information():
+    DEFAULT_OBJECT_TYPE.micro_op_types[("set-wildcard", )] = ObjectWildcardSetterType(readonly_rich_composite_type, rich_composite_type, True, True)
 
 DEFAULT_LIST_TYPE.micro_op_types[("get-wildcard", )] = ListWildcardGetterType(rich_composite_type, True, False)
-DEFAULT_LIST_TYPE.micro_op_types[("set-wildcard", )] = ListWildcardSetterType(rich_composite_type, True, True)
-DEFAULT_LIST_TYPE.micro_op_types[("insert", 0 )] = ListInsertType(rich_composite_type, 0, False, False)
+DEFAULT_LIST_TYPE.micro_op_types[("insert", 0 )] = ListInsertType(0, rich_composite_type, False, False)
 DEFAULT_LIST_TYPE.micro_op_types[("delete-wildcard", )] = ListWildcardDeletterType(True)
-DEFAULT_LIST_TYPE.micro_op_types[("insert-wildcard", )] = ListWildcardInsertType(rich_composite_type, True, True)
+if runtime_type_information():
+    DEFAULT_LIST_TYPE.micro_op_types[("set-wildcard", )] = ListWildcardSetterType(rich_composite_type, True, True)
+    DEFAULT_LIST_TYPE.micro_op_types[("insert-wildcard", )] = ListWildcardInsertType(rich_composite_type, True, True)
 
 DEFAULT_DICT_TYPE.micro_op_types[("get-wildcard", )] = DictWildcardGetterType(readonly_rich_composite_type, rich_composite_type, True, False)
-DEFAULT_DICT_TYPE.micro_op_types[("set-wildcard", )] = DictWildcardSetterType(readonly_rich_composite_type, rich_composite_type, True, True)
+if runtime_type_information():
+    DEFAULT_DICT_TYPE.micro_op_types[("set-wildcard", )] = DictWildcardSetterType(readonly_rich_composite_type, rich_composite_type, True, True)
 DEFAULT_DICT_TYPE.micro_op_types[("delete-wildcard", )] = DictWildcardDeletterType(True)
 
-EMPTY_OBJECT_TYPE = CompositeType({}, is_object_checker, name="empty")
-EMPTY_LIST_TYPE = CompositeType({}, is_list_checker, name="empty")
-EMPTY_DICT_TYPE = CompositeType({}, is_dict_checker, name="empty")
+EMPTY_COMPOSITE_TYPE = CompositeType({}, name="empty")
 

@@ -16,11 +16,12 @@ from rdhlang5.executor.raw_code_factories import function_lit, nop, comma_op, \
     loop_op, condition_op, binary_integer_op, equality_op, dereference, \
     local_function, reset_op, inferred_type, prepare_function_lit, transform, \
     continue_op, check_is_opcode, is_op, function_type, dict_template_op, \
-    composite_type, static_op, map_op
+    composite_type, static_op, map_op, insert_op
 from rdhlang5.parser.grammar.langLexer import langLexer
 from rdhlang5.parser.grammar.langParser import langParser
 from rdhlang5.parser.grammar.langVisitor import langVisitor
-from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE
+from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE,\
+    READONLY_DEFAULT_DICT_TYPE, READONLY_DEFAULT_OBJECT_TYPE
 from rdhlang5.type_system.dict_types import RDHDict
 from rdhlang5.type_system.exceptions import FatalError
 from rdhlang5.type_system.managers import get_manager
@@ -35,7 +36,7 @@ class RDHLang5Visitor(langVisitor):
             pair = self.visit(pair)
             result[pair[0]] = pair[1]
 
-        return RDHObject(result, bind=DEFAULT_OBJECT_TYPE)
+        return RDHObject(result, bind=READONLY_DEFAULT_OBJECT_TYPE)
 
     def visitPair(self, ctx):
         return [ ctx.STRING().getText()[1:-1], self.visit(ctx.value()) ]
@@ -425,6 +426,15 @@ class RDHLang5Visitor(langVisitor):
             of, reference, rvalue
         )
 
+    def visitDynamicInsertion(self, ctx):
+        of, reference, rvalue = ctx.expression()
+        of = self.visit(of)
+        reference = self.visit(reference)
+        rvalue = self.visit(rvalue)
+        return insert_op(
+            of, reference, rvalue
+        )
+
     def visitTernary(self, ctx):
         condition, when_true, when_false = ctx.expression()
 
@@ -797,6 +807,7 @@ def parse(code, debug=False):
     visitor = RDHLang5Visitor()
     ast = visitor.visit(ast)
     if debug:
-        get_manager(ast, "parse-code").add_composite_type(DEFAULT_OBJECT_TYPE)
-        ast.raw_code = code
+        ast._set("raw_code", code)
+#        get_manager(ast, "parse-code").add_composite_type(DEFAULT_OBJECT_TYPE)
+#        ast.raw_code = code
     return ast

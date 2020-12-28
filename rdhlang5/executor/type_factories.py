@@ -12,16 +12,14 @@ from rdhlang5.type_system.core_types import UnitType, OneOfType, Const, AnyType,
 from rdhlang5.type_system.default_composite_types import DEFAULT_DICT_TYPE
 from rdhlang5.type_system.dict_types import RDHDict, DictGetterType, \
     DictSetterType, DictDeletterType, DictWildcardGetterType, \
-    DictWildcardSetterType, DictWildcardDeletterType, is_dict_checker
+    DictWildcardSetterType, DictWildcardDeletterType
 from rdhlang5.type_system.exceptions import FatalError
 from rdhlang5.type_system.list_types import RDHListType, RDHList, ListGetterType, \
     ListSetterType, ListDeletterType, ListWildcardGetterType, \
-    ListWildcardSetterType, ListWildcardDeletterType, is_list_checker
+    ListWildcardSetterType, ListWildcardDeletterType
 from rdhlang5.type_system.object_types import RDHObjectType, RDHObject, \
     ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
-    ObjectWildcardSetterType, ObjectDeletterType, ObjectWildcardDeletterType, \
-    is_object_checker
-
+    ObjectWildcardSetterType, ObjectDeletterType, ObjectWildcardDeletterType
 
 def build_closed_function_type(data):
     if not isinstance(data.break_types, RDHDict):
@@ -112,18 +110,11 @@ OPCODE_TYPE_FACTORIES = {
     }
 }
 
-OBJECT_TYPE_CHECKERS = {
-    "object": is_object_checker,
-    "list": is_list_checker,
-    "dict": is_dict_checker
-}
-
 def build_composite_type(data):    
     micro_ops = OrderedDict({})
 
     python_type_name = data.python_type
     opcode_type_factory = OPCODE_TYPE_FACTORIES[python_type_name]
-    python_object_type_checker = OBJECT_TYPE_CHECKERS[python_type_name]
 
     for property in data.properties:
         if hasattr(property, "name"):
@@ -132,7 +123,7 @@ def build_composite_type(data):
             tag = ( property.opcode, )
         micro_ops[tag] = opcode_type_factory[property.opcode](property)
 
-    return CompositeType(micro_ops, python_object_type_checker)
+    return CompositeType(micro_ops)
 
 TYPES = {
     "Any": lambda data: AnyType(),
@@ -151,6 +142,7 @@ TYPES = {
 
 
 def enrich_type(data):
+    from rdhlang5.type_system.managers import get_manager
     if not isinstance(data, RDHObject):
         raise PreparationException("Unknown type data {}, {}".format(data, type(data)))
     if not hasattr(data, "type"):

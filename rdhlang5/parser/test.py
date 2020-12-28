@@ -8,11 +8,12 @@ import unittest.main
 from rdhlang5.executor.bootstrap import bootstrap_function
 from rdhlang5.executor.exceptions import PreparationException
 from rdhlang5.parser.parser import parse
+from rdhlang5.testing import miss_test
 from rdhlang5.type_system.default_composite_types import DEFAULT_LIST_TYPE
 from rdhlang5.type_system.list_types import RDHList
 from rdhlang5.type_system.managers import get_manager
 from rdhlang5.type_system.object_types import RDHObject
-from rdhlang5.utils import set_debug, set_bind_runtime_contexts
+from rdhlang5.utils import set_debug, set_runtime_type_information
 
 
 class TestJSONParsing(TestCase):
@@ -278,7 +279,7 @@ class TestBasicFunction(TestCase):
         code = parse("""
             function() {
                 List<int> foo = [ 1, 2, 3 ];
-                foo.insert(0, 4);
+                foo[0] << 4;
                 return foo[0];
             }
         """)
@@ -290,7 +291,7 @@ class TestBasicFunction(TestCase):
         code = parse("""
             function() {
                 List<Object { bar: int }> foo = [ { bar: 2 }, { bar: 3 } ];
-                foo.insert(0, { bar: 6 });
+                foo[0] << { bar: 6 };
                 return foo[0].bar;
             }
         """)
@@ -573,14 +574,12 @@ class TestLoops(TestCase):
         result = bootstrap_function(code, check_safe_exit=True)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 1 + 2 + 3 + 4)
-        
 
-class TestMisc(TestCase):
+class TestParserMisc(TestCase):
     def test_invalid_list_assignment(self):
         code = parse("""
             function() {
                 List<int> foo = [ { bar: 2 }, { bar: 3 } ];
-                foo.insert([ 0, { bar: 6 } ]);
                 return foo[0].bar;
             }
         """)
@@ -594,9 +593,9 @@ class TestSpeed(TestCase):
         code = parse("""
             function() {
                 int i = 0, j = 0;
-                while(i < 100) {
+                while(i < 20) {
                     j = 0;
-                    while(j < 100) {
+                    while(j < 20) {
                         int foo = i * j;
                         int bar = i * j;
                         int baz = i * j;
@@ -608,9 +607,9 @@ class TestSpeed(TestCase):
             }
         """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True, measure=True)
-        self.assertEquals(result.value, 100 * 100)
+        self.assertEquals(result.value, 20 * 20)
         end = time()
-        self.assertLess(end - start, 25)
+        self.assertLess(end - start, 15)
 
     def test_loop_faster(self):
         start = time()
@@ -786,7 +785,7 @@ class TestEuler(TestCase):
         self.assertEquals(result.value, 31875000)
 
     def test_14(self):
-        return
+        return miss_test()
         code = parse("""
             function() {
                 Dictionary<int : int> cachedResults = { 1: 1 };

@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 import cProfile
 from contextlib import contextmanager
 from functools import wraps
+import pstats
 import sys
 
 from rdhlang5.type_system.exceptions import FatalError
@@ -26,7 +27,12 @@ def spread_dict(*args, **kwargs):
     result.update(kwargs)
     return result
 
-def default(value, marker, default_if_marker):
+def default(value, *args):
+    if len(args) == 1:
+        marker = MISSING
+        default_if_marker, = args
+    else:
+        marker, default_if_marker = args
     if value is marker:
         return default_if_marker
     return value
@@ -42,6 +48,16 @@ def micro_op_repr(opname, key, key_error, type=None, type_error=None):
         return "{}.{}{}.{}{}".format(opname, key, "!" if key_error else "", type.short_str(), "!" if type_error else "")
     else:
         return "{}.{}{}".format(opname, key, "!" if key_error else "")
+
+@contextmanager
+def profile(output_file):
+    try:
+        pr = cProfile.Profile()
+        pr.enable()
+        yield
+    finally:
+        pr.disable()
+        pr.dump_stats(output_file)
 
 def one_shot_memoize(func):
     @wraps(func)
@@ -68,29 +84,20 @@ def set_debug(debug):
         raise FatalError()
     DEBUG_MODE = debug
 
-BIND_RUNTIME_CONTEXTS = None
 
-@contextmanager
-def profile(output_file):
-    try:
-        pr = cProfile.Profile()
-        pr.enable()
-        yield
-    finally:
-        pr.disable()
-        pr.dump_stats(output_file)
+runtime_type_information_active = None
 
-def bind_runtime_contexts():
-    global BIND_RUNTIME_CONTEXTS
-    if BIND_RUNTIME_CONTEXTS is None:
+def runtime_type_information():
+    global runtime_type_information_active
+    if runtime_type_information_active is None:
         raise FatalError()
-    return BIND_RUNTIME_CONTEXTS
+    return runtime_type_information_active
 
-def set_bind_runtime_contexts(bind):
-    global BIND_RUNTIME_CONTEXTS
-    if BIND_RUNTIME_CONTEXTS is not None:
+def set_runtime_type_information(bind):
+    global runtime_type_information_active
+    if runtime_type_information_active is not None:
         raise FatalError()
-    BIND_RUNTIME_CONTEXTS = bind
+    runtime_type_information_active = bind
 
 NO_VALUE = InternalMarker("NO_VALUE")
 MISSING = InternalMarker("MISSING")

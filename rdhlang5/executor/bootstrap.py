@@ -15,7 +15,8 @@ from rdhlang5.executor.raw_code_factories import inferred_type, function_lit, \
     invoke_op, object_template_op, prepared_function, no_value_type, \
     assignment_op, dict_template_op, addition_op, reset_op, shift_op, \
     transform, local_function
-from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE
+from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
+    READONLY_DEFAULT_OBJECT_TYPE
 from rdhlang5.type_system.dict_types import RDHDict
 from rdhlang5.type_system.list_types import RDHList
 from rdhlang5.type_system.managers import get_manager
@@ -34,6 +35,9 @@ class BootstrapException(Exception):
 def get_default_global_context():
     return RDHObject({
         "static": RDHObject({
+            "any": RDHObject({
+                "type": "Any"
+            }, debug_reason="default-global-context"),
             "int": RDHObject({
                 "type": "Integer"
             }, debug_reason="default-global-context"),
@@ -134,7 +138,7 @@ def get_default_global_context():
 #                 None, FrameManager()
 #             ).close(None),
         }, debug_reason="default-global-context")
-    }, bind=DEFAULT_OBJECT_TYPE, debug_reason="default-global-context")
+    }, bind=READONLY_DEFAULT_OBJECT_TYPE, debug_reason="default-global-context")
 
 def format_unhandled_break_type(break_type, raw_code):
     if not raw_code:
@@ -166,7 +170,7 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False,
     if context is None:
         context = get_default_global_context()
 
-    get_manager(context).add_composite_type(DEFAULT_OBJECT_TYPE)
+    get_manager(context).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
 
     frame_manager = FrameManager()
 
@@ -207,8 +211,6 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False,
             raise BootstrapException("\n\n".join(error_msgs))
 
         closed_function = open_function.close(context)
-
-#        print closed_function.to_code()
 
         if transpile:
             closed_function = closed_function.transpile()
