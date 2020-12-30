@@ -123,7 +123,7 @@ def build_composite_type(data):
             tag = ( property.opcode, )
         micro_ops[tag] = opcode_type_factory[property.opcode](property)
 
-    return CompositeType(micro_ops)
+    return CompositeType(micro_ops, name="App")
 
 TYPES = {
     "Any": lambda data: AnyType(),

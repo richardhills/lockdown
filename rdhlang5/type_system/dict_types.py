@@ -2,13 +2,14 @@ from UserDict import DictMixin
 
 from rdhlang5.type_system.composites import CompositeType, \
     Composite, unbind_key, bind_key, does_value_fit_through_type
-from rdhlang5.type_system.core_types import Type, merge_types
+from rdhlang5.type_system.core_types import Type, merge_types, StringType
 from rdhlang5.type_system.exceptions import FatalError, raise_if_safe, \
     InvalidDereferenceKey, InvalidDereferenceType, InvalidAssignmentType, \
     InvalidAssignmentKey, MissingMicroOp
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.micro_ops import MicroOpType
 from rdhlang5.utils import MISSING, is_debug
+
 
 class DictWildcardGetterType(MicroOpType):
     def __init__(self, key_type, value_type, key_error, type_error):
@@ -262,6 +263,7 @@ class DictWildcardSetterType(MicroOpType):
 
     def merge(self, other_micro_op_type):
         return DictWildcardSetterType(
+            self.key_type,
             merge_types([ self.value_type, other_micro_op_type.value_type ], "super"),
             self.key_error or other_micro_op_type.key_error,
             self.type_error or other_micro_op_type.type_error
@@ -454,11 +456,11 @@ class RDHDictType(CompositeType):
         micro_ops = {}
 
         if wildcard_type:
-            micro_ops[("get-wildcard",)] = DictWildcardGetterType(wildcard_type, True, False)
-            micro_ops[("set-wildcard",)] = DictWildcardSetterType(wildcard_type, True, True)
+            micro_ops[("get-wildcard",)] = DictWildcardGetterType(StringType(), wildcard_type, True, False)
+            micro_ops[("set-wildcard",)] = DictWildcardSetterType(StringType(), wildcard_type, True, True)
             micro_ops[("delete-wildcard",)] = DictWildcardDeletterType(True)
 
-        super(RDHDictType, self).__init__(micro_ops)
+        super(RDHDictType, self).__init__(micro_ops, "RDHDictType")
 
 
 class RDHDict(Composite, DictMixin, object):

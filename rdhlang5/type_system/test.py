@@ -48,7 +48,7 @@ class TestBasicObject(TestCase):
         obj = RDHDict({ "foo": "hello" })
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): DictGetterType("foo", StringType(), False, False)
-        }))
+        }, name="test"))
 
     def test_add_micro_op_object(self):
         class Foo(TestObject):
@@ -56,35 +56,35 @@ class TestBasicObject(TestCase):
         obj = Foo({ "foo": "hello" })
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", StringType(), False, False)
-        }))
+        }, name="test"))
 
     def test_setup_read_write_property(self):
         obj = TestObject({ "foo": "hello" })
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", StringType(), False, False),
             ("set", "foo"): ObjectSetterType("foo", StringType(), False, False)
-        }))
+        }, name="test"))
 
     def test_setup_broad_read_write_property(self):
         obj = TestObject({ "foo": "hello" })
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", AnyType(), False, False),
             ("set", "foo"): ObjectSetterType("foo", AnyType(), False, False)
-        }))
+        }, name="test"))
 
     def test_setup_narrow_write_property(self):
         obj = TestObject({ "foo": "hello" })
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", UnitType("hello"), False, False),
             ("set", "foo"): ObjectSetterType("foo", UnitType("hello"), False, False)
-        }))
+        }, name="test"))
 
     def test_setup_broad_reading_property(self):
         obj = TestObject({ "foo": "hello" })
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", AnyType(), False, False),
             ("set", "foo"): ObjectSetterType("foo", StringType(), False, False)
-        }))
+        }, name="test"))
 
     def test_failed_setup_broad_writing_property(self):
         with self.assertRaises(CompositeTypeIsInconsistent):
@@ -93,7 +93,7 @@ class TestBasicObject(TestCase):
             get_manager(obj).add_composite_type(CompositeType({
                 ("get", "foo"): ObjectGetterType("foo", StringType(), False, False),
                 ("set", "foo"): ObjectSetterType("foo", AnyType(), False, False)
-            }))
+            }, name="test"))
 
     def test_composite_object_dereference(self):
         obj = TestObject({ "foo": "hello" })
@@ -101,7 +101,7 @@ class TestBasicObject(TestCase):
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", StringType(), False, False),
             ("set", "foo"): ObjectSetterType("foo", StringType(), False, False)
-        }))
+        }, name="test"))
 
         self.assertEquals(obj.foo, "hello")
 
@@ -111,7 +111,7 @@ class TestBasicObject(TestCase):
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", AnyType(), False, False),
             ("set", "foo"): ObjectSetterType("foo", AnyType(), False, False)
-        }))
+        }, name="test"))
 
         self.assertEquals(obj.foo, "hello")
 
@@ -121,7 +121,7 @@ class TestBasicObject(TestCase):
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", StringType(), False, False),
             ("set", "foo"): ObjectSetterType("foo", StringType(), False, False)
-        }))
+        }, name="test"))
 
         obj.foo = "what"
 
@@ -131,7 +131,7 @@ class TestBasicObject(TestCase):
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", StringType(), False, False),
             ("set", "foo"): ObjectSetterType("foo", StringType(), False, False)
-        }))
+        }, name="test"))
 
         with self.assertRaises(Exception):
             obj.foo = 5
@@ -142,7 +142,7 @@ class TestBasicObject(TestCase):
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", AnyType(), False, False),
             ("set", "foo"): ObjectSetterType("foo", AnyType(), False, False)
-        }))
+        }, name="test"))
 
         self.assertEquals(obj.foo, "hello")
         obj.foo = "what"
@@ -154,7 +154,7 @@ class TestBasicObject(TestCase):
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", StringType(), False, False),
             ("set", "foo"): ObjectSetterType("foo", StringType(), False, False)
-        }))
+        }, name="test"))
 
         self.assertEquals(obj.foo, "hello")
         obj.foo = "what"
@@ -168,7 +168,7 @@ class TestBasicObject(TestCase):
 
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", StringType(), False, False)
-        }))
+        }, name="test"))
 
         self.assertEquals(obj.foo, "hello")
         with self.assertRaises(Exception):
@@ -186,7 +186,7 @@ class TestBasicObject(TestCase):
             ("get", "foo"): ObjectGetterType("foo", StringType(), True, True),
             ("set", "foo"): ObjectSetterType("foo", StringType(), True, True),
             ("delete", "foo"): ObjectDeletterType("foo", True)
-        }))
+        }, name="test"))
 
         del obj.foo
         self.assertFalse(hasattr(obj, "foo"))
@@ -197,12 +197,12 @@ class TestRevConstType(TestCase):
         rev_const_type = CompositeType({
             ("get", "foo"): ObjectGetterType("foo", StringType(), False, False),
             ("set", "foo"): ObjectSetterType("foo", AnyType(), False, False),
-        })
+        }, name="test")
 
         normal_broad_type = CompositeType({
             ("get", "foo"): ObjectGetterType("foo", AnyType(), False, False),
             ("set", "foo"): ObjectSetterType("foo", AnyType(), False, False)
-        })
+        }, name="test")
 
         self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type))
 
@@ -210,12 +210,12 @@ class TestRevConstType(TestCase):
         rev_const_type = CompositeType({
             ("get", "foo"): ObjectGetterType("foo", StringType(), False, False),
             ("set", "foo"): ObjectSetterType("foo", AnyType(), False, False)
-        })
+        }, name="test")
 
         normal_broad_type = CompositeType({
             ("get", "foo"): ObjectGetterType("foo", StringType(), False, False),
             ("set", "foo"): ObjectSetterType("foo", StringType(), False, False)
-        })
+        }, name="test")
 
         self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type))
 
@@ -223,7 +223,7 @@ class TestRevConstType(TestCase):
         rev_const_type = CompositeType({
             ("get", "foo"): ObjectGetterType("foo", StringType(), False, False),
             ("set", "foo"): ObjectSetterType("foo", AnyType(), False, False)
-        })
+        }, name="test")
 
         obj = TestObject({ "foo": "hello" })
         with self.assertRaises(Exception):
@@ -233,12 +233,12 @@ class TestRevConstType(TestCase):
         rev_const_type = CompositeType({
             ("get", "foo"): ObjectGetterType("foo", StringType(), False, False),
             ("set", "foo"): ObjectSetterType("foo", AnyType(), False, False)
-        })
+        }, name="test")
 
         normal_broad_type = CompositeType({
             ("get", "foo"): ObjectGetterType("foo", StringType(), False, False),
             ("set", "foo"): ObjectSetterType("foo", StringType(), False, False)
-        })
+        }, name="test")
 
         rev_const_type = prepare_lhs_type(rev_const_type, None)
 
@@ -250,12 +250,12 @@ class TestRevConstType(TestCase):
         rev_const_type = CompositeType({
             ("get-wildcard", ): ObjectWildcardGetterType(StringType(), StringType(), False, False),
             ("set-wildcard", ): ObjectWildcardSetterType(StringType(), AnyType(), False, False)
-        })
+        }, name="test")
 
         normal_broad_type = CompositeType({
             ("get", "foo"): ObjectWildcardGetterType(StringType(), StringType(), False, False),
             ("set", "foo"): ObjectWildcardSetterType(StringType(), StringType(), False, False)
-        })
+        }, name="test")
 
         rev_const_type = prepare_lhs_type(rev_const_type, None)
 
@@ -267,12 +267,12 @@ class TestRevConstType(TestCase):
         rev_const_type = CompositeType({
             ("get", 0): ListGetterType(0, StringType(), False, False),
             ("set", 0): ListSetterType(0, AnyType(), False, False)
-        })
+        }, name="test")
 
         normal_broad_type = CompositeType({
             ("get", 0): ListGetterType(0, StringType(), False, False),
             ("set", 0): ListSetterType(0, StringType(), False, False)
-        })
+        }, name="test")
 
         rev_const_type = prepare_lhs_type(rev_const_type, None)
 
@@ -285,13 +285,13 @@ class TestRevConstType(TestCase):
             ("get", 0): ListGetterType(0, StringType(), False, False),
             ("set", 0): ListSetterType(0, AnyType(), False, False),
             ("insert", 0): ListInsertType(0, IntegerType(), False, False)
-        })
+        }, name="test")
 
         normal_broad_type = CompositeType({
             ("get", 0): ListGetterType(0, OneOfType([ StringType(), IntegerType() ]), False, False),
             ("set", 0): ListSetterType(0, StringType(), False, False),
             ("insert", 0): ListInsertType(0, IntegerType(), False, False),
-        })
+        }, name="test")
 
         rev_const_type = prepare_lhs_type(rev_const_type, None)
 
@@ -308,7 +308,7 @@ class TestRevConstType(TestCase):
             ("get", 2): ListGetterType(2, AnyType(), False, False),
             ("set", 2): ListSetterType(2, AnyType(), False, False),
             ("insert", 0): ListInsertType(0, StringType(), False, False)
-        })
+        }, name="test")
 
         normal_broad_type = CompositeType({
             ("get", 0): ListGetterType(0, StringType(), False, False),
@@ -318,7 +318,7 @@ class TestRevConstType(TestCase):
             ("get", 2): ListGetterType(2, AnyType(), False, False),
             ("set", 2): ListSetterType(2, AnyType(), False, False),
             ("insert", 0): ListInsertType(0, StringType(), False, False),
-        })
+        }, name="test")
 
         rev_const_type = prepare_lhs_type(rev_const_type, None)
 
@@ -335,7 +335,7 @@ class TestRevConstType(TestCase):
             ("get", 2): ListGetterType(2, StringType(), False, False),
             ("set", 2): ListSetterType(2, StringType(), False, False),
             ("delete", 0): ListDeletterType(0, False)
-        })
+        }, name="test")
 
         normal_broad_type = CompositeType({
             ("get", 0): ListGetterType(0, AnyType(), True, False),
@@ -345,7 +345,7 @@ class TestRevConstType(TestCase):
             ("get", 2): ListGetterType(2, StringType(), True, False),
             ("set", 2): ListSetterType(2, StringType(), True, False),
             ("delete", 0): ListDeletterType(0, False),
-        })
+        }, name="test")
 
         rev_const_type = prepare_lhs_type(rev_const_type, None)
 
@@ -678,7 +678,7 @@ class TestNestedPythonTypes(TestCase):
             })
         })
 
-        get_manager(foo).add_composite_type(PythonObjectType())
+        get_manager(foo).add_composite_type(PythonObjectType(name="test"))
 
         foo.bar.baz = 22
 
@@ -694,7 +694,7 @@ class TestNestedPythonTypes(TestCase):
         })
 
         get_manager(bar).add_composite_type(RDHObjectType({ "baz": IntegerType() }))
-        get_manager(foo).add_composite_type(PythonObjectType())
+        get_manager(foo).add_composite_type(PythonObjectType(name="test"))
 
         self.assertEqual(foo.bar.baz, 42)
         foo.bar.baz = 5
@@ -709,7 +709,7 @@ class TestNestedPythonTypes(TestCase):
         })
 
         get_manager(bar).add_composite_type(RDHObjectType({ "baz": IntegerType() }))
-        get_manager(foo).add_composite_type(PythonObjectType())
+        get_manager(foo).add_composite_type(PythonObjectType(name="test"))
 
         with self.assertRaises(Exception):
             foo.bar.baz = "hello"
@@ -723,7 +723,7 @@ class TestNestedPythonTypes(TestCase):
         })
 
         get_manager(bar).add_composite_type(RDHObjectType({ "baz": IntegerType() }))
-        get_manager(foo).add_composite_type(PythonObjectType())
+        get_manager(foo).add_composite_type(PythonObjectType(name="test"))
 
         foo.bar = TestObject({
             "baz": 123
@@ -743,7 +743,7 @@ class TestNestedPythonTypes(TestCase):
 
         # The first, stronger, type prevents the PythonObjectType spreading from foo to bar
         get_manager(bar).add_composite_type(RDHObjectType({ "baz": IntegerType() }))
-        get_manager(foo).add_composite_type(PythonObjectType())
+        get_manager(foo).add_composite_type(PythonObjectType(name="test"))
 
         self.assertIs(foo.bar, bar)
 
@@ -772,7 +772,7 @@ class TestNestedPythonTypes(TestCase):
             })
         })
 
-        get_manager(foo).add_composite_type(PythonObjectType())
+        get_manager(foo).add_composite_type(PythonObjectType(name="test"))
 
         del foo.bar
         self.assertFalse(hasattr(foo, "bar"))
@@ -784,7 +784,7 @@ class TestNestedPythonTypes(TestCase):
             })
         })
 
-        get_manager(foo).add_composite_type(PythonObjectType())
+        get_manager(foo).add_composite_type(PythonObjectType(name="test"))
 
         foo.bar = TestObject({ "baz": 123 })
 
@@ -797,7 +797,7 @@ class TestNestedPythonTypes(TestCase):
             })
         })
 
-        get_manager(foo).add_composite_type(PythonObjectType())
+        get_manager(foo).add_composite_type(PythonObjectType(name="test"))
 
         with self.assertRaises(AttributeError):
             foo.bop
@@ -805,7 +805,7 @@ class TestNestedPythonTypes(TestCase):
 
 class TestDefaultDict(TestCase):
     def test_default_dict_is_consistent_type(self):
-        type = DefaultDictType(StringType())
+        type = DefaultDictType(StringType(), name="test")
         self.assertTrue(type.is_self_consistent())
 
     def test_default_dict(self):
@@ -816,7 +816,7 @@ class TestDefaultDict(TestCase):
             "bar": "forty-two"
         }, default_factory=default_factory)
 
-        get_manager(foo).add_composite_type(DefaultDictType(StringType()))
+        get_manager(foo).add_composite_type(DefaultDictType(StringType(), name="test"))
 
         self.assertEquals(foo.bar, "forty-two")
         self.assertEquals(foo.bam, "bam-123")

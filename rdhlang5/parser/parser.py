@@ -16,7 +16,7 @@ from rdhlang5.executor.raw_code_factories import function_lit, nop, comma_op, \
     loop_op, condition_op, binary_integer_op, equality_op, dereference, \
     local_function, reset_op, inferred_type, prepare_function_lit, transform, \
     continue_op, check_is_opcode, is_op, function_type, dict_template_op, \
-    composite_type, static_op, map_op, insert_op
+    composite_type, static_op, map_op, insert_op, prepared_function
 from rdhlang5.parser.grammar.langLexer import langLexer
 from rdhlang5.parser.grammar.langParser import langParser
 from rdhlang5.parser.grammar.langVisitor import langVisitor
@@ -528,7 +528,7 @@ class RDHLang5Visitor(langVisitor):
                                 }, **get_debug_info(ctx)),
                                 **get_debug_info(ctx)
                             )
-                        ),
+                        ), **get_debug_info(ctx)
                     ), **get_debug_info(ctx)),
                     **get_debug_info(ctx)
                 ),
@@ -551,17 +551,16 @@ class RDHLang5Visitor(langVisitor):
 
         return map_op(
             composite_expression,
-            local_function(
-                nop(),
-                transform(
-                    ("continue", "value"),
-                    invoke_op(
-                        prepare_function_lit(loop_code),
-                        object_template_op({
-                            iterator_name: dereference("local.value")
-                        }, **get_debug_info(ctx)),
-                    )
-                )
+            prepared_function(
+                inferred_type(),
+                invoke_op(
+                    prepare_function_lit(loop_code, **get_debug_info(ctx)),
+                    object_template_op({
+                        iterator_name: dereference("argument", **get_debug_info(ctx))
+                    }, **get_debug_info(ctx)),
+                    **get_debug_info(ctx)
+                ),
+                **get_debug_info(ctx)
             )
         )
 
@@ -644,7 +643,7 @@ class RDHLang5Visitor(langVisitor):
 
     def visitToFunctionExpression(self, ctx):
         _, function = self.visit(ctx.function())
-        return prepare_function_lit(function)
+        return prepare_function_lit(function, **get_debug_info(ctx))
 
 
 class CodeBlockBuilder(object):

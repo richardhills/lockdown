@@ -447,8 +447,6 @@ def prepare_op(function_expression, **kwargs):
 
 
 def close_op(function, context, **kwargs):
-    if not "line" in kwargs:
-        pass
     check_is_opcode(function)
     check_is_opcode(context)
     return RDHObject(spread_dict({
@@ -467,6 +465,8 @@ def static_op(expression, **kwargs):
 
 
 def invoke_op(function_expression, argument_expression=None, **kwargs):
+    if "line" not in kwargs:
+        pass
     if argument_expression is None:
         argument_expression = nop()
     check_is_opcode(function_expression)

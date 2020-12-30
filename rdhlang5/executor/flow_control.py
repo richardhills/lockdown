@@ -20,10 +20,13 @@ class BreakException(Exception):
         self.caused_by = caused_by
 
     def __str__(self):
-        result = "BreakException<{}: {}>".format(self.mode, self.value)
-        if self.caused_by:
-            result = "{}\n{}".format(result, self.caused_by)
-        return result
+        return break_exception_to_string(self.mode, self.value, self.caused_by)
+
+def break_exception_to_string(mode, value, caused_by):
+    result = "BreakException<{}: {}>".format(mode, value)
+    if caused_by:
+        result = "{}\n{}".format(result, caused_by)
+    return result
 
 class BreakTypesFactory(object):
     def __init__(self, target):
@@ -61,7 +64,7 @@ class BreakTypesFactory(object):
         return result
 
 class Capturer(object):
-    __slots__ = [ "frame_manager", "break_mode", "top_level", "value", "caught_break_mode", "caught_restart_type", "caught_frames" ]
+    __slots__ = [ "frame_manager", "break_mode", "top_level", "value", "caught_break_mode", "caught_restart_type", "caught_frames", "opcode" ]
 
     def __init__(self, frame_manager, break_mode=None, top_level=False):
         self.frame_manager = frame_manager
@@ -72,11 +75,13 @@ class Capturer(object):
         self.caught_break_mode = MISSING
         self.caught_restart_type = MISSING
         self.caught_frames = MISSING
+        self.opcode = MISSING
 
-    def attempt_capture(self, mode, value, restart_type):
+    def attempt_capture(self, mode, value, opcode, restart_type):
         if self.break_mode is None or self.break_mode == mode:
             self.value = value
             self.caught_break_mode = mode
+            self.opcode = opcode
 
             if restart_type:
                 self.caught_restart_type = restart_type
@@ -86,7 +91,7 @@ class Capturer(object):
         return False
 
     def attempt_capture_or_raise(self, mode, value, opcode, restart_type):
-        if not self.attempt_capture(mode, value, restart_type):
+        if not self.attempt_capture(mode, value, opcode, restart_type):
             raise BreakException(mode, value, opcode, restart_type)
 
     def create_continuation(self, callback, break_types):
@@ -101,7 +106,7 @@ class Capturer(object):
         if isinstance(exc_value, FatalError):
             return False
         if isinstance(exc_value, BreakException):
-            return self.attempt_capture(exc_value.mode, exc_value.value, exc_value.restart_type)
+            return self.attempt_capture(exc_value.mode, exc_value.value, exc_value.opcode, exc_value.restart_type)
         return False
 
 def is_restartable(thing):
@@ -174,23 +179,23 @@ class PassThroughFrame(object):
     def step(self, name, func):
         return func()
 
-    def unwind(self, mode, value, restart_type):
+    def unwind(self, mode, value, opcode, restart_type):
         if is_debug():
             raise FatalError()
 
         if restart_type is None:
-            return mode, value, None, None
-        raise BreakException(mode, value, None, restart_type)
+            return mode, value, opcode, None
+        raise BreakException(mode, value, opcode, restart_type)
 
     def value(self, value):
         #return self.unwind("value", value, None)
         return "value", value, None, None
 
-    def exception(self, value):
-        return self.unwind("exception", value, None)
+    def exception(self, value, opcode=None):
+        return self.unwind("exception", value, opcode, None)
 
     def yield_(self, value, restart_type=None):
-        return self.unwind("yield", value, restart_type)
+        return self.unwind("yield", value, None, restart_type)
 
     def __enter__(self):
         return self
@@ -216,7 +221,7 @@ class Frame(object):
             initial_locals=dict(self.locals)
         )
 
-    def unwind(self, mode, value, restart_type):
+    def unwind(self, mode, value, opcode, restart_type):
         if restart_type:
             self.manager.mode = "shift"
 
@@ -225,13 +230,13 @@ class Frame(object):
         raise BreakException(mode, value, self.target, restart_type)
 
     def value(self, value):
-        return self.unwind("value", value, None)
+        return self.unwind("value", value, None, None)
 
-    def exception(self, value):
-        return self.unwind("exception", value, None)
+    def exception(self, value, opcode=None):
+        return self.unwind("exception", value, opcode, None)
 
     def yield_(self, value, restart_type=None):
-        return self.unwind("yield", value, restart_type)
+        return self.unwind("yield", value, None, restart_type)
 
     def step(self, name, func):
         locals = self.locals

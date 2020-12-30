@@ -31,7 +31,8 @@ from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     DEFAULT_DICT_TYPE, READONLY_DEFAULT_OBJECT_TYPE, \
     readonly_rich_composite_type
 from rdhlang5.type_system.dict_types import RDHDict
-from rdhlang5.type_system.exceptions import FatalError, InvalidInferredType
+from rdhlang5.type_system.exceptions import FatalError, InvalidInferredType,\
+    DanglingInferredType
 from rdhlang5.type_system.list_types import RDHList
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType
@@ -99,8 +100,14 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
     if suggested_outer_type is None:
         suggested_outer_type = NoValueType()
 
-    argument_type = prepare_piece_of_context(argument_type, suggested_argument_type)
-    outer_type = prepare_piece_of_context(outer_type, suggested_outer_type)
+    try:
+        argument_type = prepare_piece_of_context(argument_type, suggested_argument_type)
+    except DanglingInferredType:
+        raise PreparationException("Failed to infer argument types in {} from {}".format(argument_type, suggested_argument_type))
+    try:
+        outer_type = prepare_piece_of_context(outer_type, suggested_outer_type)
+    except DanglingInferredType:
+        raise PreparationException("Failed to infer outer types in {} from {}".format(argument_type, suggested_argument_type))
 
     local_type = enrich_type(static.local)
 

@@ -4,11 +4,9 @@ from __future__ import unicode_literals
 import cProfile
 from contextlib import contextmanager
 from functools import wraps
+from json.encoder import JSONEncoder
 import pstats
 import sys
-
-from rdhlang5.type_system.exceptions import FatalError
-
 
 class InternalMarker(object):
     def __init__(self, name):
@@ -48,6 +46,23 @@ def micro_op_repr(opname, key, key_error, type=None, type_error=None):
         return "{}.{}{}.{}{}".format(opname, key, "!" if key_error else "", type.short_str(), "!" if type_error else "")
     else:
         return "{}.{}{}".format(opname, key, "!" if key_error else "")
+
+def print_code(ast):
+    from rdhlang5.type_system.dict_types import RDHDict
+    from rdhlang5.type_system.exceptions import FatalError
+    from rdhlang5.type_system.list_types import RDHList
+    from rdhlang5.type_system.object_types import RDHObject
+
+    class RDHObjectEncoder(JSONEncoder):
+        def default(self, o):
+            if isinstance(o, RDHObject):
+                return o.__dict__
+            if isinstance(o, RDHList):
+                return o._to_list()
+            if isinstance(o, RDHDict):
+                return dict(o.wrapped)
+            return o
+    print RDHObjectEncoder().encode(ast)
 
 @contextmanager
 def profile(output_file):

@@ -102,11 +102,11 @@ class ListWildcardGetterType(ListMicroOpType):
             return ([], None)
         return (target.wrapped.values(), self.value_type)
 
-    def clone(self, value_type=MISSING, key_error=MISSING):
+    def clone(self, value_type=MISSING, key_error=MISSING, type_error=MISSING):
         return ListWildcardGetterType(
             default(value_type, self.value_type),
             default(key_error, self.key_error),
-            self.type_error
+            default(type_error, self.type_error)
         )
 
     def merge(self, other_micro_op_type):
@@ -169,7 +169,6 @@ class ListGetterType(ListMicroOpType):
 
         return False
             
-
     def conflicts_with(self, our_type, other_type):
         wildcard_setter = other_type.get_micro_op_type(("set-wildcard",))
         if wildcard_setter and not self.type_error and not wildcard_setter.type_error and not self.value_type.is_copyable_from(wildcard_setter.value_type):
@@ -209,10 +208,10 @@ class ListGetterType(ListMicroOpType):
         return True
 
     def prepare_bind(self, target, key_filter, substitute_value):
-        if not key_filter or key_filter == self.key:
+        if key_filter is None or key_filter == self.key:
             if substitute_value is not MISSING:
                 return ([ substitute_value ], self.value_type)
-            if self.key in target.wrapped:
+            if target._contains(self.key):
                 return ([ target._get(self.key) ], self.value_type)
         return ([], None)
 
@@ -246,7 +245,7 @@ class ListWildcardSetterType(ListMicroOpType):
         if is_debug() or not shortcut_checks or self.key_error or self.type_error:
             self.raise_micro_op_invocation_conflicts(target_manager, key, new_value, allow_failure)
 
-        if key < 0 or key > len(target_manager.get_obj()):
+        if key < 0 or key > target_manager.get_obj()._length:
             if self.key_error:
                 raise InvalidAssignmentKey()
 
@@ -296,11 +295,12 @@ class ListWildcardSetterType(ListMicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
-    def clone(self, value_type=MISSING, key_error=MISSING):
+
+    def clone(self, value_type=MISSING, key_error=MISSING, type_error=MISSING):
         return ListWildcardSetterType(
             default(value_type, self.value_type),
             default(key_error, self.key_error),
-            self.type_error
+            default(type_error, self.type_error)
         )
 
     def merge(self, other_micro_op_type):
@@ -650,6 +650,179 @@ class ListInsertType(ListMicroOpType):
     def __repr__(self):
         return micro_op_repr("insertL", self.key, self.key_error, self.value_type, self.type_error)
 
+class ListRangeGetterType(ListMicroOpType):
+    def __init__(self, range, value_type, key_error, type_error):
+        self.range = range
+        self.value_type = value_type
+        self.key_error = key_error
+        self.type_error = type_error
+
+    def invoke(self, target_manager, key):
+        if key < 0 or key >= self.range:
+            raise FatalError()
+
+        obj = target_manager.get_obj()
+
+        if obj._contains(key):
+            value = obj._get(key)
+        else:
+            default_factory = target_manager.default_factory
+
+            if default_factory:
+                value = default_factory(key)
+            else:
+                raise_if_safe(InvalidDereferenceKey, self.key_error)
+
+        if not does_value_fit_through_type(value, self.value_type):
+            raise_if_safe(InvalidDereferenceKey, self.type_error)
+
+        return value
+
+    def is_derivable_from(self, other_type):
+        for tag, micro_op in other_type.micro_op_types:
+            tags_match = tag[0] == "get-range" and tag[1] > self.range
+            if not tags_match:
+                continue
+            micro_op_match = self.value_type.is_copyable_from(micro_op.value_type)
+            if micro_op_match:
+                return True
+        return False
+
+    def is_bindable_to(self, target):
+        manager = get_manager(target)
+        if not isinstance(target, RDHList):
+            return False
+        if not manager:
+            return False
+
+        if not (self.range < target._length or manager.default_factory or self.key_error):
+            return False
+
+        return True
+
+    def conflicts_with(self, our_type, other_type):
+        wildcard_setter = other_type.get_micro_op_type(("set-wildcard",))
+        if wildcard_setter and not self.type_error and not wildcard_setter.type_error and not self.value_type.is_copyable_from(wildcard_setter.value_type):
+            return True
+
+        wildcard_inserter = other_type.get_micro_op_type(("insert-wildcard",))
+        if wildcard_inserter and not self.type_error and not wildcard_setter.type_error and not wildcard_inserter.type.is_copyable_from(self.value_type):
+            return True
+
+        for tag, other in other_type.micro_op_types.items():
+            if tag[0] == "set" and tag[1] < self.range and not self.value_type.is_copyable_from(other.value_type):
+                return True
+            if tag[0] == "insert" and tag[1] < self.range and not self.value_type.is_copyable_from(other.value_type):
+                return True
+
+        # There's a lot more to do here...
+
+        return False
+
+    def prepare_bind(self, target, key_filter, substitute_value):
+        if key_filter is not None or key_filter < self.range:
+            if substitute_value is not MISSING:
+                return ([ substitute_value ], self.value_type)
+            if target._contains(key_filter):
+                return ([ target._get(key_filter) ], self.value_type)
+        return ([], None)
+
+    def clone(self, value_type=MISSING, key_error=MISSING):
+        return ListRangeGetterType(
+            self.range,
+            default(value_type, self.value_type),
+            default(key_error, self.key_error),
+            self.type_error
+        )
+
+    def merge(self, other_micro_op_type):
+        return ListRangeGetterType(
+            self.range,
+            merge_types([ self.value_type, other_micro_op_type.value_type ], "super"),
+            self.key_error or other_micro_op_type.key_error,
+            self.type_error or other_micro_op_type.type_error
+        )
+
+    def __repr__(self):
+        return micro_op_repr("getrangeL", self.key, self.key_error, self.value_type, self.type_error)
+
+class ListRangeSetterType(ListMicroOpType):
+    def __init__(self, range, value_type, key_error, type_error):
+        self.range = range
+        self.value_type = value_type
+        self.key_error = key_error
+        self.type_error = type_error
+
+    def invoke(self, target_manager, key, new_value):
+        if key < 0 or key >= self.range:
+            if self.key_error:
+                raise InvalidAssignmentKey()
+
+        obj = target_manager.get_obj()
+
+        unbind_key(target_manager, key)
+
+        target_manager.get_obj()._set(key, new_value)
+
+        bind_key(target_manager, key)
+
+    def is_derivable_from(self, other_type):
+        for tag, micro_op in other_type.micro_op_types:
+            tags_match = tag[0] == "set-range" and tag[1] > self.range
+            if not tags_match:
+                continue
+            micro_op_match = self.value_type.is_copyable_from(micro_op.value_type)
+            if micro_op_match:
+                return True
+        return False
+
+    def is_bindable_to(self, target):
+        manager = get_manager(target)
+        if not isinstance(target, RDHList):
+            return False
+        if not manager:
+            return False
+
+        if not self.key_error and not target.is_sparse:
+            return False
+
+        return True
+
+    def conflicts_with(self, our_type, other_type):
+        wildcard_getter = other_type.get_micro_op_type(("get-wildcard",))
+        if wildcard_getter and not self.type_error and not wildcard_getter.type_error and not wildcard_getter.value_type.is_copyable_from(self.value_type):
+            return True
+
+        for tag, other in other_type.micro_op_types.items():
+            pass #...
+
+        # There's a lot more to do here...
+
+        return False
+
+    def prepare_bind(self, target, key_filter, substitute_value):
+        return ([], None)
+
+    def clone(self, value_type=MISSING, key_error=MISSING):
+        return ListRangeSetterType(
+            self.range,
+            default(value_type, self.value_type),
+            default(key_error, self.key_error),
+            self.type_error
+        )
+
+    def merge(self, other_micro_op_type):
+        return ListRangeSetterType(
+            self.range,
+            merge_types([ self.value_type, other_micro_op_type.value_type ], "super"),
+            self.key_error or other_micro_op_type.key_error,
+            self.type_error or other_micro_op_type.type_error
+        )
+
+    def __repr__(self):
+        return micro_op_repr("setrangeL", self.key, self.key_error, self.value_type, self.type_error)
+
+
 def RDHListType(element_types, wildcard_type, allow_push=True, allow_wildcard_insert=True, allow_delete=True, is_sparse=False):
     micro_ops = OrderedDict()  #  Ordered so that dependencies from i+1 element on i are preserved
 
@@ -683,7 +856,7 @@ def RDHListType(element_types, wildcard_type, allow_push=True, allow_wildcard_in
             micro_ops[("insert-wildcard",)] = ListWildcardInsertType(wildcard_type, not is_sparse, False)
 #            micro_ops[("get", "insert")] = BuiltInFunctionGetterType(ListInsertFunctionType(micro_ops[("insert-wildcard",)], wildcard_type))
 
-    return CompositeType(micro_ops)
+    return CompositeType(micro_ops, "RDHListType")
 
 
 SPARSE_ELEMENT = object()
@@ -743,6 +916,10 @@ class RDHList(Composite, MutableSequence, object):
             del self.wrapped[k]
         self.wrapped[key] = value
         self.length = max(self.length + 1, key + 1)
+
+    @property
+    def _length(self):
+        return self.length
 
     def _to_list(self):
         return self._values()

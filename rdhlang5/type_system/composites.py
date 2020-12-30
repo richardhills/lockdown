@@ -11,6 +11,7 @@ from rdhlang5.type_system.exceptions import FatalError, IsNotCompositeType, \
 from rdhlang5.type_system.managers import get_manager, get_type_of_value
 from rdhlang5.type_system.micro_ops import merge_composite_types
 from rdhlang5.utils import MISSING
+import rdhlang5
 
 
 class InferredType(Type):
@@ -40,7 +41,7 @@ def temporary_bind(value, composite_type):
 
 
 class CompositeType(Type):
-    def __init__(self, micro_op_types, name=None):
+    def __init__(self, micro_op_types, name):
         if not isinstance(micro_op_types, dict):
             raise FatalError()
         for tag in micro_op_types.keys():
@@ -48,7 +49,7 @@ class CompositeType(Type):
                 raise FatalError()
 
         self.micro_op_types = micro_op_types
-        self.name = name or "unknown"
+        self.name = name
         self._is_self_consistent = None
 
     def replace_inferred_types(self, other, cache=None):
@@ -129,7 +130,7 @@ class CompositeType(Type):
         return cache[result_key]
 
     def __repr__(self):
-        return "Composite<{}>".format(", ".join([str(m) for m in self.micro_op_types.values()]))
+        return "{}<{}>".format(self.name, ", ".join([str(m) for m in self.micro_op_types.values()]))
 
     def short_str(self):
         return "Composite<{}>".format(self.name)
@@ -270,8 +271,12 @@ def prepare_composite_lhs_type(composite_type, guide_type, results_cache=None):
 
     result = CompositeType(
         dict(composite_type.micro_op_types),
-        name="LHSPrepared<{}>".format(composite_type.name)
+        name="{}<LHSPrepared>".format(composite_type.name)
     )
+
+    # TODO: do this better
+    if hasattr(composite_type, "from_opcode"):
+        result.from_opcode = composite_type.from_opcode
 
     if ("get", "best_result") in composite_type.micro_op_types:
         pass
@@ -281,6 +286,8 @@ def prepare_composite_lhs_type(composite_type, guide_type, results_cache=None):
     results_cache[cache_key] = result
     something_changed = False
 
+    # Take any overlapping getter/setter types (typically get X, set Any) and transform so that they
+    # are compatible (typically get X, set X)
     for tag, micro_op in result.micro_op_types.items():
         getter = None
         if hasattr(micro_op, "value_type") and isinstance(micro_op.value_type, (AnyType, InferredType)):
@@ -292,6 +299,16 @@ def prepare_composite_lhs_type(composite_type, guide_type, results_cache=None):
             if micro_op.value_type is not getter.value_type:
                 result.micro_op_types[tag] = micro_op.clone(value_type=getter.value_type)
                 something_changed = True
+
+    # Add error codes to get-wildcard and set-wildcard if there are any getters or setters
+    setter_or_getter_found = any([ t[0] in ("get", "set") for t in result.micro_op_types.keys() ])
+    if setter_or_getter_found:
+        wildcard_getter = result.get_micro_op_type(("get-wildcard", ))
+        if wildcard_getter:
+            result.micro_op_types[("get-wildcard", )] = wildcard_getter.clone(key_error=True)
+        wildcard_setter = result.get_micro_op_type(("set-wildcard", ))
+        if wildcard_setter:
+            result.micro_op_types[("set-wildcard", )] = wildcard_setter.clone(key_error=True, type_error=True)
 
     for tag, micro_op in result.micro_op_types.items():
         if hasattr(micro_op, "value_type"):
@@ -480,3 +497,14 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
         cache[result_key] = False
 
     return atleast_one_sub_type_worked
+
+def create_reasonable_composite_type(obj):
+    result = CompositeType({}, name="reasonable list type")
+    from rdhlang5.type_system.list_types import RDHList
+    from rdhlang5.type_system.list_types import ListGetterType,\
+    ListWildcardGetterType
+    if isinstance(obj, RDHList):
+        for key in obj._keys():
+            result.micro_op_types[("get", key)] = ListGetterType(key, get_type_of_value(obj._get(key)), False, False)
+        result.micro_op_types[("get-wildcard", )] = ListWildcardGetterType(AnyType(), True, True)
+    return result

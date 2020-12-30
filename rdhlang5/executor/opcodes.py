@@ -5,6 +5,7 @@ from _collections import defaultdict
 from abc import abstractmethod
 import ast
 import collections
+from compiler.ast import flatten
 from pydoc import visiblename
 
 from jsonpickle.util import is_list
@@ -18,7 +19,8 @@ from rdhlang5.executor.flow_control import BreakTypesFactory, BreakException
 from rdhlang5.executor.function_type import OpenFunctionType, ClosedFunctionType
 from rdhlang5.executor.type_factories import enrich_type
 from rdhlang5.type_system.composites import CompositeType, temporary_bind, \
-    does_value_fit_through_type, is_type_bindable_to_value
+    does_value_fit_through_type, is_type_bindable_to_value, Composite, \
+    prepare_lhs_type, create_reasonable_composite_type
 from rdhlang5.type_system.core_types import AnyType, Type, merge_types, Const, \
     UnitType, NoValueType, AllowedValuesNotAvailable, unwrap_types, IntegerType, \
     BooleanType, remove_type
@@ -26,7 +28,7 @@ from rdhlang5.type_system.default_composite_types import rich_composite_type, \
     DEFAULT_OBJECT_TYPE, readonly_rich_composite_type, \
     READONLY_DEFAULT_OBJECT_TYPE
 from rdhlang5.type_system.dict_types import RDHDict, DictGetterType, \
-    DictSetterType, DictWildcardGetterType, DictWildcardSetterType
+    DictSetterType, DictWildcardGetterType, DictWildcardSetterType, RDHDictType
 from rdhlang5.type_system.exceptions import FatalError, InvalidDereferenceType, \
     InvalidDereferenceKey, InvalidAssignmentType, InvalidAssignmentKey
 from rdhlang5.type_system.list_types import RDHList, ListGetterType, \
@@ -99,28 +101,24 @@ def flatten_out_types(break_types):
 
 
 class TypeErrorFactory(object):
-    def __init__(self, message=None):
+    def __init__(self, message):
         self.message = message
 
-    def __call__(self, **kwargs):
+    def __call__(self, message=None, **kwargs):
         data = {
             "type": "TypeError",
+            "message": message or self.message,
+            "kwargs": kwargs
         }
-        message = self.message
-        if message:
-            message = self.message.format(**kwargs)
-            data["message"] = message
-        return RDHObject(data, bind=self.get_type(**kwargs), debug_reason="type-error")
+        return RDHObject(data, bind=self.get_type(message), debug_reason="type-error")
 
-    def get_type(self, **kwargs):
+    def get_type(self, message=None):
         properties = {
-            "type": Const(UnitType("TypeError"))
+            "type": Const(UnitType("TypeError")),
+            "message": Const(UnitType(message or self.message)),
+            "kwargs": Const(RDHDictType(AnyType()))
         }
-        message = self.message
-        if message:
-            message = self.message.format(**kwargs)
-            properties["message"] = Const(UnitType(message))
-        return RDHObjectType(properties, name=message)
+        return RDHObjectType(properties, wildcard_value_type=AnyType(), name="TypeError")
 
 
 class Opcode(object):
@@ -214,6 +212,8 @@ class ObjectTemplateOp(Opcode):
 
         all_value_types = []
 
+        can_break_with_value_type = True
+
         for key_opcode, value_opcode in self.opcodes:
             key_type, other_key_break_types = get_expression_break_types(key_opcode, context, frame_manager, immediate_context=immediate_context)
             break_types.merge(other_key_break_types)
@@ -221,6 +221,7 @@ class ObjectTemplateOp(Opcode):
             break_types.merge(other_value_break_types)
 
             if key_type is MISSING:
+                can_break_with_value_type = False
                 continue
 
             key_type = flatten_out_types(key_type)
@@ -234,6 +235,7 @@ class ObjectTemplateOp(Opcode):
                 pass
 
             if value_type is MISSING:
+                can_break_with_value_type = False
                 continue
 
             value_type = flatten_out_types(value_type)
@@ -245,18 +247,18 @@ class ObjectTemplateOp(Opcode):
                 micro_ops[("get", key)] = ObjectGetterType(key, value_type, False, False)
                 micro_ops[("set", key)] = ObjectSetterType(key, AnyType(), False, False)
 
-        if len(all_value_types) == 0:
-            all_value_types.append(AnyType())
+        if can_break_with_value_type:
+            if len(all_value_types) == 0:
+                all_value_types.append(AnyType())
 
-        combined_value_types = merge_types(all_value_types, "exact")
+            combined_value_types = merge_types(all_value_types, "exact")
 
-        micro_ops[("get-wildcard",)] = ObjectWildcardGetterType(AnyType(), combined_value_types, True, False)
-        micro_ops[("set-wildcard",)] = ObjectWildcardSetterType(AnyType(), AnyType(), True, True)
-#        micro_ops[("get", "get")] = BuiltInFunctionGetterType(ObjectGetFunctionType(micro_ops[("get-wildcard",)]))
+            micro_ops[("get-wildcard",)] = ObjectWildcardGetterType(AnyType(), combined_value_types, True, False)
+            micro_ops[("set-wildcard",)] = ObjectWildcardSetterType(AnyType(), AnyType(), False, False)
 
-        value_type = CompositeType(micro_ops)
+            value_type = CompositeType(micro_ops, name="ObjectTemplateOp")
 
-        break_types.add("value", value_type)
+            break_types.add("value", value_type)
 
         return break_types.build()
 
@@ -367,7 +369,7 @@ class ListTemplateOp(Opcode):
         micro_ops[("insert-wildcard",)] = ListWildcardInsertType(AnyType(), True, False)
 #        micro_ops[("get", "insert")] = BuiltInFunctionGetterType(ListInsertFunctionType(micro_ops[("insert-wildcard",)], combined_value_types))
 
-        break_types.add("value", CompositeType(micro_ops))
+        break_types.add("value", CompositeType(micro_ops, name="ListTemplateOp"))
 
         return break_types.build()
 
@@ -423,7 +425,7 @@ class ContextOp(Opcode):
 
 
 class DereferenceOp(Opcode):
-    INVALID_DEREFERENCE = TypeErrorFactory("DereferenceOp: invalid_dereference {reference}")
+    INVALID_DEREFERENCE = TypeErrorFactory("DereferenceOp: invalid_dereference")
 
     def __init__(self, data, visitor):
         super(DereferenceOp, self).__init__(data, visitor)
@@ -487,9 +489,11 @@ class DereferenceOp(Opcode):
 
         exception_break_mode = "exception" if self.safe else "value"
         for invalid_dereference in invalid_dereferences:
-            break_types.add(exception_break_mode, self.INVALID_DEREFERENCE.get_type(reference=invalid_dereference), opcode=self)
+            break_types.add(exception_break_mode, self.INVALID_DEREFERENCE.get_type(
+                message="DereferenceOp: invalid_dereference {}".format(invalid_dereference)
+            ), opcode=self)
         if invalid_unknown_dereference:
-            break_types.add(exception_break_mode, self.INVALID_DEREFERENCE.get_type(reference=""), opcode=self)
+            break_types.add(exception_break_mode, self.INVALID_DEREFERENCE.get_type(), opcode=self)
 
         return break_types.build()
 
@@ -505,7 +509,7 @@ class DereferenceOp(Opcode):
             exception_break_mode = "exception" if self.safe else "value"
 
             if manager is None:
-                return frame.unwind(exception_break_mode, self.INVALID_DEREFERENCE(reference=reference), None)
+                return frame.unwind(exception_break_mode, self.INVALID_DEREFERENCE(reference=reference), None, None)
 
             try:
                 direct, micro_op_type = self.micro_ops.get(reference, (False, None))
@@ -520,16 +524,20 @@ class DereferenceOp(Opcode):
                     direct, micro_op_type = False, manager.get_micro_op_type(("get-wildcard",))
 
                 if not micro_op_type:                    
-                    return frame.unwind(exception_break_mode, self.INVALID_DEREFERENCE(reference=reference), None)
+                    return frame.unwind(exception_break_mode, self.INVALID_DEREFERENCE(reference=reference), None, None)
 
                 if direct:
                     return frame.value(micro_op_type.invoke(manager, shortcut_checks=True))
                 else:
                     return frame.value(micro_op_type.invoke(manager, reference, shortcut_checks=True))
             except InvalidDereferenceType:
-                return frame.unwind(exception_break_mode, self.INVALID_DEREFERENCE(reference=reference), None)
+                return frame.unwind(exception_break_mode, self.INVALID_DEREFERENCE(
+                    message="DereferenceOp: invalid_dereference {}".format(reference)
+                ), None, None)
             except InvalidDereferenceKey:
-                return frame.unwind(exception_break_mode, self.INVALID_DEREFERENCE(reference=reference), None)
+                return frame.unwind(exception_break_mode, self.INVALID_DEREFERENCE(
+                    message="DereferenceOp: invalid_dereference {}".format(reference)
+                ), None, None)
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         micro_op_to_compile = None
@@ -582,7 +590,7 @@ class DynamicDereferenceOp(Opcode):
 
         break_types.add(
             "exception",
-            self.INVALID_DEREFERENCE.get_type(reference=self.reference),
+            self.INVALID_DEREFERENCE.get_type(message="DynamicDereferenceOp: invalid_dereference {}".format(self.reference)),
             opcode=self
         )
 
@@ -868,11 +876,23 @@ class MapOp(Opcode):
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
 
-        composite_type = get_expression_break_types(self.composite, context, frame_manager)
-        mapper_type = get_expression_break_types(self.mapper, context, frame_manager)
-
+        composite_type, composite_other_break_types = get_expression_break_types(self.composite, context, frame_manager)
         if composite_type is not MISSING:
             composite_type = flatten_out_types(composite_type)
+        break_types.merge(composite_other_break_types)
+
+        if composite_type and isinstance(composite_type, CompositeType):
+            immediate_context = immediate_context or {}
+
+            getter_value_types = [micro_op.value_type for key, micro_op in composite_type.micro_op_types.items() if key[0] == "get"]
+            wildcard_getter = composite_type.get_micro_op_type(("get-wildcard", ))
+            if wildcard_getter:
+                getter_value_types.append(wildcard_getter.value_type)
+
+            immediate_context["suggested_argument_type"] = merge_types(getter_value_types, "sub")
+
+        mapper_type, mapper_other_break_types = get_expression_break_types(self.mapper, context, frame_manager, immediate_context)
+        break_types.merge(mapper_other_break_types)
         if mapper_type is not MISSING:
             mapper_type = flatten_out_types(mapper_type)
 
@@ -882,30 +902,40 @@ class MapOp(Opcode):
             break_types.add("exception", self.MISSING_mapper.get_type(), opcode=self)
 
         if composite_type is not MISSING and mapper_type is not MISSING:
-            result = CompositeType({})
-
             if isinstance(composite_type, CompositeType) and isinstance(mapper_type, ClosedFunctionType):
-                mapper_return_type = mapper_type.break_types.get("value", MISSING)
+                mapper_break_types = dict(mapper_type.break_types)
 
-                if mapper_return_type is not MISSING:
+                break_value_type = mapper_break_types.pop("break", MISSING)
+                if break_value_type is not MISSING:
+                    break_types.add("value", break_value_type)
+
+                mapper_continue_type = mapper_break_types.pop("continue", MISSING)
+
+                ends = mapper_break_types.pop("end", MISSING) is not MISSING
+                skips = mapper_break_types.pop("value", MISSING) is not MISSING
+
+                if mapper_continue_type is not MISSING:
+                    mapper_continue_type = flatten_out_types(mapper_continue_type)
                     micro_ops = {}
 
                     keys = [getattr(micro_op, "key", None) for micro_op in composite_type.micro_op_types.values()]
                     integer_keys = [k for k in keys if isinstance(k, int)]
 
-                    for index in integer_keys:
-                        micro_ops[("get", index)] = ListGetterType(index, mapper_return_type, False, False)
-                        micro_ops[("set", index)] = ListSetterType(index, AnyType(), False, False)
+                    if not ends and not skips:
+                        for index in integer_keys:
+                            micro_ops[("get", index)] = ListGetterType(index, mapper_continue_type, False, False)
+                            micro_ops[("set", index)] = ListSetterType(index, AnyType(), False, False)
 
-                    micro_ops[("get-wildcard",)] = ListWildcardGetterType(mapper_return_type, True, False)
-                    micro_ops[("set-wildcard",)] = ListWildcardSetterType(AnyType(), True, True)
+                    micro_ops[("get-wildcard",)] = ListWildcardGetterType(mapper_continue_type, True, False)
+                    micro_ops[("set-wildcard",)] = ListWildcardSetterType(AnyType(), False, False)
                     micro_ops[("insert", 0)] = ListInsertType(0, AnyType(), False, False)
                     micro_ops[("delete-wildcard",)] = ListWildcardDeletterType(True)
                     micro_ops[("insert-wildcard",)] = ListWildcardInsertType(AnyType(), True, False)
 
-                    result = CompositeType(micro_ops)
+                    result = CompositeType(micro_ops, name="MapOp")
+                    break_types.add("value", result)
 
-            break_types.add("value", result)
+                break_types.merge(mapper_break_types)
 
         return break_types.build()
 
@@ -917,11 +947,22 @@ class MapOp(Opcode):
             if not isinstance(composite, RDHList):
                 raise FatalError() # Be more liberal
 
-            result = RDHList([
-                mapper.invoke(v, frame_manager) for v in composite
-            ])
+            with frame_manager.get_next_frame(self) as frame:
+                with frame_manager.capture("break") as breaker:
+                    results = []
+                    for v in composite:
+                        with frame_manager.capture("end") as ender:
+                            with frame_manager.capture("continue") as capturer:
+                                mapper.invoke(v, frame_manager)
+                            if capturer.value is not MISSING:
+                                results.append(capturer.value)
+                        if ender.value is not MISSING:
+                            break
+                    return frame.value(RDHList(results))
+                if breaker.value is not MISSING:
+                    return frame.value(breaker.value)
 
-            return frame.value(result)
+            raise FatalError()
 
 def BinaryOp(name, symbol, func, argument_type, result_type, number_op=None, cmp_op=None):
     class _BinaryOp(Opcode):
@@ -1026,9 +1067,9 @@ class TransformOp(Opcode):
                 with frame_manager.capture(self.input) as capture_result:
                     capture_result.attempt_capture_or_raise(*self.expression.jump(context, frame_manager))
 
-                return frame.unwind(self.output, capture_result.value, None)
+                return frame.unwind(self.output, capture_result.value, None, None)
             else:
-                return frame.unwind(self.output, NO_VALUE, None)
+                return frame.unwind(self.output, NO_VALUE, None, None)
         raise FatalError()
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
@@ -1118,7 +1159,7 @@ class ShiftOp(Opcode):
                     if not self.restart_type.is_copyable_from(get_type_of_value(restart_value)):
                         raise FatalError()
 
-                return frame.unwind("value", restart_value, None)
+                return frame.unwind("value", restart_value, None, None)
 
             value = evaluate(self.opcode, context, frame_manager)
 
@@ -1144,7 +1185,7 @@ class ResetOp(Opcode):
         return RDHObjectType({
             "value": Const(out_break_type),
             "continuation": Const(ClosedFunctionType(in_break_type, continuation_break_types))
-        })
+        }, name="ValueAndContinuation")
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
@@ -1423,6 +1464,8 @@ else:
 
 
 class PrepareOp(Opcode):
+    PREPARATION_ERROR = TypeErrorFactory("Prepare: preparation_error")
+
     def __init__(self, data, visitor):
         super(PrepareOp, self).__init__(data, visitor)
         self.code = enrich_opcode(data.code, visitor)
@@ -1438,6 +1481,8 @@ class PrepareOp(Opcode):
                 "value", AnyType()
             )
 
+        break_types.add("exception", self.PREPARATION_ERROR.get_type(), opcode=self)
+
         return break_types.build()
 
     def jump(self, context, frame_manager, immediate_context=None):
@@ -1449,7 +1494,10 @@ class PrepareOp(Opcode):
             immediate_context = immediate_context or {}
             immediate_context["suggested_outer_type"] = get_context_type(context)
 
-            function = prepare(function_data, context, frame_manager, immediate_context)
+            try:
+                function = prepare(function_data, context, frame_manager, immediate_context)
+            except PreparationException as e:
+                return frame.exception(self.PREPARATION_ERROR(exception=str(e)), opcode=self)
 
             return frame.value(function)
 
@@ -1522,27 +1570,27 @@ class StaticOp(Opcode):
         super(StaticOp, self).__init__(data, visitor)
         self.code = enrich_opcode(data.code, visitor)
         self.value = MISSING
-        self.mode = MISSING
 
     def lazy_initialize(self, context, frame_manager, immediate_context):
-        if self.value is MISSING and self.mode is MISSING:
-            with frame_manager.capture() as capture_result:
-                capture_result.attempt_capture_or_raise(*self.code.jump(context, frame_manager, immediate_context))
-
-            self.value = capture_result.value
-            self.mode = capture_result.caught_break_mode
+        if self.value is MISSING:
+            self.value = evaluate(self.code, context, frame_manager, immediate_context)
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
         self.lazy_initialize(context, frame_manager, immediate_context)
-        if self.value is not MISSING:
-            break_types.add(self.mode, get_type_of_value(self.value))
+
+        if isinstance(self.value, Composite):
+            type = create_reasonable_composite_type(self.value)
+        else:
+            type = get_type_of_value(self.value)
+
+        break_types.add("value", type)
         return break_types.build()
 
     def jump(self, context, frame_manager, immediate_context=None):
         with frame_manager.get_next_frame(self) as frame:
             self.lazy_initialize(context, frame_manager, immediate_context)
-            return frame.unwind(self.mode, self.value, None)
+            return frame.unwind("value", self.value, None, None)
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         if self.mode == "value":
@@ -1569,13 +1617,15 @@ class InvokeOp(Opcode):
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
 
+        immediate_context = {}
         argument_type, other_argument_break_types = get_expression_break_types(self.argument, context, frame_manager)
         if argument_type is not MISSING:
             argument_type = flatten_out_types(argument_type)
+            immediate_context["suggested_argument_type"] = argument_type
         break_types.merge(other_argument_break_types)
 
         function_type, other_function_break_types = get_expression_break_types(
-            self.function, context, frame_manager, immediate_context={ "suggested_argument_type": argument_type }
+            self.function, context, frame_manager, immediate_context=immediate_context
         )
         break_types.merge(other_function_break_types)
 
@@ -1603,9 +1653,9 @@ class InvokeOp(Opcode):
             argument = frame.step("argument", lambda: evaluate(self.argument, context, frame_manager))
 
             if not isinstance(function, RDHFunction):
-                return frame.exception(self.INVALID_FUNCTION_TYPE())
-            if self.invalid_argument_type_exception_is_possible and not function.get_type().argument_type.is_copyable_from(get_type_of_value(argument)):
-                return frame.exception(self.INVALID_ARGUMENT_TYPE()) 
+                return frame.exception(self.INVALID_FUNCTION_TYPE(), self)
+            if self.invalid_argument_type_exception_is_possible and not does_value_fit_through_type(argument, function.get_type().argument_type):
+                return frame.exception(self.INVALID_ARGUMENT_TYPE(), self) 
 
             return function.invoke(argument, frame_manager)
 

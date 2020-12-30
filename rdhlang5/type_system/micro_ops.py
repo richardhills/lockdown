@@ -5,7 +5,7 @@ class MicroOpType(object):
     def invoke(self, target_manager, *args, **kwargs):
         raise NotImplementedError(self)
 
-    def is_derivable_from(self, type):
+    def is_derivable_from(self, other_type):
         raise NotImplementedError(self)
 
     def is_bindable_to(self, target):
@@ -14,7 +14,7 @@ class MicroOpType(object):
     def conflicts_with(self, our_type, other_type):
         raise NotImplementedError(self)
 
-    def prepare_bind(self, target, key_filter):
+    def prepare_bind(self, target, key_filter, substitute_value):
         # Returns a tuple (nested_targets, nested_type)
         raise NotImplementedError(self)
 

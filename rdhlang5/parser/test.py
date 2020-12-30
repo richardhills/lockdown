@@ -786,7 +786,6 @@ class TestEuler(TestCase):
         self.assertEquals(result.value, 31875000)
 
     def test_14(self):
-        return miss_test()
         code = parse("""
             function() {
                 Dictionary<int : int> cachedResults = { 1: 1 };
@@ -806,11 +805,11 @@ class TestEuler(TestCase):
                     return calcedResult;
                 };
 
-                var results = for(var test in <list(range(1, 1000000))>) { continue testNumber(test); };
-                return max(results);
+                Tuple<int,int,int,int,int,int,int,int,int,int> results = for(var test in <list(range(1, 10))>) { continue testNumber(test); };
+                return max(|results|);
             }
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True)
+        result = bootstrap_function(code, check_safe_exit=True, print_ast=True)
         self.assertEquals(result.value, 837799)
 
 

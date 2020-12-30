@@ -106,12 +106,12 @@ class ObjectWildcardGetterType(MicroOpType):
             return ([], None)
         return (target._values(), self.value_type)
 
-    def clone(self, value_type=MISSING, key_error=MISSING):
+    def clone(self, value_type=MISSING, key_error=MISSING, type_error=MISSING):
         return ObjectWildcardGetterType(
             self.key_type,
             default(value_type, self.value_type),
             default(key_error, self.key_error),
-            self.type_error
+            default(type_error, self.type_error)
         )
 
     def merge(self, other_micro_op_type):
@@ -299,8 +299,13 @@ class ObjectWildcardSetterType(MicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
 
-    def clone(self, value_type=None):
-        return ObjectWildcardSetterType(self.key_type, value_type, self.key_error, self.type_error)
+    def clone(self, value_type=MISSING, key_error=MISSING, type_error=MISSING):
+        return ObjectWildcardSetterType(
+            self.key_type,
+            default(value_type, self.value_type),
+            default(key_error, self.key_error),
+            default(type_error, self.type_error)
+        )
 
     def merge(self, other_micro_op_type):
         return ObjectWildcardSetterType(
@@ -549,27 +554,30 @@ def RDHObjectType(properties=None, wildcard_key_type=None, wildcard_value_type=N
 
 #        micro_ops[("get", "get")] = BuiltInFunctionGetterType(ObjectGetFunctionType(micro_ops[("get-wildcard",)]))
 
+    if "name" not in kwargs:
+        kwargs["name"] = "RDHObjectType"
+
     return CompositeType(micro_ops, **kwargs)
 
 class PythonObjectType(CompositeType):
-    def __init__(self):
+    def __init__(self, **kwargs):
         micro_ops = {}
 
         micro_ops[("get-wildcard",)] = ObjectWildcardGetterType(StringType(), OneOfType([ self, AnyType() ]), True, False)
         micro_ops[("set-wildcard",)] = ObjectWildcardSetterType(StringType(), OneOfType([ self, AnyType() ]), False, False)
         micro_ops[("delete-wildcard",)] = ObjectWildcardDeletterType(True)
 
-        super(PythonObjectType, self).__init__(micro_ops)
+        super(PythonObjectType, self).__init__(micro_ops, **kwargs)
 
 class DefaultDictType(CompositeType):
-    def __init__(self, type):
+    def __init__(self, type, **kwargs):
         micro_ops = {}
 
         micro_ops[("get-wildcard",)] = ObjectWildcardGetterType(StringType(), type, False, False)
         micro_ops[("set-wildcard",)] = ObjectWildcardSetterType(StringType(), type, False, False)
         micro_ops[("delete-wildcard",)] = ObjectWildcardDeletterType(False)
 
-        super(DefaultDictType, self).__init__(micro_ops)
+        super(DefaultDictType, self).__init__(micro_ops, **kwargs)
 
 class RDHObject(Composite, object):
     def __init__(self, initial_data=None, default_factory=None, is_sparse=True, bind=None, debug_reason=None):
