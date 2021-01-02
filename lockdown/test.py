@@ -5,7 +5,7 @@ import argparse
 import sys
 import unittest
 
-from rdhlang5.utils import set_debug, set_runtime_type_information, profile
+from lockdown.utils import set_debug, set_runtime_type_information, profile
 
 
 parser = argparse.ArgumentParser()
@@ -20,12 +20,12 @@ set_debug(args.d)
 set_runtime_type_information(args.t)
 
 if __name__ == "__main__":
-    from rdhlang5.executor import test as executor_tests
-    from rdhlang5.executor.test import *
-    from rdhlang5.parser import test as parser_tests
-    from rdhlang5.parser.test import *
-    from rdhlang5.type_system import test as type_system_tests
-    from rdhlang5.type_system.test import *
+    from lockdown.executor import test as executor_tests
+    from lockdown.executor.test import *
+    from lockdown.parser import test as parser_tests
+    from lockdown.parser.test import *
+    from lockdown.type_system import test as type_system_tests
+    from lockdown.type_system.test import *
 
     if args.p:
         with profile(args.p):

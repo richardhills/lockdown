@@ -3,8 +3,8 @@ import gc
 import inspect
 import types
 
-from rdhlang5.type_system.exceptions import FatalError
-from rdhlang5.utils import runtime_type_information, is_debug
+from lockdown.type_system.exceptions import FatalError
+from lockdown.utils import runtime_type_information, is_debug
 
 
 def proxy0(data):

@@ -1,7 +1,7 @@
 from abc import abstractmethod
 
-from rdhlang5.type_system.exceptions import FatalError
-from rdhlang5.utils import InternalMarker
+from lockdown.type_system.exceptions import FatalError
+from lockdown.utils import InternalMarker
 
 
 class AllowedValuesNotAvailable(Exception):

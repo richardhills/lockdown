@@ -1,13 +1,13 @@
-from rdhlang5.type_system.composites import CompositeType
-from rdhlang5.type_system.core_types import OneOfType, AnyType, StringType
-from rdhlang5.type_system.dict_types import RDHDictType, DictWildcardGetterType, \
+from lockdown.type_system.composites import CompositeType
+from lockdown.type_system.core_types import OneOfType, AnyType, StringType
+from lockdown.type_system.dict_types import RDHDictType, DictWildcardGetterType, \
     DictWildcardSetterType, DictWildcardDeletterType
-from rdhlang5.type_system.list_types import RDHListType, ListWildcardGetterType, \
+from lockdown.type_system.list_types import RDHListType, ListWildcardGetterType, \
     ListWildcardSetterType, ListInsertType, ListWildcardDeletterType, \
     ListWildcardInsertType
-from rdhlang5.type_system.object_types import RDHObjectType, \
+from lockdown.type_system.object_types import RDHObjectType, \
     ObjectWildcardGetterType, ObjectWildcardSetterType
-from rdhlang5.utils import runtime_type_information
+from lockdown.utils import runtime_type_information
 
 
 READONLY_DEFAULT_OBJECT_TYPE = RDHObjectType(name="readonly-default-object-type")

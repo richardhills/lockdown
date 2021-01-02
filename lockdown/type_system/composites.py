@@ -3,15 +3,15 @@ from contextlib import contextmanager
 import threading
 import weakref
 
-from rdhlang5.type_system.core_types import Type, unwrap_types, OneOfType, \
+from lockdown.type_system.core_types import Type, unwrap_types, OneOfType, \
     AnyType, merge_types
-from rdhlang5.type_system.exceptions import FatalError, IsNotCompositeType, \
+from lockdown.type_system.exceptions import FatalError, IsNotCompositeType, \
     CompositeTypeIncompatibleWithTarget, CompositeTypeIsInconsistent, \
     DanglingInferredType
-from rdhlang5.type_system.managers import get_manager, get_type_of_value
-from rdhlang5.type_system.micro_ops import merge_composite_types
-from rdhlang5.utils import MISSING
-import rdhlang5
+from lockdown.type_system.managers import get_manager, get_type_of_value
+from lockdown.type_system.micro_ops import merge_composite_types
+from lockdown.utils import MISSING
+import lockdown
 
 
 class InferredType(Type):
@@ -165,7 +165,7 @@ class CompositeObjectManager(object):
 #         self.child_value_type_references = defaultdict(lambda: defaultdict(list))
         self.on_gc_callback = on_gc_callback
 
-        from rdhlang5.type_system.default_composite_types import EMPTY_COMPOSITE_TYPE
+        from lockdown.type_system.default_composite_types import EMPTY_COMPOSITE_TYPE
 
         self.cached_effective_composite_type = EMPTY_COMPOSITE_TYPE
 
@@ -500,8 +500,8 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
 
 def create_reasonable_composite_type(obj):
     result = CompositeType({}, name="reasonable list type")
-    from rdhlang5.type_system.list_types import RDHList
-    from rdhlang5.type_system.list_types import ListGetterType,\
+    from lockdown.type_system.list_types import RDHList
+    from lockdown.type_system.list_types import ListGetterType,\
     ListWildcardGetterType
     if isinstance(obj, RDHList):
         for key in obj._keys():

@@ -1,4 +1,4 @@
-from rdhlang5.executor.ast_utils import compile_expression
+from lockdown.executor.ast_utils import compile_expression
 
 
 class MicroOpType(object):
@@ -35,11 +35,11 @@ class MicroOpType(object):
         )
 
 def merge_composite_types(types, name=None):
-    from rdhlang5.type_system.composites import CompositeType
+    from lockdown.type_system.composites import CompositeType
 
     types_with_opcodes = [t for t in types if t.micro_op_types]
 
-    from rdhlang5.type_system.default_composite_types import EMPTY_COMPOSITE_TYPE
+    from lockdown.type_system.default_composite_types import EMPTY_COMPOSITE_TYPE
 
     if len(types_with_opcodes) == 0:
         return EMPTY_COMPOSITE_TYPE

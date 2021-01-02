@@ -7,7 +7,7 @@ from antlr4.CommonTokenStream import CommonTokenStream
 from antlr4.InputStream import InputStream
 from antlr4.error.ErrorListener import ConsoleErrorListener
 
-from rdhlang5.executor.raw_code_factories import function_lit, nop, comma_op, \
+from lockdown.executor.raw_code_factories import function_lit, nop, comma_op, \
     literal_op, dereference_op, unbound_dereference, addition_op, \
     transform_op, multiplication_op, division_op, subtraction_op, \
     object_type, is_opcode, object_template_op, infer_all, \
@@ -17,16 +17,16 @@ from rdhlang5.executor.raw_code_factories import function_lit, nop, comma_op, \
     local_function, reset_op, inferred_type, prepare_function_lit, transform, \
     continue_op, check_is_opcode, is_op, function_type, dict_template_op, \
     composite_type, static_op, map_op, insert_op, prepared_function
-from rdhlang5.parser.grammar.langLexer import langLexer
-from rdhlang5.parser.grammar.langParser import langParser
-from rdhlang5.parser.grammar.langVisitor import langVisitor
-from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE,\
+from lockdown.parser.grammar.langLexer import langLexer
+from lockdown.parser.grammar.langParser import langParser
+from lockdown.parser.grammar.langVisitor import langVisitor
+from lockdown.type_system.default_composite_types import DEFAULT_OBJECT_TYPE,\
     READONLY_DEFAULT_DICT_TYPE, READONLY_DEFAULT_OBJECT_TYPE
-from rdhlang5.type_system.dict_types import RDHDict
-from rdhlang5.type_system.exceptions import FatalError
-from rdhlang5.type_system.managers import get_manager
-from rdhlang5.type_system.object_types import RDHObject
-from rdhlang5.utils import MISSING, default, spread_dict
+from lockdown.type_system.dict_types import RDHDict
+from lockdown.type_system.exceptions import FatalError
+from lockdown.type_system.managers import get_manager
+from lockdown.type_system.object_types import RDHObject
+from lockdown.utils import MISSING, default, spread_dict
 
 
 class RDHLang5Visitor(langVisitor):

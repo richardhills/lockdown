@@ -48,10 +48,10 @@ def micro_op_repr(opname, key, key_error, type=None, type_error=None):
         return "{}.{}{}".format(opname, key, "!" if key_error else "")
 
 def print_code(ast):
-    from rdhlang5.type_system.dict_types import RDHDict
-    from rdhlang5.type_system.exceptions import FatalError
-    from rdhlang5.type_system.list_types import RDHList
-    from rdhlang5.type_system.object_types import RDHObject
+    from lockdown.type_system.dict_types import RDHDict
+    from lockdown.type_system.exceptions import FatalError
+    from lockdown.type_system.list_types import RDHList
+    from lockdown.type_system.object_types import RDHObject
 
     class RDHObjectEncoder(JSONEncoder):
         def default(self, o):

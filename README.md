@@ -8,7 +8,7 @@ It means you can write quick prototype code that looks like Javascript, then ask
 
 ## How does it do this?
 
-*Structural Typing*, *Gradual Typing*, *flow control verification* and *flow control inference*.
+*Structural Typing*, *Optional Typing*, *flow control verification* and *flow control inference*.
 
 In many Nominally Typed languages (such as Java, C#, etc), we are used to seeing classes and functions like this:
 

@@ -1,17 +1,17 @@
 from _abcoll import MutableSequence
 from collections import OrderedDict
 
-from rdhlang5.type_system.composites import CompositeType, \
+from lockdown.type_system.composites import CompositeType, \
     Composite, unbind_key, bind_key, can_add_composite_type_with_filter,\
     does_value_fit_through_type
-from rdhlang5.type_system.core_types import merge_types, Const, NoValueType, \
+from lockdown.type_system.core_types import merge_types, Const, NoValueType, \
     IntegerType, Type
-from rdhlang5.type_system.exceptions import FatalError, raise_if_safe, \
+from lockdown.type_system.exceptions import FatalError, raise_if_safe, \
     InvalidDereferenceKey, InvalidDereferenceType, InvalidAssignmentKey, \
     InvalidAssignmentType, MissingMicroOp
-from rdhlang5.type_system.managers import get_manager, get_type_of_value
-from rdhlang5.type_system.micro_ops import MicroOpType
-from rdhlang5.utils import MISSING, is_debug, micro_op_repr, default
+from lockdown.type_system.managers import get_manager, get_type_of_value
+from lockdown.type_system.micro_ops import MicroOpType
+from lockdown.utils import MISSING, is_debug, micro_op_repr, default
 
 
 class ListMicroOpType(MicroOpType):

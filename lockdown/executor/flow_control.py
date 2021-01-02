@@ -4,11 +4,11 @@ from __future__ import unicode_literals
 from __builtin__ import True
 from _collections import defaultdict
 
-from rdhlang5.type_system.composites import is_type_bindable_to_value, \
+from lockdown.type_system.composites import is_type_bindable_to_value, \
     CompositeType, does_value_fit_through_type
-from rdhlang5.type_system.core_types import Type
-from rdhlang5.type_system.exceptions import FatalError
-from rdhlang5.utils import MISSING, InternalMarker, is_debug
+from lockdown.type_system.core_types import Type
+from lockdown.type_system.exceptions import FatalError
+from lockdown.utils import MISSING, InternalMarker, is_debug
 
 
 class BreakException(Exception):
@@ -101,7 +101,7 @@ class Capturer(object):
             raise BreakException(mode, value, opcode, restart_type)
 
     def create_continuation(self, callback, break_types):
-        from rdhlang5.executor.function import Continuation
+        from lockdown.executor.function import Continuation
  
         return Continuation(self.frame_manager, self.caught_frames, callback, self.caught_restart_type, break_types)
 

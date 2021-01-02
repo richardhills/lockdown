@@ -3,21 +3,21 @@ from __future__ import unicode_literals
 
 from collections import OrderedDict
 
-from rdhlang5.executor.exceptions import PreparationException
-from rdhlang5.executor.function_type import enrich_break_type, \
+from lockdown.executor.exceptions import PreparationException
+from lockdown.executor.function_type import enrich_break_type, \
     ClosedFunctionType
-from rdhlang5.type_system.composites import InferredType, CompositeType
-from rdhlang5.type_system.core_types import UnitType, OneOfType, Const, AnyType, \
+from lockdown.type_system.composites import InferredType, CompositeType
+from lockdown.type_system.core_types import UnitType, OneOfType, Const, AnyType, \
     IntegerType, BooleanType, NoValueType, StringType
-from rdhlang5.type_system.default_composite_types import DEFAULT_DICT_TYPE
-from rdhlang5.type_system.dict_types import RDHDict, DictGetterType, \
+from lockdown.type_system.default_composite_types import DEFAULT_DICT_TYPE
+from lockdown.type_system.dict_types import RDHDict, DictGetterType, \
     DictSetterType, DictDeletterType, DictWildcardGetterType, \
     DictWildcardSetterType, DictWildcardDeletterType
-from rdhlang5.type_system.exceptions import FatalError
-from rdhlang5.type_system.list_types import RDHListType, RDHList, ListGetterType, \
+from lockdown.type_system.exceptions import FatalError
+from lockdown.type_system.list_types import RDHListType, RDHList, ListGetterType, \
     ListSetterType, ListDeletterType, ListWildcardGetterType, \
     ListWildcardSetterType, ListWildcardDeletterType
-from rdhlang5.type_system.object_types import RDHObjectType, RDHObject, \
+from lockdown.type_system.object_types import RDHObjectType, RDHObject, \
     ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
     ObjectWildcardSetterType, ObjectDeletterType, ObjectWildcardDeletterType
 
@@ -142,7 +142,7 @@ TYPES = {
 
 
 def enrich_type(data):
-    from rdhlang5.type_system.managers import get_manager
+    from lockdown.type_system.managers import get_manager
     if not isinstance(data, RDHObject):
         raise PreparationException("Unknown type data {}, {}".format(data, type(data)))
     if not hasattr(data, "type"):

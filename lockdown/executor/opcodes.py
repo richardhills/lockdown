@@ -5,34 +5,34 @@ from abc import abstractmethod
 import ast
 
 from log import logger
-from rdhlang5.executor.ast_utils import compile_expression, compile_statement, \
+from lockdown.executor.ast_utils import compile_expression, compile_statement, \
     unwrap_modules, wrap_as_statement
-from rdhlang5.executor.exceptions import PreparationException
-from rdhlang5.executor.flow_control import BreakTypesFactory, BreakException
-from rdhlang5.executor.function_type import OpenFunctionType, ClosedFunctionType
-from rdhlang5.executor.type_factories import enrich_type
-from rdhlang5.type_system.composites import CompositeType, temporary_bind, \
+from lockdown.executor.exceptions import PreparationException
+from lockdown.executor.flow_control import BreakTypesFactory, BreakException
+from lockdown.executor.function_type import OpenFunctionType, ClosedFunctionType
+from lockdown.executor.type_factories import enrich_type
+from lockdown.type_system.composites import CompositeType, temporary_bind, \
     does_value_fit_through_type, is_type_bindable_to_value, Composite, \
     create_reasonable_composite_type
-from rdhlang5.type_system.core_types import AnyType, Type, merge_types, Const, \
+from lockdown.type_system.core_types import AnyType, Type, merge_types, Const, \
     UnitType, NoValueType, AllowedValuesNotAvailable, unwrap_types, IntegerType, \
     BooleanType, remove_type
-from rdhlang5.type_system.default_composite_types import rich_composite_type, \
+from lockdown.type_system.default_composite_types import rich_composite_type, \
     readonly_rich_composite_type, \
     READONLY_DEFAULT_OBJECT_TYPE
-from rdhlang5.type_system.dict_types import RDHDict, DictGetterType, \
+from lockdown.type_system.dict_types import RDHDict, DictGetterType, \
     DictSetterType, DictWildcardGetterType, DictWildcardSetterType, RDHDictType
-from rdhlang5.type_system.exceptions import FatalError, InvalidDereferenceType, \
+from lockdown.type_system.exceptions import FatalError, InvalidDereferenceType, \
     InvalidDereferenceKey, InvalidAssignmentType, InvalidAssignmentKey
-from rdhlang5.type_system.list_types import RDHList, ListGetterType, \
+from lockdown.type_system.list_types import RDHList, ListGetterType, \
     ListSetterType, ListWildcardGetterType, ListWildcardSetterType, \
     ListWildcardDeletterType, ListInsertType, ListWildcardInsertType, \
     RDHListType
-from rdhlang5.type_system.managers import get_type_of_value, get_manager
-from rdhlang5.type_system.object_types import RDHObject, RDHObjectType, \
+from lockdown.type_system.managers import get_type_of_value, get_manager
+from lockdown.type_system.object_types import RDHObject, RDHObjectType, \
     ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
     ObjectWildcardSetterType
-from rdhlang5.utils import MISSING, NO_VALUE, is_debug, \
+from lockdown.utils import MISSING, NO_VALUE, is_debug, \
     runtime_type_information
 
 
@@ -1249,7 +1249,7 @@ class ResetOp(Opcode):
         return break_types.build()
 
     def jump(self, context, frame_manager, immediate_context=None):
-        from rdhlang5.executor.function import Continuation
+        from lockdown.executor.function import Continuation
 
         with frame_manager.get_next_frame(self) as frame:
             if self.opcode:
@@ -1508,7 +1508,7 @@ class PrepareOp(Opcode):
         with frame_manager.get_next_frame(self) as frame:
             function_data = evaluate(self.code, context, frame_manager)
 
-            from rdhlang5.executor.function import prepare
+            from lockdown.executor.function import prepare
 
             immediate_context = immediate_context or {}
             immediate_context["suggested_outer_type"] = get_context_type(context)
@@ -1565,7 +1565,7 @@ class CloseOp(Opcode):
             open_function = frame.step("function", lambda: evaluate(self.function, context, frame_manager, immediate_context))
             outer_context = frame.step("outer", lambda: evaluate(self.outer_context, context, frame_manager, immediate_context))
 
-            from rdhlang5.executor.function import OpenFunction
+            from lockdown.executor.function import OpenFunction
 
             if not isinstance(open_function, OpenFunction):
                 return frame.exception(self.INVALID_FUNCTION())
@@ -1665,7 +1665,7 @@ class InvokeOp(Opcode):
 
     def jump(self, context, frame_manager, immediate_context=None):
         logger.debug("Invoke:jump")
-        from rdhlang5.executor.function import RDHFunction
+        from lockdown.executor.function import RDHFunction
 
         with frame_manager.get_next_frame(self) as frame:
             function = frame.step("function", lambda: evaluate(self.function, context, frame_manager))
@@ -1681,7 +1681,7 @@ class InvokeOp(Opcode):
         raise FatalError()
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
-        from rdhlang5.executor.function import OpenFunction
+        from lockdown.executor.function import OpenFunction
         if (isinstance(self.function, CloseOp)
             and isinstance(self.function.function, StaticOp)
             and isinstance(self.function.function.value, OpenFunction)

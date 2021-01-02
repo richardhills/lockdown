@@ -4,9 +4,9 @@ from __future__ import unicode_literals
 from unittest import main
 from unittest.case import TestCase
 
-from rdhlang5.executor.bootstrap import bootstrap_function
-from rdhlang5.executor.function import prepare
-from rdhlang5.executor.raw_code_factories import function_lit, no_value_type, \
+from lockdown.executor.bootstrap import bootstrap_function
+from lockdown.executor.function import prepare
+from lockdown.executor.raw_code_factories import function_lit, no_value_type, \
     build_break_types, int_type, literal_op, return_op, addition_op, \
     dereference_op, context_op, comma_op, any_type, object_type, \
     object_template_op, unit_type, assignment_op, condition_op, loop_op, \
@@ -14,14 +14,14 @@ from rdhlang5.executor.raw_code_factories import function_lit, no_value_type, \
     unbound_dereference, match_op, dereference, prepared_function, one_of_type, \
     string_type, bool_type, try_catch_op, throw_op, const_string_type, \
     function_type, close_op, shift_op
-from rdhlang5.type_system.core_types import IntegerType, StringType
-from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
+from lockdown.type_system.core_types import IntegerType, StringType
+from lockdown.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     rich_composite_type
-from rdhlang5.type_system.list_types import RDHList, RDHListType
-from rdhlang5.type_system.managers import get_manager
-from rdhlang5.type_system.object_types import RDHObject, RDHObjectType
-from rdhlang5.utils import NO_VALUE, set_debug
-from rdhlang5.executor.flow_control import FrameManager
+from lockdown.type_system.list_types import RDHList, RDHListType
+from lockdown.type_system.managers import get_manager
+from lockdown.type_system.object_types import RDHObject, RDHObjectType
+from lockdown.utils import NO_VALUE, set_debug
+from lockdown.executor.flow_control import FrameManager
 
 
 class TestPreparedFunction(TestCase):

@@ -1,23 +1,23 @@
 from unittest import main
 from unittest.case import TestCase
 
-from rdhlang5.type_system.composites import CompositeType, InferredType, \
+from lockdown.type_system.composites import CompositeType, InferredType, \
     check_dangling_inferred_types, prepare_lhs_type
-from rdhlang5.type_system.core_types import IntegerType, UnitType, StringType, \
+from lockdown.type_system.core_types import IntegerType, UnitType, StringType, \
     AnyType, Const, OneOfType, BooleanType, merge_types
-from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
+from lockdown.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     rich_composite_type
-from rdhlang5.type_system.dict_types import DictGetterType, \
+from lockdown.type_system.dict_types import DictGetterType, \
     RDHDict
-from rdhlang5.type_system.exceptions import CompositeTypeIncompatibleWithTarget, \
+from lockdown.type_system.exceptions import CompositeTypeIncompatibleWithTarget, \
     CompositeTypeIsInconsistent, FatalError, DanglingInferredType
-from rdhlang5.type_system.list_types import RDHListType, RDHList, SPARSE_ELEMENT, \
+from lockdown.type_system.list_types import RDHListType, RDHList, SPARSE_ELEMENT, \
     ListGetterType, ListSetterType, ListInsertType, ListDeletterType
-from rdhlang5.type_system.managers import get_manager, get_type_of_value
-from rdhlang5.type_system.object_types import ObjectGetterType, ObjectSetterType, \
+from lockdown.type_system.managers import get_manager, get_type_of_value
+from lockdown.type_system.object_types import ObjectGetterType, ObjectSetterType, \
     ObjectDeletterType, RDHObjectType, PythonObjectType, RDHObject, \
     DefaultDictType, ObjectWildcardGetterType, ObjectWildcardSetterType
-from rdhlang5.utils import set_debug
+from lockdown.utils import set_debug
 
 
 class TestObject(RDHObject):
@@ -848,7 +848,7 @@ class TestListObjects(TestCase):
 class TestTypeSystemMisc(TestCase):
     # Tests for random things that were broken
     def test_misc1(self):
-        # Came up testing rdhlang5 local variable binding
+        # Came up testing lockdown local variable binding
         RDHObject({
             "local": RDHList([ 39, 3 ]),
             "types": RDHObject()

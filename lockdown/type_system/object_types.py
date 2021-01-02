@@ -1,15 +1,15 @@
-from rdhlang5.executor.ast_utils import compile_statement, compile_expression
-from rdhlang5.type_system.composites import CompositeType, \
+from lockdown.executor.ast_utils import compile_statement, compile_expression
+from lockdown.type_system.composites import CompositeType, \
     Composite, unbind_key, bind_key, can_add_composite_type_with_filter,\
     does_value_fit_through_type
-from rdhlang5.type_system.core_types import merge_types, Type, Const, OneOfType, \
+from lockdown.type_system.core_types import merge_types, Type, Const, OneOfType, \
     AnyType, StringType, NoValueType
-from rdhlang5.type_system.exceptions import FatalError, raise_if_safe, \
+from lockdown.type_system.exceptions import FatalError, raise_if_safe, \
     InvalidDereferenceKey, InvalidDereferenceType, \
     InvalidAssignmentType, MissingMicroOp, InvalidAssignmentKey
-from rdhlang5.type_system.managers import get_manager, get_type_of_value
-from rdhlang5.type_system.micro_ops import MicroOpType
-from rdhlang5.utils import is_debug, MISSING, micro_op_repr, \
+from lockdown.type_system.managers import get_manager, get_type_of_value
+from lockdown.type_system.micro_ops import MicroOpType
+from lockdown.utils import is_debug, MISSING, micro_op_repr, \
     runtime_type_information, default
 
 

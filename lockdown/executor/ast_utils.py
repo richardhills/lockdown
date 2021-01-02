@@ -1,8 +1,8 @@
 import ast
 from types import FunctionType, MethodType
 
-from rdhlang5.type_system.exceptions import FatalError
-from rdhlang5.utils import spread_dict, NO_VALUE
+from lockdown.type_system.exceptions import FatalError
+from lockdown.utils import spread_dict, NO_VALUE
 
 
 def extract_single_statement(module):
@@ -115,9 +115,9 @@ def compile_ast_function_def(function_creator_ast, open_function_id, dependencie
     return function_creation_context[open_function_id]
 
 def default_globals():
-    from rdhlang5.executor.flow_control import BreakException
-    from rdhlang5.type_system.managers import get_manager
-    from rdhlang5.type_system.object_types import RDHObject
+    from lockdown.executor.flow_control import BreakException
+    from lockdown.type_system.managers import get_manager
+    from lockdown.type_system.object_types import RDHObject
     return {
         "__builtins": None,
         "RDHObject": RDHObject,

@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-from rdhlang5.type_system.core_types import Type
-from rdhlang5.type_system.dict_types import RDHDict
-from rdhlang5.type_system.exceptions import FatalError
+from lockdown.type_system.core_types import Type
+from lockdown.type_system.dict_types import RDHDict
+from lockdown.type_system.exceptions import FatalError
 
 
 def enrich_break_type(data):
-    from rdhlang5.executor.type_factories import enrich_type
+    from lockdown.executor.type_factories import enrich_type
     result = {
         "out": enrich_type(data["out"])
     }

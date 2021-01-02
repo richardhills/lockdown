@@ -4,35 +4,35 @@ from __future__ import unicode_literals
 import ast
 
 from log import logger
-from rdhlang5.executor.ast_utils import unwrap_expr, \
+from lockdown.executor.ast_utils import unwrap_expr, \
     build_and_compile_ast_function, compile_module, compile_statement, \
     DependencyBuilder, compile_function, compile_ast_function_def, \
     get_dependency_key
-from rdhlang5.executor.exceptions import PreparationException
-from rdhlang5.executor.flow_control import BreakTypesFactory, FrameManager, \
+from lockdown.executor.exceptions import PreparationException
+from lockdown.executor.flow_control import BreakTypesFactory, FrameManager, \
     is_restartable
-from rdhlang5.executor.function_type import enrich_break_type, OpenFunctionType, \
+from lockdown.executor.function_type import enrich_break_type, OpenFunctionType, \
     ClosedFunctionType
-from rdhlang5.executor.opcodes import enrich_opcode, get_context_type, evaluate, \
+from lockdown.executor.opcodes import enrich_opcode, get_context_type, evaluate, \
     get_expression_break_types, flatten_out_types, TransformOp
-from rdhlang5.executor.raw_code_factories import dynamic_dereference_op, \
+from lockdown.executor.raw_code_factories import dynamic_dereference_op, \
     static_op, match_op, prepared_function, inferred_type
-from rdhlang5.executor.type_factories import enrich_type
-from rdhlang5.type_system.composites import prepare_lhs_type, \
+from lockdown.executor.type_factories import enrich_type
+from lockdown.type_system.composites import prepare_lhs_type, \
     check_dangling_inferred_types, CompositeType, InferredType, \
     is_type_bindable_to_value
-from rdhlang5.type_system.core_types import Type, NoValueType, IntegerType, \
+from lockdown.type_system.core_types import Type, NoValueType, IntegerType, \
     AnyType
-from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
+from lockdown.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     DEFAULT_DICT_TYPE, READONLY_DEFAULT_OBJECT_TYPE, \
     readonly_rich_composite_type
-from rdhlang5.type_system.dict_types import RDHDict
-from rdhlang5.type_system.exceptions import FatalError, InvalidInferredType,\
+from lockdown.type_system.dict_types import RDHDict
+from lockdown.type_system.exceptions import FatalError, InvalidInferredType,\
     DanglingInferredType
-from rdhlang5.type_system.list_types import RDHList
-from rdhlang5.type_system.managers import get_manager, get_type_of_value
-from rdhlang5.type_system.object_types import RDHObject, RDHObjectType
-from rdhlang5.utils import MISSING, is_debug, runtime_type_information, raise_from, \
+from lockdown.type_system.list_types import RDHList
+from lockdown.type_system.managers import get_manager, get_type_of_value
+from lockdown.type_system.object_types import RDHObject, RDHObjectType
+from lockdown.utils import MISSING, is_debug, runtime_type_information, raise_from, \
     spread_dict
 
 
@@ -245,7 +245,7 @@ class UnboundDereferenceBinder(object):
         self.context_type = get_context_type(self.context)
 
     def search_context_type_area_for_reference(self, reference, area, context_type, prepend_context, debug_info):
-        from rdhlang5.executor.raw_code_factories import dereference_op, assignment_op, \
+        from lockdown.executor.raw_code_factories import dereference_op, assignment_op, \
             literal_op, dereference, context_op
 
         area_getter = context_type.micro_op_types.get(("get", area), None)
@@ -259,7 +259,7 @@ class UnboundDereferenceBinder(object):
             return dereference(prepend_context, area, **debug_info)
 
     def search_context_type_for_reference(self, reference, context_type, prepend_context, debug_info):
-        from rdhlang5.executor.raw_code_factories import dereference_op, assignment_op, \
+        from lockdown.executor.raw_code_factories import dereference_op, assignment_op, \
             literal_op, dereference, context_op
 
         argument_search = self.search_context_type_area_for_reference(reference, "argument", context_type, prepend_context, debug_info)
@@ -276,7 +276,7 @@ class UnboundDereferenceBinder(object):
                 return outer_search
 
     def search_statics_for_reference(self, reference, context, prepend_context, debug_info):
-        from rdhlang5.executor.raw_code_factories import dereference_op, assignment_op, \
+        from lockdown.executor.raw_code_factories import dereference_op, assignment_op, \
             literal_op, dereference, context_op
 
         static = getattr(context, "static", None)
@@ -290,7 +290,7 @@ class UnboundDereferenceBinder(object):
                 return prepare_search
 
     def search_for_reference(self, reference, debug_info):
-        from rdhlang5.executor.raw_code_factories import dereference_op, assignment_op, \
+        from lockdown.executor.raw_code_factories import dereference_op, assignment_op, \
             literal_op, dereference, context_op
 
         if not isinstance(reference, basestring):
@@ -309,7 +309,7 @@ class UnboundDereferenceBinder(object):
         return None, False
 
     def __call__(self, expression):
-        from rdhlang5.executor.raw_code_factories import dereference_op, assignment_op, \
+        from lockdown.executor.raw_code_factories import dereference_op, assignment_op, \
             literal_op, dereference, context_op
 
         debug_info = get_debug_info_from_opcode(expression)

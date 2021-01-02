@@ -2,22 +2,22 @@
 from __future__ import unicode_literals
 from time import time
 
-from rdhlang5.executor.flow_control import FrameManager, \
+from lockdown.executor.flow_control import FrameManager, \
     break_exception_to_string
-from rdhlang5.executor.function import prepare
-from rdhlang5.executor.opcodes import get_context_type
-from rdhlang5.executor.raw_code_factories import inferred_type, function_lit, \
+from lockdown.executor.function import prepare
+from lockdown.executor.opcodes import get_context_type
+from lockdown.executor.raw_code_factories import inferred_type, function_lit, \
     int_type, infer_all, dereference, loop_op, comma_op, condition_op, \
     binary_integer_op, nop, list_type, \
     function_type, list_template_op, insert_op, transform_op, literal_op, \
     invoke_op, object_template_op, prepared_function, no_value_type, \
     assignment_op, dict_template_op, addition_op, reset_op, shift_op, \
     transform, local_function, map_op
-from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
+from lockdown.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     READONLY_DEFAULT_OBJECT_TYPE
-from rdhlang5.type_system.managers import get_manager
-from rdhlang5.type_system.object_types import RDHObject
-from rdhlang5.utils import NO_VALUE, print_code, MISSING
+from lockdown.type_system.managers import get_manager
+from lockdown.type_system.object_types import RDHObject
+from lockdown.utils import NO_VALUE, print_code, MISSING
 
 
 class ObjectDictWrapper(object):

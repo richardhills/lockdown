@@ -1,5 +1,5 @@
 import logging
 
-logger = logging.getLogger("rdhlang5")
+logger = logging.getLogger("lockdown")
 logging.basicConfig()
 logger.setLevel(logging.INFO)

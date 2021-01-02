@@ -4,14 +4,14 @@ from __future__ import unicode_literals
 from time import time
 from unittest.case import TestCase
 
-from rdhlang5.executor.bootstrap import bootstrap_function
-from rdhlang5.executor.exceptions import PreparationException
-from rdhlang5.parser.parser import parse
-from rdhlang5.testing import miss_test
-from rdhlang5.type_system.default_composite_types import DEFAULT_LIST_TYPE
-from rdhlang5.type_system.list_types import RDHList
-from rdhlang5.type_system.managers import get_manager
-from rdhlang5.type_system.object_types import RDHObject
+from lockdown.executor.bootstrap import bootstrap_function
+from lockdown.executor.exceptions import PreparationException
+from lockdown.parser.parser import parse
+from lockdown.testing import miss_test
+from lockdown.type_system.default_composite_types import DEFAULT_LIST_TYPE
+from lockdown.type_system.list_types import RDHList
+from lockdown.type_system.managers import get_manager
+from lockdown.type_system.object_types import RDHObject
 
 
 class TestJSONParsing(TestCase):

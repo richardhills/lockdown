@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-from rdhlang5.type_system.dict_types import RDHDict
-from rdhlang5.type_system.exceptions import FatalError
-from rdhlang5.type_system.list_types import RDHList
-from rdhlang5.type_system.object_types import RDHObject
-from rdhlang5.utils import spread_dict
+from lockdown.type_system.dict_types import RDHDict
+from lockdown.type_system.exceptions import FatalError
+from lockdown.type_system.list_types import RDHList
+from lockdown.type_system.object_types import RDHObject
+from lockdown.utils import spread_dict
 
 
 def is_opcode(data):

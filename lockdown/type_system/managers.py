@@ -1,9 +1,9 @@
 import weakref
 
-from rdhlang5.type_system.core_types import Type, UnitType, NoValueType
-from rdhlang5.type_system.exceptions import FatalError, InvalidData
-from rdhlang5.type_system.runtime import replace_all_refs
-from rdhlang5.utils import InternalMarker, NO_VALUE, is_debug,\
+from lockdown.type_system.core_types import Type, UnitType, NoValueType
+from lockdown.type_system.exceptions import FatalError, InvalidData
+from lockdown.type_system.runtime import replace_all_refs
+from lockdown.utils import InternalMarker, NO_VALUE, is_debug,\
     runtime_type_information
 
 managers_by_object_id = {}
@@ -16,22 +16,22 @@ def get_manager(obj, trigger=None):
     if isinstance(obj, InternalMarker):
         return None
 
-    from rdhlang5.type_system.composites import Composite
+    from lockdown.type_system.composites import Composite
     if not isinstance(obj, (list, tuple, dict, Composite)) and not hasattr(obj, "__dict__"):
         return None
 
     if isinstance(obj, Type):
         return None
 
-    from rdhlang5.executor.function import RDHFunction, OpenFunction
+    from lockdown.executor.function import RDHFunction, OpenFunction
     if isinstance(obj, (RDHFunction, OpenFunction)):
         return None
 
-    from rdhlang5.executor.opcodes import Opcode
+    from lockdown.executor.opcodes import Opcode
     if isinstance(obj, Opcode):
         return None
 
-    from rdhlang5.type_system.composites import CompositeObjectManager
+    from lockdown.type_system.composites import CompositeObjectManager
 
     old_obj = obj
     if isinstance(obj, Composite):
@@ -39,28 +39,28 @@ def get_manager(obj, trigger=None):
     elif isinstance(obj, list):
         if is_debug() and not runtime_type_information():
             raise FatalError()
-        from rdhlang5.type_system.list_types import RDHList
+        from lockdown.type_system.list_types import RDHList
         obj = RDHList(obj)
         replace_all_refs(old_obj, obj)            
         manager = CompositeObjectManager(obj, obj_cleared_callback)
     elif isinstance(obj, tuple):
         if is_debug() and not runtime_type_information():
             raise FatalError()
-        from rdhlang5.type_system.list_types import RDHList
+        from lockdown.type_system.list_types import RDHList
         obj = RDHList(obj)
         replace_all_refs(old_obj, obj)            
         manager = CompositeObjectManager(obj, obj_cleared_callback)
     elif isinstance(obj, dict):
         if is_debug() and not runtime_type_information():
             raise FatalError()
-        from rdhlang5.type_system.dict_types import RDHDict
+        from lockdown.type_system.dict_types import RDHDict
         obj = RDHDict(obj, debug_reason="monkey-patch")
         replace_all_refs(old_obj, obj)
         manager = CompositeObjectManager(obj, obj_cleared_callback)
     elif isinstance(obj, object) and hasattr(obj, "__dict__"):
         if is_debug() and not runtime_type_information():
             raise FatalError()
-        from rdhlang5.type_system.object_types import RDHObject
+        from lockdown.type_system.object_types import RDHObject
         original_type = obj.__class__
         new_type = type("RDH{}".format(original_type.__name__), (RDHObject, original_type,), {})
         obj = new_type(obj.__dict__)
@@ -89,7 +89,7 @@ def get_type_of_value(value):
     if isinstance(value, Type):
         return NoValueType()
 
-    from rdhlang5.executor.function import RDHFunction, OpenFunction
+    from lockdown.executor.function import RDHFunction, OpenFunction
     if isinstance(value, (RDHFunction, OpenFunction)):
         return value.get_type()
 
