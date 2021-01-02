@@ -1,31 +1,23 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-from _collections import defaultdict
 from abc import abstractmethod
 import ast
-import collections
-from compiler.ast import flatten
-from pydoc import visiblename
 
-from jsonpickle.util import is_list
-from traitlets.traitlets import HasDescriptors
 
 from log import logger
-from rdhlang5.executor.ast_utils import compile_statement, compile_function, compile_expression, \
-    unwrap_modules, wrap_as_statement, compile_module
 from rdhlang5.executor.exceptions import PreparationException
 from rdhlang5.executor.flow_control import BreakTypesFactory, BreakException
 from rdhlang5.executor.function_type import OpenFunctionType, ClosedFunctionType
 from rdhlang5.executor.type_factories import enrich_type
 from rdhlang5.type_system.composites import CompositeType, temporary_bind, \
     does_value_fit_through_type, is_type_bindable_to_value, Composite, \
-    prepare_lhs_type, create_reasonable_composite_type
+    create_reasonable_composite_type
 from rdhlang5.type_system.core_types import AnyType, Type, merge_types, Const, \
     UnitType, NoValueType, AllowedValuesNotAvailable, unwrap_types, IntegerType, \
     BooleanType, remove_type
 from rdhlang5.type_system.default_composite_types import rich_composite_type, \
-    DEFAULT_OBJECT_TYPE, readonly_rich_composite_type, \
+    readonly_rich_composite_type, \
     READONLY_DEFAULT_OBJECT_TYPE
 from rdhlang5.type_system.dict_types import RDHDict, DictGetterType, \
     DictSetterType, DictWildcardGetterType, DictWildcardSetterType, RDHDictType
@@ -36,11 +28,10 @@ from rdhlang5.type_system.list_types import RDHList, ListGetterType, \
     ListWildcardDeletterType, ListInsertType, ListWildcardInsertType, \
     RDHListType
 from rdhlang5.type_system.managers import get_type_of_value, get_manager
-from rdhlang5.type_system.micro_ops import merge_composite_types
 from rdhlang5.type_system.object_types import RDHObject, RDHObjectType, \
     ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
     ObjectWildcardSetterType
-from rdhlang5.utils import MISSING, NO_VALUE, is_debug, one_shot_memoize, \
+from rdhlang5.utils import MISSING, NO_VALUE, is_debug, \
     runtime_type_information
 
 
