@@ -1,3 +1,9 @@
+## Literals, mathematical operators, dereferences, other expressions
+- value: AnyType
+
+## Assignment, other statements
+- value: NoValueType
+
 ## Functions
 - value: AnyType
 - exception: ExceptionType
@@ -8,7 +14,7 @@
 - yield: AnyType => NoValueType	# With new values
 - value: AnyType				# When finishing
 
-## Loops
+## Loops (LoopOp, MapOp)
 - value: AnyType 	# is swallowed
 - continue: AnyType	# is captured
 - end: NoValueType	# terminates loop with continue values
