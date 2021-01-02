@@ -12,6 +12,9 @@ from rdhlang5.utils import MISSING, InternalMarker, is_debug
 
 
 class BreakException(Exception):
+    """
+    Represents execution leaving an opcode or function. 
+    """
     def __init__(self, mode, value, opcode, restart_type, caused_by=None):
         self.mode = mode
         self.value = value
@@ -29,6 +32,9 @@ def break_exception_to_string(mode, value, caused_by):
     return result
 
 class BreakTypesFactory(object):
+    """
+    Utility Factory for Opcodes.get_break_types() to build the break types data structure. 
+    """
     def __init__(self, target):
         self.target = target
         self.result = defaultdict(list)
@@ -123,6 +129,17 @@ def is_restartable(thing):
     return False
 
 class FrameManager(object):
+    """
+    Manages the opcode frame stack, allowing deliminated continuations, unwinds, rewinds of the stack.
+
+    Any opcode that calculates intermediate values while executing (such as addition), will call
+    get_next_frame() - this will either return a new Frame object if the opcode is being executed,
+    or it will return a previously used Frame object if the continuation is being restarted. This way,
+    any opcodes written using the FrameManager get restartability largely for free.
+
+    The Frame returned by get_next_frame should be used in a context with: block, so that it can
+    verify the break mode and type when debugging the executor itself.
+    """
     __slots__ = [ "frames", "index", "mode" ]
 
     def __init__(self):
@@ -176,6 +193,10 @@ class FrameManager(object):
         self.frames[-1].restart_value = restart_value
 
 class PassThroughFrame(object):
+    """
+    An optimized version of Frame where we *know* we will never restart, so we are safe reusing the
+    same PassThroughFrame every time for performance.
+    """
     def step(self, name, func):
         return func()
 
@@ -276,6 +297,8 @@ class Frame(object):
             return
 
         if is_debug() and isinstance(exc_value, BreakException) and self.target.break_types:
+            # Verifies that execution is leaving the target opcode at run-time in a way that was forecast
+            # at verification time. 
             break_types = self.target.break_types.get(exc_value.mode, MISSING)
 
             if break_types is MISSING:
