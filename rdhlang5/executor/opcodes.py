@@ -4,8 +4,9 @@ from __future__ import unicode_literals
 from abc import abstractmethod
 import ast
 
-
 from log import logger
+from rdhlang5.executor.ast_utils import compile_expression, compile_statement, \
+    unwrap_modules, wrap_as_statement
 from rdhlang5.executor.exceptions import PreparationException
 from rdhlang5.executor.flow_control import BreakTypesFactory, BreakException
 from rdhlang5.executor.function_type import OpenFunctionType, ClosedFunctionType

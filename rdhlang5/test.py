@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 
 import argparse
 import sys
+import unittest
 
 from rdhlang5.utils import set_debug, set_runtime_type_information, profile
 

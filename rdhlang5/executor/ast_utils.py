@@ -1,8 +1,6 @@
 import ast
 from types import FunctionType, MethodType
 
-from astor.code_gen import to_source
-
 from rdhlang5.type_system.exceptions import FatalError
 from rdhlang5.utils import spread_dict, NO_VALUE
 

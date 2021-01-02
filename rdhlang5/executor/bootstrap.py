@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
-
-import json
-from json.encoder import JSONEncoder
 from time import time
 
 from rdhlang5.executor.flow_control import FrameManager, \
@@ -18,8 +15,6 @@ from rdhlang5.executor.raw_code_factories import inferred_type, function_lit, \
     transform, local_function, map_op
 from rdhlang5.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     READONLY_DEFAULT_OBJECT_TYPE
-from rdhlang5.type_system.dict_types import RDHDict
-from rdhlang5.type_system.list_types import RDHList
 from rdhlang5.type_system.managers import get_manager
 from rdhlang5.type_system.object_types import RDHObject
 from rdhlang5.utils import NO_VALUE, print_code, MISSING

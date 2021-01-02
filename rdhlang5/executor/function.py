@@ -1,11 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-from _ast import AST
 import ast
-import sys
-
-from astor.code_gen import to_source
 
 from log import logger
 from rdhlang5.executor.ast_utils import unwrap_expr, \
