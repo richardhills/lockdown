@@ -26,7 +26,7 @@ Please note - Lockdown is in alpha! These examples don't all work yet, but illus
 
 ### 1. Structural typing
 
-AKA "compile-time duck-typing", where type compatibility is determined by the structure and shape of your data. See [here](rdhlang5/type_system/README.md) for how Lockdown implements structural typing, and here [here](STRUCTURAL_TYPING.md) for a broader description.
+AKA "compile-time duck-typing", where type compatibility is determined by the structure and shape of your data. See [here](lockdown/type_system/README.md) for how Lockdown implements structural typing, and here [here](STRUCTURAL_TYPING.md) for a broader description.
 
 In brief, this gives a more dynamic feel, while keeping strong compile-time verification of all types.
 
@@ -102,7 +102,7 @@ To run the unit tests, create a virtual environment, install the dependencies an
 	pip install -r ./requirements.txt
 	./runtests.sh
 
-The main focus so far has been on [~200 unit tests](rdhlang5/test.py) for the parser, type system and executor. Some of these unit tests are based on Euler problems [https://projecteuler.net/](https://projecteuler.net/). There is not yet a command line compiler or shell, but it should be easy to add these.
+The main focus so far has been on [~200 unit tests](lockdown/test.py) for the parser, type system and executor. Some of these unit tests are based on Euler problems [https://projecteuler.net/](https://projecteuler.net/). There is not yet a command line compiler or shell, but it should be easy to add these.
 
 ## List of Features
 
