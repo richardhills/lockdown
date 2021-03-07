@@ -11,36 +11,30 @@ from lockdown.type_system.exceptions import FatalError, IsNotCompositeType, \
 from lockdown.type_system.managers import get_manager, get_type_of_value
 from lockdown.type_system.micro_ops import merge_composite_types
 from lockdown.utils import MISSING
-import lockdown
 
-
-class InferredType(Type):
-    def is_copyable_from(self, other):
-        raise FatalError()
-
-    def replace_inferred_types(self, other, cache=None):
-        return other
-
-    def __repr__(self):
-        return "Inferred"
 
 composite_type_is_copyable_cache = threading.local()
 
-
-@contextmanager
-def temporary_bind(value, composite_type):
-    if not isinstance(composite_type, CompositeType):
-        raise FatalError()
-
-    manager = get_manager(value)
-    try:
-        manager.add_composite_type(composite_type)
-        yield
-    finally:
-        manager.remove_composite_type(composite_type)
-
-
 class CompositeType(Type):
+    """
+    A Product Type for Lockdown: https://en.wikipedia.org/wiki/Product_type
+
+    Can be thought of as a value that contains several other types at the same time.
+
+    In Lockdown, this is achieved with MicroOps that can be executed against the value at run time.
+    These MicroOps themselves refer to other types, and have flags indicating how safe they are.
+
+    The MicroOps are stored against a tag, which is a Python Tuple of strings/ints. A readonly object,
+    as found in JS or Python, might be represented as:
+
+    {
+        ("get", "foo"): ObjectGetter("foo"),
+        ("get", "bar"): ObjectGetter("bar")
+    }
+
+    Concretely, these are used for Lists, Arrays, Dictionaries, Objects etc - types
+    that contain other types.
+    """
     def __init__(self, micro_op_types, name):
         if not isinstance(micro_op_types, dict):
             raise FatalError()
@@ -52,41 +46,21 @@ class CompositeType(Type):
         self.name = name
         self._is_self_consistent = None
 
-    def replace_inferred_types(self, other, cache=None):
-        if cache is None:
-            cache = {}
-
-        cache_key = (id(self), id(other))
-
-        if cache_key in cache:
-            return cache[cache_key]
-
-        name = getattr(other, "name", "Unknown")
-        result = CompositeType({},
-            name="inferred<{} & {}>".format(self.name, name)
-        )
-
-        cache[cache_key] = result
-
-        for key, micro_op_type in self.micro_op_types.items():
-            if key == ("set", "_temp"):
-                pass
-            if isinstance(other, CompositeType):
-                other_micro_op_type = other.micro_op_types.get(key, None)
-            else:
-                other_micro_op_type = None
-
-            if other_micro_op_type:
-                result.micro_op_types[key] = micro_op_type.replace_inferred_type(other_micro_op_type, cache)
-            else:
-                result.micro_op_types[key] = micro_op_type
-
-        return result
-
     def get_micro_op_type(self, tag):
         return self.micro_op_types.get(tag, None)
 
     def is_self_consistent(self):
+        """
+        Returns True if the CompositeType is self_consistent.
+
+        Self consistency of CompositeTypes means that none of the opcodes on the type conflict.
+
+        Non-self-consistent types are supported in Lockdown, and are actually important to achieving
+        dynamic programming effects. But they have limitations: can not be bound at runtime against
+        actual composite values, because they would allow data corruption.
+
+        See lockdown/type_system/README.md for a more details description.
+        """
         if self._is_self_consistent is None:
             self._is_self_consistent = True
             for micro_op in self.micro_op_types.values():
@@ -106,6 +80,10 @@ class CompositeType(Type):
             return True
 
         try:
+            # CompositeTypes contain other types... which can contain other types, including
+            # the one we started with. These can form a cyclic graph, where types contain
+            # themselves, or other types that then contain themselves.
+            # We build a cache of results during this calculation so we do not execute loops.
             cache_initialized_here = False
             if getattr(composite_type_is_copyable_cache, "_is_copyable_from_cache", None) is None:
                 composite_type_is_copyable_cache._is_copyable_from_cache = {}
@@ -135,34 +113,27 @@ class CompositeType(Type):
     def short_str(self):
         return "Composite<{}>".format(self.name)
 
-
-weakrefs_for_type = {}
-type_ids_for_weakref_id = {}
-results_by_target_id = defaultdict(lambda: defaultdict(lambda: None))
-results_by_source_id = defaultdict(lambda: defaultdict(lambda: None))
-strong_links = {}
-
-
-def type_cleared(type_weakref):
-    type_id = type_ids_for_weakref_id[id(type_weakref)]
-    for source_id in results_by_target_id[type_id].keys():
-        del results_by_source_id[source_id]
-    del results_by_target_id[type_id]
-    del weakrefs_for_type[type_id]
-    del type_ids_for_weakref_id[id(type_weakref)]
-
-
 class Composite(object):
+    """
+    Subclass for all Composite objects we create at runtime.
+
+    To achieve Python interopability there are separate implementations for Python
+    Lists, Dictionaries, Objects etc that all subclass Composite.
+
+    This does not give us any behaviour, but makes it easier to identify these objects.
+    """
     pass
 
 class CompositeObjectManager(object):
+    """
+    A Manage Object that exists alongside every Composite Object at runtime to manage
+    type constraints that should be enforced at runtime.
+    """
     def __init__(self, obj, on_gc_callback):
         self.obj_ref = weakref.ref(obj, self.obj_gced)
         self.obj_id = id(obj)
         self.attached_types = {}
         self.attached_type_counts = defaultdict(int)
-#         self.child_key_type_references = defaultdict(lambda: defaultdict(list))
-#         self.child_value_type_references = defaultdict(lambda: defaultdict(list))
         self.on_gc_callback = on_gc_callback
 
         from lockdown.type_system.default_composite_types import EMPTY_COMPOSITE_TYPE
@@ -179,12 +150,28 @@ class CompositeObjectManager(object):
         self.on_gc_callback(self.obj_id)
 
     def get_effective_composite_type(self):
+        """
+        Returns a CompositeType that is a combination of all the CompositeTypes that are bound
+        to this runtime object. The MicroOps on the returned CompositeType are safe to use
+        to interact with the object.
+        """
         if not self.cached_effective_composite_type:
-            obj = self.get_obj()
-            self.cached_effective_composite_type = merge_composite_types(self.attached_types.values(), name="Composed from {}".format(self.debug_reason))
+            self.cached_effective_composite_type = merge_composite_types(
+                self.attached_types.values(), name="Composed from {}".format(self.debug_reason)
+            )
         return self.cached_effective_composite_type
 
     def attach_type(self, new_type, multiplier=1):
+        """
+        Attaches a CompositeType to this CompositeObject at run time. All modifications to this object
+        (even done naively by Python code) will be passed through these CompositeTypes to make sure they
+        are compatible.
+
+        This does not check whether the new type conflicts with any of the existing CompositeTypes
+        attached - so should not be called directly. Instead call
+
+        lockdown.type_system.composites.add_composite_type
+        """
         new_type_id = id(new_type)
 
         if self.attached_type_counts[new_type_id] == 0:
@@ -217,7 +204,27 @@ class CompositeObjectManager(object):
         # TODO: remove
         remove_composite_type(self, remove_type)
 
+class InferredType(Type):
+    """
+    A placeholder Type that should be replaced by a real type before getting new the actual verification
+    or run time systems.
+    """
+    def is_copyable_from(self, other):
+        raise FatalError()
+
+    def replace_inferred_types(self, other, cache=None):
+        return other
+
+    def __repr__(self):
+        return "Inferred"
+
 def check_dangling_inferred_types(type, results_cache=None):
+    """
+    Recursively checks a CompositeType and all related types for any InferredTypes
+    that haven't been replaced.
+
+    Returns False if any InferredTypes are found
+    """
     if results_cache is None:
         results_cache = {}
 
@@ -240,45 +247,80 @@ def check_dangling_inferred_types(type, results_cache=None):
 
     return True
 
-def prepare_lhs_type(type, guide_type, results_cache=None):
-    if isinstance(type, InferredType):
-        if guide_type is None:
+def prepare_lhs_type(lhs_type, rhs_type, results_cache=None):
+    """
+    A Heuristic. Takes the LHS (left-hand-side) Type and returns a new (always more specific) Type based
+    on some rules to make the type more useful to the developer.
+
+    The rules within this function are both:
+    1. A core part of the nature of Lockdown for a normal developer
+    2. Largely arbitrary, and can be changed without impacting the real core ideas behind Lockdown
+
+    For example, a developer might write:
+
+    var foo = [ 3, 6 ];
+
+    What type should foo be? RHS is an Inconsistent Type with these micro ops:
+
+    (get, 0) => Get.0.unit<3>
+    (set, 0) => Set.0.any
+    (get, 1) => Get.1.unit<6>
+    (set, 1) => Set.1.any
+    ... any some other inconsistent micro ops!
+
+    There are several types for foo that would be Consistent with this Inconsistent Type. All of the
+    following could be substituted for var, and the code will compile:
+
+    Any
+    List<any>
+    List<int>
+    Tuple<any, any>
+    Tuple<int, int> # and combinations with the previous version!
+    Tuple<unit<3>, unit<6>> # and combinations again!
+
+    So when we use "var", which do we select? Lockdown uses Tuple<int, int> - this is likely to be most useful.
+    """
+    if isinstance(lhs_type, InferredType):
+        if rhs_type is None:
             raise DanglingInferredType()
-        return prepare_lhs_type(guide_type, None, results_cache=results_cache)
+        return prepare_lhs_type(rhs_type, None, results_cache=results_cache)
 
-    if isinstance(type, CompositeType):
-        return prepare_composite_lhs_type(type, guide_type, results_cache)
+    if isinstance(lhs_type, CompositeType):
+        return prepare_composite_lhs_type(lhs_type, rhs_type, results_cache)
 
-    if isinstance(type, OneOfType):
-        if guide_type is None:
-            return type
+    if isinstance(lhs_type, OneOfType):
+        if rhs_type is None:
+            return lhs_type
         # TODO
         raise FatalError()
 
-    return type
+    return lhs_type
 
-def prepare_composite_lhs_type(composite_type, guide_type, results_cache=None):
-    if hasattr(composite_type, "_prepared_lhs_type"):
-        return composite_type
+def prepare_composite_lhs_type(composite_lhs_type, rhs_type, results_cache=None):
+    """
+    See the comment on prepare_lhs_type
+    """
+    if hasattr(composite_lhs_type, "_prepared_lhs_type"):
+        return composite_lhs_type
 
     if results_cache is None:
         results_cache = {}
 
-    cache_key = (id(composite_type), id(guide_type))
+    cache_key = (id(composite_lhs_type), id(rhs_type))
 
     if cache_key in results_cache:
         return results_cache[cache_key]
 
     result = CompositeType(
-        dict(composite_type.micro_op_types),
-        name="{}<LHSPrepared>".format(composite_type.name)
+        dict(composite_lhs_type.micro_op_types),
+        name="{}<LHSPrepared>".format(composite_lhs_type.name)
     )
 
     # TODO: do this better
-    if hasattr(composite_type, "from_opcode"):
-        result.from_opcode = composite_type.from_opcode
+    if hasattr(composite_lhs_type, "from_opcode"):
+        result.from_opcode = composite_lhs_type.from_opcode
 
-    if ("get", "best_result") in composite_type.micro_op_types:
+    if ("get", "best_result") in composite_lhs_type.micro_op_types:
         pass
 
     result._prepared_lhs_type = True
@@ -314,14 +356,14 @@ def prepare_composite_lhs_type(composite_type, guide_type, results_cache=None):
         if hasattr(micro_op, "value_type"):
             guide_micro_op_type = None
 
-            if isinstance(guide_type, CompositeType):
-                guide_op = guide_type.get_micro_op_type(tag)
+            if isinstance(rhs_type, CompositeType):
+                guide_op = rhs_type.get_micro_op_type(tag)
 
                 if hasattr(guide_op, "value_type") and isinstance(guide_op.value_type, AnyType):
                     if tag[0] == "set":
-                        guide_op = guide_type.get_micro_op_type(( "get", tag[1] ))
+                        guide_op = rhs_type.get_micro_op_type(( "get", tag[1] ))
                     if tag[0] == "set-wildcard":
-                        guide_op = guide_type.get_micro_op_type(( "get-wildcard" ))
+                        guide_op = rhs_type.get_micro_op_type(( "get-wildcard" ))
 
                 if hasattr(guide_op, "value_type"):
                     guide_micro_op_type = guide_op.value_type
@@ -380,15 +422,21 @@ def prepare_composite_lhs_type(composite_type, guide_type, results_cache=None):
                 something_changed = True
 
     if not something_changed:
-        result.micro_op_types = composite_type.micro_op_types
+        result.micro_op_types = composite_lhs_type.micro_op_types
 
     return result
 
 def add_composite_type(target_manager, new_type, key_filter=None, multiplier=1):
+    """
+    Safely adds a new CompositeType to a CompositeObjectManager, so that run time verification
+    of mutations to the object owned by the CompositeObjectManager can be enforced.
+
+    It checks whether the new CompositeType is compatible with any CompositeTypes that
+    have been added previously. If it is found to conflict, this function raises a
+    CompositeTypeIncompatibleWithTarget exception.
+    """
     types_to_bind = {}
     succeeded = build_binding_map_for_type(None, new_type, target_manager.get_obj(), target_manager, key_filter, MISSING, {}, types_to_bind)
-    if len(types_to_bind) > 100:
-        pass
     if not succeeded:
         raise CompositeTypeIncompatibleWithTarget()
 
@@ -399,8 +447,6 @@ def add_composite_type(target_manager, new_type, key_filter=None, multiplier=1):
 def remove_composite_type(target_manager, remove_type, key_filter=None, multiplier=1):
     types_to_bind = {}
     succeeded = build_binding_map_for_type(None, remove_type, target_manager.get_obj(), target_manager, key_filter, MISSING, {}, types_to_bind)
-    if len(types_to_bind) > 100:
-        pass
     if not succeeded:
         raise CompositeTypeIncompatibleWithTarget()
 
@@ -437,12 +483,23 @@ def unbind_key(manager, key_filter):
 
 
 def build_binding_map_for_type(source_micro_op, new_type, target, target_manager, key_filter, substitute_value, cache, types_to_bind, build_binding_map=True):
+    """
+    Builds a binding map of the Type new_type against the object target.
+
+    The binding map is stored in types_to_bind, a dictionary of:
+
+    {
+        (id(source_micro_op), id(new_type), id(target)) : (source_micro_op, new_type, target),
+        ...
+    }
+
+    It stores every MicroOp that uses a particular Type against a particular target Object. It is then possible
+    to loop over all these ops to bind the types (done elsewhere).
+    """
     result_key = (id(source_micro_op), id(new_type), id(target))
 
     if result_key in cache:
         return cache[result_key]
-
-#    print "{}:{}:{}".format(id(source_micro_op), id(new_type), id(target))
 
     cache[result_key] = True
 
@@ -498,13 +555,15 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
 
     return atleast_one_sub_type_worked
 
-def create_reasonable_composite_type(obj):
-    result = CompositeType({}, name="reasonable list type")
-    from lockdown.type_system.list_types import RDHList
-    from lockdown.type_system.list_types import ListGetterType,\
-    ListWildcardGetterType
-    if isinstance(obj, RDHList):
-        for key in obj._keys():
-            result.micro_op_types[("get", key)] = ListGetterType(key, get_type_of_value(obj._get(key)), False, False)
-        result.micro_op_types[("get-wildcard", )] = ListWildcardGetterType(AnyType(), True, True)
-    return result
+@contextmanager
+def scoped_bind(value, composite_type):
+    if not isinstance(composite_type, CompositeType):
+        raise FatalError()
+
+    manager = get_manager(value)
+    try:
+        manager.add_composite_type(composite_type)
+        yield
+    finally:
+        manager.remove_composite_type(composite_type)
+

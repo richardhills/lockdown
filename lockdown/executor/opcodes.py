@@ -11,11 +11,10 @@ from lockdown.executor.exceptions import PreparationException
 from lockdown.executor.flow_control import BreakTypesFactory, BreakException
 from lockdown.executor.function_type import OpenFunctionType, ClosedFunctionType
 from lockdown.executor.type_factories import enrich_type
-from lockdown.type_system.composites import CompositeType, temporary_bind, \
-    does_value_fit_through_type, is_type_bindable_to_value, Composite, \
-    create_reasonable_composite_type
+from lockdown.type_system.composites import CompositeType, scoped_bind, \
+    does_value_fit_through_type, is_type_bindable_to_value, Composite
 from lockdown.type_system.core_types import AnyType, Type, merge_types, Const, \
-    UnitType, NoValueType, AllowedValuesNotAvailable, unwrap_types, IntegerType, \
+    UnitType, NoValueType, PermittedValuesDoesNotExist, unwrap_types, IntegerType, \
     BooleanType, remove_type
 from lockdown.type_system.default_composite_types import rich_composite_type, \
     readonly_rich_composite_type, \
@@ -247,10 +246,10 @@ class ObjectTemplateOp(Opcode):
             key = None
 
             try:
-                allowed_keys = key_type.get_allowed_values()
+                allowed_keys = key_type.get_all_permitted_values()
                 if len(allowed_keys) == 1:
                     key = allowed_keys[0]
-            except AllowedValuesNotAvailable:
+            except PermittedValuesDoesNotExist:
                 pass
 
             if value_type is MISSING:
@@ -333,10 +332,10 @@ class DictTemplateOp(Opcode):
             initial_value = MISSING
 
             try:
-                allowed_values = value_type.get_allowed_values()
+                allowed_values = value_type.get_all_permitted_values()
                 if len(allowed_values) == 1:
                     initial_value = allowed_values[0]
-            except AllowedValuesNotAvailable:
+            except PermittedValuesDoesNotExist:
                 pass
 
         micro_ops[("get-wildcard",)] = DictWildcardGetterType(AnyType(), rich_composite_type, True, False)
@@ -473,8 +472,8 @@ class DereferenceOp(Opcode):
         if reference_types is not MISSING and of_types is not MISSING:
             for reference_type in unwrap_types(reference_types):
                 try:
-                    possible_references = reference_type.get_allowed_values()
-                except AllowedValuesNotAvailable:
+                    possible_references = reference_type.get_all_permitted_values()
+                except PermittedValuesDoesNotExist:
                     possible_references = None
                 for of_type in unwrap_types(of_types):
                     if possible_references is None:
@@ -655,8 +654,8 @@ class AssignmentOp(Opcode):
         if reference_types is not MISSING and of_types is not MISSING and rvalue_type is not MISSING:
             for reference_type in unwrap_types(reference_types):
                 try:
-                    possible_references = reference_type.get_allowed_values()
-                except AllowedValuesNotAvailable:
+                    possible_references = reference_type.get_all_permitted_values()
+                except PermittedValuesDoesNotExist:
                     possible_references = None
                 for of_type in unwrap_types(of_types):
                     if possible_references is None:
@@ -803,7 +802,7 @@ class InsertOp(Opcode):
         if reference_types is not MISSING and of_types is not MISSING and rvalue_type is not MISSING:
             for reference_type in unwrap_types(reference_types):
                 try:
-                    for reference in reference_type.get_allowed_values():    
+                    for reference in reference_type.get_all_permitted_values():    
                         for of_type in unwrap_types(of_types):
                             micro_op = None
                             if isinstance(of_type, CompositeType) and reference is not None:
@@ -826,7 +825,7 @@ class InsertOp(Opcode):
                                     self.invalid_assignment_error = True
                             else:
                                 self.invalid_lvalue_error = True
-                except AllowedValuesNotAvailable:
+                except PermittedValuesDoesNotExist:
                     self.invalid_lvalue_error = True
 
         if self.invalid_assignment_error:
@@ -1158,7 +1157,7 @@ class ShiftOp(Opcode):
         value_type, other_break_types = get_expression_break_types(self.opcode, context, frame_manager, immediate_context) 
 
         restart_type_value = evaluate(self.restart_type, context, frame_manager)
-        with temporary_bind(restart_type_value, READONLY_DEFAULT_OBJECT_TYPE):
+        with scoped_bind(restart_type_value, READONLY_DEFAULT_OBJECT_TYPE):
             self.restart_type = enrich_type(restart_type_value)
 
         value_type = flatten_out_types(value_type)
@@ -1583,6 +1582,21 @@ class CloseOp(Opcode):
             outer_context=self.outer_context.to_ast(context_name, dependency_builder)
         )
 
+def create_readonly_static_type(value):
+    """
+    For the StaticOp, for a given static value, produces a Type that opcodes
+    that refer to the value from StaticOp are able to run against.
+    """
+    if isinstance(value, Composite):
+        # Only do ListTypes atm since that is what is needed for unit tests, but can be expanded...
+        result = CompositeType({}, name="reasonable list type")
+        if isinstance(value, RDHList):
+            for key in value._keys():
+                result.micro_op_types[("get", key)] = ListGetterType(key, get_type_of_value(value._get(key)), False, False)
+            result.micro_op_types[("get-wildcard", )] = ListWildcardGetterType(AnyType(), True, True)
+        return result
+    else:
+        return get_type_of_value(value)
 
 class StaticOp(Opcode):
     def __init__(self, data, visitor):
@@ -1597,13 +1611,7 @@ class StaticOp(Opcode):
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
         self.lazy_initialize(context, frame_manager, immediate_context)
-
-        if isinstance(self.value, Composite):
-            type = create_reasonable_composite_type(self.value)
-        else:
-            type = get_type_of_value(self.value)
-
-        break_types.add("value", type)
+        break_types.add("value", create_readonly_static_type(self.value))
         return break_types.build()
 
     def jump(self, context, frame_manager, immediate_context=None):

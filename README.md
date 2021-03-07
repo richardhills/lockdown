@@ -22,7 +22,7 @@ In many Nominally Typed languages (such as Java, C#, etc), we are used to seeing
 		
 		adder(new Container({ foo: 38, bar: 4 }));
 
-Please note - Lockdown is in alpha! These examples don't all work yet, but illustrate what I'm aiming for.
+( Please note - Lockdown is in alpha! Not all the syntax works yet, but this illustrates my plan. )
 
 ### 1. Structural typing
 

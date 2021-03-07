@@ -9,6 +9,19 @@ from lockdown.utils import InternalMarker, NO_VALUE, is_debug,\
 managers_by_object_id = {}
 
 def get_manager(obj, trigger=None):
+    """
+    Returns the run time CompositeManager for an object (if it needs one!)
+
+    CompositeManager objects are needed for objects that can have CompositeTypes. In Lockdown, this is
+    Python Lists, Objects, Dictionaries, Tuples, etc
+
+    CompositeManagers exist alongside the base Python objects for their lifetime. They are GCed when the
+    Python object is GCed.
+
+    When code interacts with these base Python objects, they will often use the CompositeManager to
+    determine what interactions are allowed or not, to maintain consistency with the rest of the Lockdown
+    application. The CompositeManager maintains a weak ref to the object for which it is responsible.
+    """
     manager = managers_by_object_id.get(id(obj), None)
     if manager:
         return manager

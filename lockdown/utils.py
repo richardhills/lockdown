@@ -3,10 +3,11 @@ from __future__ import unicode_literals
 
 import cProfile
 from contextlib import contextmanager
-from functools import wraps
 from json.encoder import JSONEncoder
-import pstats
 import sys
+
+from lockdown.type_system.exceptions import FatalError
+
 
 class InternalMarker(object):
     def __init__(self, name):
@@ -73,17 +74,6 @@ def profile(output_file):
     finally:
         pr.disable()
         pr.dump_stats(output_file)
-
-def one_shot_memoize(func):
-    @wraps(func)
-    def wrapper(self, *args, **kwargs):
-        if getattr(self, "_result", MISSING) is not MISSING:
-            raise FatalError()
-        self._args = args
-        self._kwargs = kwargs
-        self._result = func(self, *args, **kwargs)
-        return self._result
-    return wrapper
 
 DEBUG_MODE = None
 

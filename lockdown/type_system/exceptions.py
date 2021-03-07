@@ -8,7 +8,9 @@ def raise_if_safe(ExceptionType, can_fail):
 
 
 class FatalError(Exception):
-    pass
+    def __init__(self, *args, **kwargs):
+        super(FatalError, self).__init__(*args, **kwargs)
+        
 
 class CompositeTypeIncompatibleWithTarget(Exception):
     pass

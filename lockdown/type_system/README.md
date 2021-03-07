@@ -77,7 +77,7 @@ In Python (within the Lockdown executor and third party code), these constraints
 		obj.foo = 42 # Changes the object
 		obj.foo = "baz" # Throws a TypeError
 
-At runtime, multiple CompositeTypes can be added to an object, with the microops of all of them being enforced. It is not possible to add two CompositeTypes that are inconsistent with each other, for example, one that contains `get.x.int` and another that supports `set.x.string`. Whichever is added second will fail.
+At runtime, multiple CompositeTypes can be added to an object, with the microops of all of them being enforced. It is not possible to add two CompositeTypes that are inconsistent with each other, for example, one that contains `get.x.int` and another that supports `set.x.string`. Whichever one is added second will fail.
 
 These runtime checks are entirely consistent with typical Normative typing. Consider the following code in Java:
 

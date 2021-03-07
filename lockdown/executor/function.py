@@ -42,16 +42,6 @@ def prepare_piece_of_context(declared_type, suggested_type):
 
     final_type = prepare_lhs_type(declared_type, suggested_type)
 
-# To sort out: merge or heiristic first??
-# 
-#     if isinstance(suggested_type, CompositeType):
-#         suggested_type = apply_consistency_heiristic(suggested_type)
-# 
-#     final_type = replace_inferred_types(declared_type, suggested_type)
-# 
-#     if isinstance(final_type, CompositeType):
-#         final_type = apply_consistency_heiristic(final_type)
-
     if not check_dangling_inferred_types(final_type):
         raise PreparationException("Invalid inferred types")
 
