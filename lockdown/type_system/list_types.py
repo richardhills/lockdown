@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+
 from _abcoll import MutableSequence
 from collections import OrderedDict
 
@@ -175,7 +178,7 @@ class ListGetterType(ListMicroOpType):
             return True
 
         wildcard_inserter = other_type.get_micro_op_type(("insert-wildcard",))
-        if wildcard_inserter and self.key > 0 and not wildcard_inserter.type_error and not wildcard_inserter.type.is_copyable_from(self.value_type):
+        if wildcard_inserter and self.key > 0 and not wildcard_inserter.type_error and not wildcard_inserter.value_type.is_copyable_from(self.value_type):
             return True
 
         detail_setter = other_type.get_micro_op_type(("set", self.key))
@@ -399,7 +402,7 @@ class ListWildcardDeletterType(ListMicroOpType):
         for after_key in range(key, len(target_manager.get_obj())):
             unbind_key(target_manager, after_key)
 
-        target_manager.get_obj().__delitem__(key, raw=True)
+        target_manager.get_obj()._delete(key)
 
         for after_key in range(key, len(target_manager.get_obj())):
             bind_key(target_manager, after_key)
@@ -411,7 +414,7 @@ class ListWildcardDeletterType(ListMicroOpType):
         if wildcard_getter and not wildcard_getter.key_error:
             raise_if_safe(InvalidAssignmentType, self.key_error)
 
-        detail_getter = target_type.get_micro_op_type(("get", self.key))
+        detail_getter = target_type.get_micro_op_type(("get", key))
         if detail_getter and not detail_getter.key_error:
             raise_if_safe(InvalidAssignmentType, self.key_error)
 
@@ -454,7 +457,7 @@ class ListDeletterType(ListMicroOpType):
         for after_key in range(self.key, len(target_manager.get_obj())):
             unbind_key(target_manager, after_key)
 
-        target_manager.get_obj().__delitem__(self.key, raw=True)
+        target_manager.get_obj()._delete(self.key)
 
         for after_key in range(self.key, len(target_manager.get_obj())):
             bind_key(target_manager, after_key)

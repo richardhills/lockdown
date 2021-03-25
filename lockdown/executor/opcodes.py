@@ -15,7 +15,7 @@ from lockdown.type_system.composites import CompositeType, scoped_bind, \
     does_value_fit_through_type, is_type_bindable_to_value, Composite
 from lockdown.type_system.core_types import AnyType, Type, merge_types, Const, \
     UnitType, NoValueType, PermittedValuesDoesNotExist, unwrap_types, IntegerType, \
-    BooleanType, remove_type
+    BooleanType, remove_type, OneOfType
 from lockdown.type_system.default_composite_types import rich_composite_type, \
     readonly_rich_composite_type, \
     READONLY_DEFAULT_OBJECT_TYPE
@@ -26,7 +26,7 @@ from lockdown.type_system.exceptions import FatalError, InvalidDereferenceType, 
 from lockdown.type_system.list_types import RDHList, ListGetterType, \
     ListSetterType, ListWildcardGetterType, ListWildcardSetterType, \
     ListWildcardDeletterType, ListInsertType, ListWildcardInsertType, \
-    RDHListType
+    RDHListType, ListRangeGetterType
 from lockdown.type_system.managers import get_type_of_value, get_manager
 from lockdown.type_system.object_types import RDHObject, RDHObjectType, \
     ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
@@ -1591,9 +1591,15 @@ def create_readonly_static_type(value):
         # Only do ListTypes atm since that is what is needed for unit tests, but can be expanded...
         result = CompositeType({}, name="reasonable list type")
         if isinstance(value, RDHList):
-            for key in value._keys():
-                result.micro_op_types[("get", key)] = ListGetterType(key, get_type_of_value(value._get(key)), False, False)
-            result.micro_op_types[("get-wildcard", )] = ListWildcardGetterType(AnyType(), True, True)
+            types_of_values = [ create_readonly_static_type(v) for v in value._values() ]
+            merged_types = merge_types(types_of_values, "exact")
+
+            if not isinstance(merged_types, OneOfType):
+                result.micro_op_types[("get-range", len(value._length))] = ListRangeGetterType(value._length, merged_types, False, False)
+            else:
+                for key, type_of_value in zip(value._keys(), types_of_values):
+                    result.micro_op_types[("get", key)] = ListGetterType(key, type_of_value, False, False)
+                result.micro_op_types[("get-wildcard", )] = ListWildcardGetterType(merged_types, True, True)
         return result
     else:
         return get_type_of_value(value)

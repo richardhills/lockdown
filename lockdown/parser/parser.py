@@ -16,11 +16,12 @@ from lockdown.executor.raw_code_factories import function_lit, nop, comma_op, \
     loop_op, condition_op, binary_integer_op, equality_op, dereference, \
     local_function, reset_op, inferred_type, prepare_function_lit, transform, \
     continue_op, check_is_opcode, is_op, function_type, dict_template_op, \
-    composite_type, static_op, map_op, insert_op, prepared_function
+    composite_type, static_op, map_op, insert_op, prepared_function, int_type, \
+    any_type
 from lockdown.parser.grammar.langLexer import langLexer
 from lockdown.parser.grammar.langParser import langParser
 from lockdown.parser.grammar.langVisitor import langVisitor
-from lockdown.type_system.default_composite_types import DEFAULT_OBJECT_TYPE,\
+from lockdown.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
     READONLY_DEFAULT_DICT_TYPE, READONLY_DEFAULT_OBJECT_TYPE
 from lockdown.type_system.dict_types import RDHDict
 from lockdown.type_system.exceptions import FatalError
@@ -596,8 +597,41 @@ class RDHLang5Visitor(langVisitor):
         ])
 
     def visitTupleType(self, ctx):
-        types = [self.visit(e) for e in ctx.expression()]
-        return list_type(types, None)
+        micro_ops = []
+        expressions = [self.visit(e) for e in ctx.expression()]
+
+        inferred_splat_type = None
+        if ctx.splat():
+            inferred_splat_type = expressions.pop()
+
+        for index, expression in expressions:
+            micro_ops.append(object_template_op({
+                "name": index,
+                "opcode": literal_op("get"),
+                "key_type": int_type(),
+                "value_type": expression,
+                "key_error": literal_op(False),
+                "type_error": literal_op(False)
+            }))
+            micro_ops.append(object_template_op({
+                "name": index,
+                "opcode": literal_op("set"),
+                "key_type": int_type(),
+                "value_type": any_type(),
+                "key_error": literal_op(False),
+                "type_error": literal_op(False)
+            }))
+
+        if inferred_splat_type:
+            # TODO use the splat type
+            micro_ops.append(object_template_op({
+                "opcode": literal_op("get-inferred")
+            }))
+            micro_ops.append(object_template_op({
+                "opcode": literal_op("set-inferred")
+            }))
+
+        return composite_type(micro_ops, "list")
 
     def visitListType(self, ctx):
         type = self.visit(ctx.expression())

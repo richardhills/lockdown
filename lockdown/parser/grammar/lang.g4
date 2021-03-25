@@ -182,7 +182,11 @@ listTemplate
    ;
 
 tupleType
-   : 'Tuple' '<' expression (',' expression)* '>'
+   : 'Tuple' '<' expression? (',' expression)* splat? '>'
+   ;
+
+splat
+   : '...'
    ;
 
 listType

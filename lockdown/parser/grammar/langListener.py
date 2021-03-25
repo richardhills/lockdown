@@ -616,6 +616,15 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#splat.
+    def enterSplat(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#splat.
+    def exitSplat(self, ctx):
+        pass
+
+
     # Enter a parse tree produced by langParser#listType.
     def enterListType(self, ctx):
         pass

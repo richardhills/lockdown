@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals
 
 
 def raise_if_safe(ExceptionType, can_fail):

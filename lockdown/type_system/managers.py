@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+
 import weakref
 
 from lockdown.type_system.core_types import Type, UnitType, NoValueType

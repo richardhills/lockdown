@@ -21,6 +21,7 @@ from lockdown.type_system.object_types import RDHObjectType, RDHObject, \
     ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
     ObjectWildcardSetterType, ObjectDeletterType, ObjectWildcardDeletterType
 
+
 def build_closed_function_type(data):
     if not isinstance(data.break_types, RDHDict):
         raise FatalError()
@@ -83,6 +84,9 @@ def build_list_type(data):
         wildcard_type
     )
 
+def inferred_opcode_factory(*args, **kwargs):
+    return None
+
 OPCODE_TYPE_FACTORIES = {
     "object": {
         "get": ObjectGetterType,
@@ -91,6 +95,8 @@ OPCODE_TYPE_FACTORIES = {
         "get-wildcard": lambda property: ObjectWildcardGetterType(enrich_type(property.key_type), enrich_type(property.value_type), property.key_error, property.type_error),
         "set-wildcard": lambda property: ObjectWildcardSetterType(enrich_type(property.key_type), enrich_type(property.value_type), property.key_error, property.type_error),
         "delete-wildcard": lambda property: ObjectWildcardDeletterType(property.key_error),
+        "get-inferred": inferred_opcode_factory,
+        "set-inferred": inferred_opcode_factory
     },
     "dict": {
         "get": DictGetterType,
@@ -99,6 +105,8 @@ OPCODE_TYPE_FACTORIES = {
         "get-wildcard": lambda property: DictWildcardGetterType(enrich_type(property.key_type), enrich_type(property.value_type), property.key_error, property.type_error),
         "set-wildcard": lambda property: DictWildcardSetterType(enrich_type(property.key_type), enrich_type(property.value_type), property.key_error, property.type_error),
         "delete-wildcard": lambda property: DictWildcardDeletterType(property.key_error),
+        "get-inferred": inferred_opcode_factory,
+        "set-inferred": inferred_opcode_factory
     },
     "list": {
         "get": ListGetterType,
@@ -107,6 +115,8 @@ OPCODE_TYPE_FACTORIES = {
         "get-wildcard": ListWildcardGetterType,
         "set-wildcard": ListWildcardSetterType,
         "delete-wildcard": ListWildcardDeletterType,
+        "get-inferred": inferred_opcode_factory,
+        "set-inferred": inferred_opcode_factory
     }
 }
 
@@ -118,7 +128,7 @@ def build_composite_type(data):
 
     for property in data.properties:
         if hasattr(property, "name"):
-            tag = ( property.name, property.opcode )
+            tag = ( property.opcode, property.name )
         else:
             tag = ( property.opcode, )
         micro_ops[tag] = opcode_type_factory[property.opcode](property)

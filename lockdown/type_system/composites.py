@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+
 from collections import defaultdict
 from contextlib import contextmanager
 import threading
@@ -98,6 +101,8 @@ class CompositeType(Type):
             cache[result_key] = True
 
             for micro_op_type in self.micro_op_types.values():
+                if micro_op_type is None:
+                    pass
                 if not micro_op_type.is_derivable_from(other):
                     cache[result_key] = False
                     break
@@ -212,9 +217,6 @@ class InferredType(Type):
     def is_copyable_from(self, other):
         raise FatalError()
 
-    def replace_inferred_types(self, other, cache=None):
-        return other
-
     def __repr__(self):
         return "Inferred"
 
@@ -320,13 +322,29 @@ def prepare_composite_lhs_type(composite_lhs_type, rhs_type, results_cache=None)
     if hasattr(composite_lhs_type, "from_opcode"):
         result.from_opcode = composite_lhs_type.from_opcode
 
-    if ("get", "best_result") in composite_lhs_type.micro_op_types:
-        pass
-
     result._prepared_lhs_type = True
 
     results_cache[cache_key] = result
     something_changed = False
+
+    # Replace InferredKeys and InferredMicroOps
+    for lhs_tag, micro_op in result.micro_op_types.items():
+        if len(lhs_tag) != 1:
+            continue
+        if lhs_tag[0] in ("get-inferred", "set-inferred"):
+            lhs_method = lhs_tag[0][:3] # get or set
+            if not isinstance(rhs_type, CompositeType):
+                raise DanglingInferredType()
+
+            del result.micro_op_types[lhs_tag]
+            for rhs_tag, rhs_micro_op in rhs_type.micro_op_types.items():
+                if not len(rhs_tag) == 2:
+                    continue
+                rhs_method, rhs_key = rhs_tag
+                if rhs_method == lhs_method:
+                    new_tag = (lhs_method, rhs_key)
+                    if new_tag not in result.micro_op_types:
+                        result.micro_op_types[new_tag] = rhs_micro_op
 
     # Take any overlapping getter/setter types (typically get X, set Any) and transform so that they
     # are compatible (typically get X, set X)

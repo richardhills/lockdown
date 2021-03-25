@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+
 from lockdown.type_system.composites import CompositeType
 from lockdown.type_system.core_types import OneOfType, AnyType, StringType
 from lockdown.type_system.dict_types import RDHDictType, DictWildcardGetterType, \

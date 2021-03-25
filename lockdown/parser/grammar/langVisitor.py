@@ -345,6 +345,11 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#splat.
+    def visitSplat(self, ctx):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#listType.
     def visitListType(self, ctx):
         return self.visitChildren(ctx)
