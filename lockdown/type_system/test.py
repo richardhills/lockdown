@@ -5,8 +5,6 @@ from lockdown.type_system.composites import CompositeType, InferredType, \
     check_dangling_inferred_types, prepare_lhs_type
 from lockdown.type_system.core_types import IntegerType, UnitType, StringType, \
     AnyType, Const, OneOfType, BooleanType, merge_types
-from lockdown.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
-    rich_composite_type
 from lockdown.type_system.dict_types import DictGetterType, \
     RDHDict
 from lockdown.type_system.exceptions import CompositeTypeIncompatibleWithTarget, \
@@ -17,14 +15,10 @@ from lockdown.type_system.managers import get_manager, get_type_of_value
 from lockdown.type_system.object_types import ObjectGetterType, ObjectSetterType, \
     ObjectDeletterType, RDHObjectType, PythonObjectType, RDHObject, \
     DefaultDictType, ObjectWildcardGetterType, ObjectWildcardSetterType
+from lockdown.type_system.universal_type import PythonObject, \
+    DEFAULT_READONLY_UNIVERSAL_TYPE
 from lockdown.utils import set_debug
 
-
-class TestObject(RDHObject):
-    def __init__(self, initial_data, *args, **kwargs):
-        for key, value in initial_data.items():
-            self.__dict__[key] = value
-        super(TestObject, self).__init__(*args, **kwargs)
 
 class TestMicroOpMerging(TestCase):
     def test_merge_gets(self):
@@ -51,7 +45,7 @@ class TestBasicObject(TestCase):
         }, name="test"))
 
     def test_add_micro_op_object(self):
-        class Foo(TestObject):
+        class Foo(PythonObject):
             pass
         obj = Foo({ "foo": "hello" })
         get_manager(obj).add_composite_type(CompositeType({
@@ -59,28 +53,28 @@ class TestBasicObject(TestCase):
         }, name="test"))
 
     def test_setup_read_write_property(self):
-        obj = TestObject({ "foo": "hello" })
+        obj = PythonObject({ "foo": "hello" })
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", StringType(), False, False),
             ("set", "foo"): ObjectSetterType("foo", StringType(), False, False)
         }, name="test"))
 
     def test_setup_broad_read_write_property(self):
-        obj = TestObject({ "foo": "hello" })
+        obj = PythonObject({ "foo": "hello" })
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", AnyType(), False, False),
             ("set", "foo"): ObjectSetterType("foo", AnyType(), False, False)
         }, name="test"))
 
     def test_setup_narrow_write_property(self):
-        obj = TestObject({ "foo": "hello" })
+        obj = PythonObject({ "foo": "hello" })
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", UnitType("hello"), False, False),
             ("set", "foo"): ObjectSetterType("foo", UnitType("hello"), False, False)
         }, name="test"))
 
     def test_setup_broad_reading_property(self):
-        obj = TestObject({ "foo": "hello" })
+        obj = PythonObject({ "foo": "hello" })
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", AnyType(), False, False),
             ("set", "foo"): ObjectSetterType("foo", StringType(), False, False)
@@ -88,7 +82,7 @@ class TestBasicObject(TestCase):
 
     def test_failed_setup_broad_writing_property(self):
         with self.assertRaises(CompositeTypeIsInconsistent):
-            obj = TestObject({ "foo": "hello" })
+            obj = PythonObject({ "foo": "hello" })
 
             get_manager(obj).add_composite_type(CompositeType({
                 ("get", "foo"): ObjectGetterType("foo", StringType(), False, False),
@@ -96,7 +90,7 @@ class TestBasicObject(TestCase):
             }, name="test"))
 
     def test_composite_object_dereference(self):
-        obj = TestObject({ "foo": "hello" })
+        obj = PythonObject({ "foo": "hello" })
 
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", StringType(), False, False),
@@ -106,7 +100,7 @@ class TestBasicObject(TestCase):
         self.assertEquals(obj.foo, "hello")
 
     def test_composite_object_broad_dereference(self):
-        obj = TestObject({ "foo": "hello" })
+        obj = PythonObject({ "foo": "hello" })
 
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", AnyType(), False, False),
@@ -116,7 +110,7 @@ class TestBasicObject(TestCase):
         self.assertEquals(obj.foo, "hello")
 
     def test_composite_object_assignment(self):
-        obj = TestObject({ "foo": "hello" })
+        obj = PythonObject({ "foo": "hello" })
 
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", StringType(), False, False),
@@ -126,7 +120,7 @@ class TestBasicObject(TestCase):
         obj.foo = "what"
 
     def test_composite_object_invalid_assignment(self):
-        obj = TestObject({ "foo": "hello" })
+        obj = PythonObject({ "foo": "hello" })
 
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", StringType(), False, False),
@@ -137,7 +131,7 @@ class TestBasicObject(TestCase):
             obj.foo = 5
 
     def test_python_like_object(self):
-        obj = TestObject({ "foo": "hello" })
+        obj = PythonObject({ "foo": "hello" })
 
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", AnyType(), False, False),
@@ -149,7 +143,7 @@ class TestBasicObject(TestCase):
         self.assertEquals(obj.foo, "what")
 
     def test_java_like_object(self):
-        obj = TestObject({ "foo": "hello" })
+        obj = PythonObject({ "foo": "hello" })
 
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", StringType(), False, False),
@@ -164,7 +158,7 @@ class TestBasicObject(TestCase):
             obj.bar = "hello"
 
     def test_const_property(self):
-        obj = TestObject({ "foo": "hello" })
+        obj = PythonObject({ "foo": "hello" })
 
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", StringType(), False, False)
@@ -175,12 +169,12 @@ class TestBasicObject(TestCase):
             obj.foo = "what"
 
     def test_invalid_initialization(self):
-        obj = TestObject({})
+        obj = PythonObject({})
         with self.assertRaises(Exception):
             get_manager(obj).add_micro_op_tag(None, ("get", "foo"), StringType(), False, False)
 
     def test_delete_property(self):
-        obj = TestObject({ "foo": "hello" })
+        obj = PythonObject({ "foo": "hello" })
 
         get_manager(obj).add_composite_type(CompositeType({
             ("get", "foo"): ObjectGetterType("foo", StringType(), True, True),
@@ -225,7 +219,7 @@ class TestRevConstType(TestCase):
             ("set", "foo"): ObjectSetterType("foo", AnyType(), False, False)
         }, name="test")
 
-        obj = TestObject({ "foo": "hello" })
+        obj = PythonObject({ "foo": "hello" })
         with self.assertRaises(Exception):
             get_manager(obj).add_composite_type(rev_const_type)
 
@@ -418,7 +412,7 @@ class TestRDHObjectType(TestCase):
         self.assertFalse(S.is_copyable_from(T))
 
     def test_can_fail_micro_ops_are_enforced(self):
-        foo = TestObject({
+        foo = PythonObject({
             "foo": 5,
             "bar": "hello"
         })
@@ -445,7 +439,7 @@ class TestRDHObjectType(TestCase):
             foo.foo = 42
 
     def test_types_on_object_merged(self):
-        foo = TestObject({
+        foo = PythonObject({
             "foo": 5,
             "bar": "hello"
         })
@@ -466,7 +460,7 @@ class TestRDHObjectType(TestCase):
 
 class TestUnitTypes(TestCase):
     def test_basics(self):
-        foo = TestObject({
+        foo = PythonObject({
             "bar": 42
         })
         get_manager(foo).add_composite_type(RDHObjectType({
@@ -475,7 +469,7 @@ class TestUnitTypes(TestCase):
         self.assertEquals(foo.bar, 42)
 
     def test_broadening_blocked(self):
-        foo = TestObject({
+        foo = PythonObject({
             "bar": 42
         })
         get_manager(foo).add_composite_type(RDHObjectType({
@@ -488,7 +482,7 @@ class TestUnitTypes(TestCase):
             }))
 
     def test_narrowing_blocked(self):
-        foo = TestObject({
+        foo = PythonObject({
             "bar": 42
         })
         get_manager(foo).add_composite_type(RDHObjectType({
@@ -500,7 +494,7 @@ class TestUnitTypes(TestCase):
             }))
 
     def test_broadening_with_const_is_ok(self):
-        foo = TestObject({
+        foo = PythonObject({
             "bar": 42
         })
         get_manager(foo).add_composite_type(RDHObjectType({
@@ -517,8 +511,8 @@ class TestNestedRDHObjectTypes(TestCase):
         Bar = RDHObjectType({
             "baz": IntegerType()
         })
-        foo = TestObject({
-            "bar": TestObject({
+        foo = PythonObject({
+            "bar": PythonObject({
                 "baz": 42
             })
         })
@@ -529,13 +523,13 @@ class TestNestedRDHObjectTypes(TestCase):
             })
         )
 
-        foo.bar = TestObject({ "baz": 42 }, bind=Bar)
+        foo.bar = PythonObject({ "baz": 42 }, bind=Bar)
 
         self.assertEquals(foo.bar.baz, 42)
 
     def test_blocked_basic_assignment(self):
-        foo = TestObject({
-            "bar": TestObject({
+        foo = PythonObject({
+            "bar": PythonObject({
                 "baz": 42
             })
         })
@@ -549,11 +543,11 @@ class TestNestedRDHObjectTypes(TestCase):
         )
 
         with self.assertRaises(Exception):
-            foo.bar = TestObject({ "baz": "hello" })
+            foo.bar = PythonObject({ "baz": "hello" })
 
     def test_deletion_blocked(self):
-        foo = TestObject({
-            "bar": TestObject({
+        foo = PythonObject({
+            "bar": PythonObject({
                 "baz": 42
             })
         })
@@ -570,8 +564,8 @@ class TestNestedRDHObjectTypes(TestCase):
             del foo.bar
 
     def test_broad_assignment(self):
-        foo = TestObject({
-            "bar": TestObject({
+        foo = PythonObject({
+            "bar": PythonObject({
                 "baz": 42
             })
         })
@@ -586,14 +580,14 @@ class TestNestedRDHObjectTypes(TestCase):
             })
         )
 
-        foo.bar = TestObject({ "baz": "hello" }, bind=Bar)
+        foo.bar = PythonObject({ "baz": "hello" }, bind=Bar)
 
         self.assertEquals(foo.bar.baz, "hello")
 
     def test_double_deep_assignment(self):
-        foo = TestObject({
-            "bar": TestObject({
-                "baz": TestObject({
+        foo = PythonObject({
+            "bar": PythonObject({
+                "baz": PythonObject({
                     "bam": 10
                 })
             })
@@ -615,13 +609,13 @@ class TestNestedRDHObjectTypes(TestCase):
 
         self.assertEquals(foo.bar.baz.bam, 10)
 
-        foo.bar = TestObject({ "baz": TestObject({ "bam": 42 }) }, bind=Bar)
+        foo.bar = PythonObject({ "baz": PythonObject({ "bam": 42 }) }, bind=Bar)
 
         self.assertEquals(foo.bar.baz.bam, 42)
 
     def test_conflicting_types(self):
-        foo = TestObject({
-            "bar": TestObject({
+        foo = PythonObject({
+            "bar": PythonObject({
                 "baz": 42
             })
         })
@@ -644,8 +638,8 @@ class TestNestedRDHObjectTypes(TestCase):
             )
 
     def test_changes_blocked_without_micro_ops(self):
-        foo = TestObject({
-            "bar": TestObject({
+        foo = PythonObject({
+            "bar": PythonObject({
                 "baz": 42
             })
         })
@@ -656,8 +650,8 @@ class TestNestedRDHObjectTypes(TestCase):
             foo.bar = "hello"
 
     def test_very_broad_assignment(self):
-        foo = TestObject({
-            "bar": TestObject({
+        foo = PythonObject({
+            "bar": PythonObject({
                 "baz": 42
             })
         })
@@ -672,8 +666,8 @@ class TestNestedRDHObjectTypes(TestCase):
 
 class TestNestedPythonTypes(TestCase):
     def test_python_like_type(self):
-        foo = TestObject({
-            "bar": TestObject({
+        foo = PythonObject({
+            "bar": PythonObject({
                 "baz": 42
             })
         })
@@ -686,10 +680,10 @@ class TestNestedPythonTypes(TestCase):
         self.assertEquals(foo.bar, "hello")
 
     def test_python_object_with_reference_can_be_modified(self):
-        bar = TestObject({
+        bar = PythonObject({
             "baz": 42
         })
-        foo = TestObject({
+        foo = PythonObject({
             "bar": bar
         })
 
@@ -701,10 +695,10 @@ class TestNestedPythonTypes(TestCase):
         self.assertEqual(foo.bar.baz, 5)
 
     def test_python_object_with_reference_types_are_enforced(self):
-        bar = TestObject({
+        bar = PythonObject({
             "baz": 42
         })
-        foo = TestObject({
+        foo = PythonObject({
             "bar": bar
         })
 
@@ -715,17 +709,17 @@ class TestNestedPythonTypes(TestCase):
             foo.bar.baz = "hello"
 
     def test_python_object_with_reference_can_be_replaced(self):
-        bar = TestObject({
+        bar = PythonObject({
             "baz": 42
         })
-        foo = TestObject({
+        foo = PythonObject({
             "bar": bar
         })
 
         get_manager(bar).add_composite_type(RDHObjectType({ "baz": IntegerType() }))
         get_manager(foo).add_composite_type(PythonObjectType(name="test"))
 
-        foo.bar = TestObject({
+        foo.bar = PythonObject({
             "baz": 123
         })
 
@@ -734,10 +728,10 @@ class TestNestedPythonTypes(TestCase):
         self.assertEqual(foo.bar.baz, "what")
 
     def test_that_python_constraints_dont_spread_to_constrained_children(self):
-        bar = TestObject({
+        bar = PythonObject({
             "baz": 42
         })
-        foo = TestObject({
+        foo = PythonObject({
             "bar": bar
         })
 
@@ -752,7 +746,7 @@ class TestNestedPythonTypes(TestCase):
 
         # ... but when bar is replaced with a new object without constraints, the PythonObjectType
         # spreads to the new object
-        foo.bar = TestObject({
+        foo.bar = PythonObject({
             "baz": 123
         })
 
@@ -766,8 +760,8 @@ class TestNestedPythonTypes(TestCase):
             get_manager(foo.bar).add_composite_type(RDHObjectType({ "baz": IntegerType() }))
 
     def test_python_delete_works(self):
-        foo = TestObject({
-            "bar": TestObject({
+        foo = PythonObject({
+            "bar": PythonObject({
                 "baz": 42
             })
         })
@@ -778,21 +772,21 @@ class TestNestedPythonTypes(TestCase):
         self.assertFalse(hasattr(foo, "bar"))
 
     def test_python_replacing_object_works(self):
-        foo = TestObject({
-            "bar": TestObject({
+        foo = PythonObject({
+            "bar": PythonObject({
                 "baz": 42
             })
         })
 
         get_manager(foo).add_composite_type(PythonObjectType(name="test"))
 
-        foo.bar = TestObject({ "baz": 123 })
+        foo.bar = PythonObject({ "baz": 123 })
 
         self.assertEquals(foo.bar.baz, 123)
 
     def test_python_random_read_fails_nicely(self):
-        foo = TestObject({
-            "bar": TestObject({
+        foo = PythonObject({
+            "bar": PythonObject({
                 "baz": 42
             })
         })
@@ -854,8 +848,8 @@ class TestTypeSystemMisc(TestCase):
             "types": RDHObject()
         }, bind=RDHObjectType({
             "local": RDHListType([ IntegerType(), IntegerType() ], None),
-            "types": DEFAULT_OBJECT_TYPE
-        }, wildcard_value_type=rich_composite_type))
+            "types": DEFAULT_READONLY_UNIVERSAL_TYPE
+        }, wildcard_value_type=DEFAULT_READONLY_UNIVERSAL_TYPE))
 
     def test_misc2(self):
         # Came up writing test_misc1
@@ -863,7 +857,7 @@ class TestTypeSystemMisc(TestCase):
             "local": RDHList([ 39, 3 ])
         }, bind=RDHObjectType({
             "local": RDHListType([ IntegerType(), IntegerType() ], None)
-        }, wildcard_value_type=rich_composite_type))
+        }, wildcard_value_type=DEFAULT_READONLY_UNIVERSAL_TYPE))
 
 
 class TestRDHListType(TestCase):
@@ -958,7 +952,7 @@ class TestRDHListType(TestCase):
 
     def test_narrowing_assignment_blocked(self):
         foo = RDHListType([], IntegerType(), allow_push=False, allow_wildcard_insert=False, allow_delete=False, is_sparse=True)
-        bar = RDHListType([], Const(rich_composite_type), allow_push=False, allow_wildcard_insert=False, allow_delete=False, is_sparse=True)
+        bar = RDHListType([], Const(DEFAULT_READONLY_UNIVERSAL_TYPE), allow_push=False, allow_wildcard_insert=False, allow_delete=False, is_sparse=True)
 
         self.assertTrue(bar.is_copyable_from(foo))
         self.assertFalse(foo.is_copyable_from(bar))

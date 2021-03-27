@@ -5,6 +5,7 @@ from unittest import main
 from unittest.case import TestCase
 
 from lockdown.executor.bootstrap import bootstrap_function
+from lockdown.executor.flow_control import FrameManager
 from lockdown.executor.function import prepare
 from lockdown.executor.raw_code_factories import function_lit, no_value_type, \
     build_break_types, int_type, literal_op, return_op, addition_op, \
@@ -15,13 +16,12 @@ from lockdown.executor.raw_code_factories import function_lit, no_value_type, \
     string_type, bool_type, try_catch_op, throw_op, const_string_type, \
     function_type, close_op, shift_op
 from lockdown.type_system.core_types import IntegerType, StringType
-from lockdown.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
-    rich_composite_type
 from lockdown.type_system.list_types import RDHList, RDHListType
 from lockdown.type_system.managers import get_manager
-from lockdown.type_system.object_types import RDHObject, RDHObjectType
+from lockdown.type_system.object_types import PythonObjectType
+from lockdown.type_system.universal_type import PythonObject, \
+    DEFAULT_READONLY_UNIVERSAL_TYPE
 from lockdown.utils import NO_VALUE, set_debug
-from lockdown.executor.flow_control import FrameManager
 
 
 class TestPreparedFunction(TestCase):
@@ -69,15 +69,15 @@ class TestDereference(TestCase):
             )
         )
 
-        context = RDHObject({
+        context = PythonObject({
             "local": 42,
-            "types": RDHObject({
+            "types": PythonObject({
                 "local": IntegerType()
             })
-        }, bind=RDHObjectType({
+        }, bind=PythonObjectType({
             "local": IntegerType(),
-            "types": DEFAULT_OBJECT_TYPE
-        }, wildcard_value_type=rich_composite_type))
+            "types": DEFAULT_READONLY_UNIVERSAL_TYPE
+        }, wildcard_value_type=DEFAULT_READONLY_UNIVERSAL_TYPE))
 
         result = bootstrap_function(func, context=context, check_safe_exit=True)
 
@@ -119,14 +119,14 @@ class TestDereference(TestCase):
             )
         )
 
-        context = RDHObject({
+        context = PythonObject({
             "local": RDHList([ 39, 3 ]),
-            "types": RDHObject({
+            "types": PythonObject({
                 "local": RDHListType([ IntegerType(), IntegerType() ], None)
             })
-        }, bind=RDHObjectType({
+        }, bind=PythonObjectType({
             "local": RDHListType([ IntegerType(), IntegerType() ], None),
-            "types": DEFAULT_OBJECT_TYPE
+            "types": DEFAULT_READONLY_UNIVERSAL_TYPE
         }))
 
         result = bootstrap_function(func, context=context, check_safe_exit=True)
@@ -149,7 +149,7 @@ class TestComma(TestCase):
         self.assertEquals(result.value, 42)
 
     def test_restart_comma(self):
-        context = RDHObject({})
+        context = PythonObject({})
 
         frame_manager = FrameManager()
 
@@ -204,8 +204,8 @@ class TestTemplates(TestCase):
         )
 
         self.assertEquals(result.caught_break_mode, "return")
-        self.assertTrue(isinstance(result.value, RDHObject))
-        get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
+        self.assertTrue(isinstance(result.value, PythonObject))
+        get_manager(result.value).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
         self.assertEquals(result.value.foo, 42)
 
     def test_nested_return(self):
@@ -220,8 +220,8 @@ class TestTemplates(TestCase):
         )
 
         self.assertEquals(result.caught_break_mode, "return")
-        self.assertTrue(isinstance(result.value, RDHObject))
-        get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
+        self.assertTrue(isinstance(result.value, PythonObject))
+        get_manager(result.value).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
         self.assertEquals(result.value.foo.bar, 42)
 
     def test_return_with_dereference1(self):
@@ -237,8 +237,8 @@ class TestTemplates(TestCase):
         )
 
         self.assertEquals(result.caught_break_mode, "return")
-        self.assertTrue(isinstance(result.value, RDHObject))
-        get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
+        self.assertTrue(isinstance(result.value, PythonObject))
+        get_manager(result.value).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
         self.assertEquals(result.value.foo, 42)
         self.assertEquals(result.value.bar, 42)
 
@@ -255,8 +255,8 @@ class TestTemplates(TestCase):
         )
 
         self.assertEquals(result.caught_break_mode, "return")
-        self.assertTrue(isinstance(result.value, RDHObject))
-        get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
+        self.assertTrue(isinstance(result.value, PythonObject))
+        get_manager(result.value).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
         self.assertEquals(result.value.foo, 42)
         self.assertEquals(result.value.bar, 42)
 
@@ -273,8 +273,8 @@ class TestTemplates(TestCase):
         )
 
         self.assertEquals(result.caught_break_mode, "return")
-        self.assertTrue(isinstance(result.value, RDHObject))
-        get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
+        self.assertTrue(isinstance(result.value, PythonObject))
+        get_manager(result.value).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
         self.assertEquals(result.value.foo, 42)
         self.assertEquals(result.value.bar, 42)
 
@@ -291,8 +291,8 @@ class TestTemplates(TestCase):
         )
 
         self.assertEquals(result.caught_break_mode, "return")
-        self.assertTrue(isinstance(result.value, RDHObject))
-        get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
+        self.assertTrue(isinstance(result.value, PythonObject))
+        get_manager(result.value).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
         self.assertEquals(result.value.foo, 42)
         self.assertEquals(result.value.bar, 42)
 
@@ -319,8 +319,8 @@ class TestTemplates(TestCase):
         )
 
         self.assertEquals(result.caught_break_mode, "return")
-        self.assertTrue(isinstance(result.value, RDHObject))
-        get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
+        self.assertTrue(isinstance(result.value, PythonObject))
+        get_manager(result.value).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
         self.assertEquals(result.value.foo.bar, 42)
 
 
@@ -355,7 +355,7 @@ class TestLocals(TestCase):
         self.assertEquals(result.value, 123)
 
     def test_restart_into_local_initialization(self):
-        context = RDHObject({})
+        context = PythonObject({})
         frame_manager = FrameManager()
 
         func = prepare(
@@ -385,7 +385,7 @@ class TestLocals(TestCase):
         self.assertEquals(returner.value, 32)
 
     def test_restart_into_local_initialization_and_code(self):
-        context = RDHObject({})
+        context = PythonObject({})
         frame_manager = FrameManager()
 
         func = prepare(
@@ -643,7 +643,7 @@ class TestUnboundReference(TestCase):
                 return_op(addition_op(
                     unbound_dereference("foo"), unbound_dereference("bar")
                 ))
-            ), check_safe_exit=True, argument=RDHObject({ "foo": 39, "bar": 3 })
+            ), check_safe_exit=True, argument=PythonObject({ "foo": 39, "bar": 3 })
         )
 
         self.assertEquals(result.caught_break_mode, "return")
@@ -673,7 +673,7 @@ class TestUnboundReference(TestCase):
                 return_op(addition_op(
                     unbound_dereference("foo"), unbound_dereference("bar")
                 ))
-            ), check_safe_exit=True, argument=RDHObject({ "foo": 39 })
+            ), check_safe_exit=True, argument=PythonObject({ "foo": 39 })
         )
 
         self.assertEquals(result.caught_break_mode, "return")
@@ -701,14 +701,14 @@ class TestMatch(TestCase):
         )
 
         result = bootstrap_function(
-            func, check_safe_exit=True, argument=RDHObject({ "foo": 39 }, bind=RDHObjectType({ "foo": IntegerType() }))
+            func, check_safe_exit=True, argument=PythonObject({ "foo": 39 }, bind=PythonObjectType({ "foo": IntegerType() }))
         )
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
         result = bootstrap_function(
-            func, check_safe_exit=True, argument=RDHObject({ "foo": "hello" })
+            func, check_safe_exit=True, argument=PythonObject({ "foo": "hello" })
         )
 
         self.assertEquals(result.caught_break_mode, "return")
@@ -794,7 +794,7 @@ class TestMatch(TestCase):
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "hello world")
 
-        prepared_func = prepare(func, RDHObject({}), FrameManager())
+        prepared_func = prepare(func, PythonObject({}), FrameManager())
         self.assertEquals(len(prepared_func.break_types), 1)
         self.assertTrue("return" in prepared_func.break_types)
         for return_break_type in prepared_func.break_types["return"]:
@@ -867,8 +867,8 @@ class TestTryCatch(TestCase):
         self.assertEquals(result.value, "unknown")
         result = bootstrap_function(func, argument="hello")
         self.assertEquals(result.caught_break_mode, "exception")
-        self.assertIsInstance(result.value, RDHObject)
-        get_manager(result.value).add_composite_type(DEFAULT_OBJECT_TYPE)
+        self.assertIsInstance(result.value, PythonObject)
+        get_manager(result.value).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
         self.assertEquals(result.value.type, "TypeError")
 
     def test_catch_real_exception(self):
@@ -946,7 +946,7 @@ class TestStatics(TestCase):
 
 class TestContinuations(TestCase):
     def test_single_restart(self):
-        context = RDHObject({})
+        context = PythonObject({})
         frame_manager = FrameManager()
 
         func = prepare(
@@ -972,7 +972,7 @@ class TestContinuations(TestCase):
         self.assertEquals(returner.value, 42)
 
     def test_repeated_restart(self):
-        context = RDHObject({})
+        context = PythonObject({})
         frame_manager = FrameManager()
 
         func = prepare(
@@ -1008,7 +1008,7 @@ class TestContinuations(TestCase):
         self.assertEquals(returner.value, 42)
 
     def test_repeated_restart_with_outer_return_handling(self):
-        context = RDHObject({})
+        context = PythonObject({})
         frame_manager = FrameManager()
 
         func = prepare(
@@ -1037,7 +1037,7 @@ class TestContinuations(TestCase):
         self.assertEquals(return_capturer.value, 42)
 
     def test_repeated_restart_while_using_restart_values(self):
-        context = RDHObject({})
+        context = PythonObject({})
         frame_manager = FrameManager()
 
         func = prepare(

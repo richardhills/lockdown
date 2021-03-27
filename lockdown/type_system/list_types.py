@@ -867,6 +867,7 @@ SPARSE_ELEMENT = object()
 
 class RDHList(Composite, MutableSequence, object):
     def __init__(self, initial_data, is_sparse=False, bind=None, debug_reason=None):
+        raise ValueError()
         self.wrapped = {
             index: value for index, value in enumerate(initial_data)
         }

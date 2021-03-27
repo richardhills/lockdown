@@ -55,8 +55,8 @@ def get_manager(obj, trigger=None):
     elif isinstance(obj, list):
         if is_debug() and not runtime_type_information():
             raise FatalError()
-        from lockdown.type_system.list_types import RDHList
-        obj = RDHList(obj)
+        from lockdown.type_system.universal_type import PythonList
+        obj = PythonList(obj)
         replace_all_refs(old_obj, obj)            
         manager = CompositeObjectManager(obj, obj_cleared_callback)
     elif isinstance(obj, tuple):
@@ -76,9 +76,9 @@ def get_manager(obj, trigger=None):
     elif isinstance(obj, object) and hasattr(obj, "__dict__"):
         if is_debug() and not runtime_type_information():
             raise FatalError()
-        from lockdown.type_system.object_types import RDHObject
+        from lockdown.type_system.universal_type import PythonObject
         original_type = obj.__class__
-        new_type = type("RDH{}".format(original_type.__name__), (RDHObject, original_type,), {})
+        new_type = type("RDH{}".format(original_type.__name__), (PythonObject, original_type,), {})
         obj = new_type(obj.__dict__)
         replace_all_refs(old_obj, obj)
         manager = CompositeObjectManager(obj, obj_cleared_callback)

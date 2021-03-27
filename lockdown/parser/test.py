@@ -8,10 +8,10 @@ from lockdown.executor.bootstrap import bootstrap_function
 from lockdown.executor.exceptions import PreparationException
 from lockdown.parser.parser import parse
 from lockdown.testing import miss_test
-from lockdown.type_system.default_composite_types import DEFAULT_LIST_TYPE
 from lockdown.type_system.list_types import RDHList
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.object_types import RDHObject
+from lockdown.type_system.universal_type import DEFAULT_READONLY_UNIVERSAL_TYPE
 
 
 class TestJSONParsing(TestCase):
@@ -308,7 +308,7 @@ class TestBuiltIns(TestCase):
         result = bootstrap_function(code, check_safe_exit=True)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertIsInstance(result.value, RDHList)
-        get_manager(result.value).add_composite_type(DEFAULT_LIST_TYPE)
+        get_manager(result.value).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
         self.assertEquals(len(result.value), 4)
         self.assertEquals(list(result.value), [ 1, 2, 3, 4 ])
 

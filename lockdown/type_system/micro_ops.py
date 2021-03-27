@@ -129,7 +129,7 @@ def merge_composite_types(types, name=None):
 
     types_with_opcodes = [t for t in types if t.micro_op_types]
 
-    from lockdown.type_system.default_composite_types import EMPTY_COMPOSITE_TYPE
+    from lockdown.type_system.universal_type import EMPTY_COMPOSITE_TYPE
 
     if len(types_with_opcodes) == 0:
         return EMPTY_COMPOSITE_TYPE

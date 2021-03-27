@@ -3,7 +3,7 @@ from __future__ import unicode_literals
 
 from lockdown.executor.ast_utils import compile_statement, compile_expression
 from lockdown.type_system.composites import CompositeType, \
-    Composite, unbind_key, bind_key, can_add_composite_type_with_filter,\
+    Composite, unbind_key, bind_key, can_add_composite_type_with_filter, \
     does_value_fit_through_type
 from lockdown.type_system.core_types import merge_types, Type, Const, OneOfType, \
     AnyType, StringType, NoValueType
@@ -529,6 +529,7 @@ class ObjectDeletterType(MicroOpType):
         return ObjectDeletterType(self.key, self.key_error or other_micro_op_type.key_error)
 
 def RDHObjectType(properties=None, wildcard_key_type=None, wildcard_value_type=None, **kwargs):
+    raise ValueError()
     if not properties:
         properties = {}
     if not wildcard_key_type:
@@ -584,6 +585,7 @@ class DefaultDictType(CompositeType):
 
 class RDHObject(Composite, object):
     def __init__(self, initial_data=None, default_factory=None, is_sparse=True, bind=None, debug_reason=None):
+        raise ValueError()
         if initial_data is None:
             initial_data = {}
         for key, value in initial_data.items():

@@ -1,18 +1,15 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-from lockdown.type_system.dict_types import RDHDict
 from lockdown.type_system.exceptions import FatalError
-from lockdown.type_system.list_types import RDHList
-from lockdown.type_system.object_types import RDHObject
+from lockdown.type_system.universal_type import PythonObject, PythonList
 from lockdown.utils import spread_dict
 
 
 def is_opcode(data):
-    if not isinstance(data, RDHObject):
+    if not isinstance(data, (PythonObject, PythonObject)):
         raise FatalError()
-    return "opcode" in data.__dict__
-
+    return data._contains("opcode")
 
 def check_is_opcode(data):
     if not is_opcode(data):
@@ -39,14 +36,13 @@ def one_of_type(types):
     }, debug_reason="type-literal")
 
 
-def object_type(properties, wildcard_value_type=None, wildcard_key_type=None):
+def object_type(properties, wildcard_type=None):
     type = {
         "type": literal_op("Object"),
         "properties": object_template_op(properties),
     }
-    if wildcard_value_type:
-        type["wildcard_value_type"] = wildcard_value_type
-        type["wildcard_key_type"] = wildcard_key_type
+    if wildcard_type:
+        type["wildcard_type"] = wildcard_type
     return object_template_op(type, debug_reason="type-literal")
 
 
@@ -145,11 +141,11 @@ def function_lit(*args, **kwargs):
         "local_initializer": local_initializer
     }, **kwargs)
 
-    return RDHObject(func)
+    return PythonObject(func)
 
 
 def literal_op(value):
-    return RDHObject({
+    return PythonObject({
         "opcode": "literal",
         "value": value
     }, debug_reason="code")
@@ -163,11 +159,11 @@ def object_template_op(values, debug_reason="code", **kwargs):
         if isinstance(k, basestring):
             k = literal_op(k)
 
-        values_list.append(RDHList([ k, v ]))
+        values_list.append(PythonList([ k, v ]))
 
-    return RDHObject(spread_dict({
+    return PythonObject(spread_dict({
         "opcode": "object_template",
-        "opcodes": RDHList(values_list, debug_reason=debug_reason)
+        "opcodes": PythonList(values_list, debug_reason=debug_reason)
     }, **kwargs), debug_reason=debug_reason)
 
 
@@ -176,27 +172,27 @@ def dict_template_op(values):
 
     for k, v in values.items():
         check_is_opcode(v)
-        values_list.append(RDHList([ k, v ]))
+        values_list.append(PythonList([ k, v ]))
 
-    return RDHObject({
+    return PythonObject({
         "opcode": "dict_template",
-        "opcodes": RDHList(values_list, debug_reason="code")
+        "opcodes": PythonList(values_list, debug_reason="code")
     }, debug_reason="code")
 
 
 def list_template_op(values):
     for v in values:
         check_is_opcode(v)
-    return RDHObject({
+    return PythonObject({
         "opcode": "list_template",
-        "opcodes": RDHList(values)
+        "opcodes": PythonList(values)
     }, debug_reason="code")
 
 
 def binary_integer_op(name, lvalue, rvalue):
     check_is_opcode(lvalue)
     check_is_opcode(rvalue)
-    return RDHObject({
+    return PythonObject({
         "opcode": name,
         "lvalue": lvalue,
         "rvalue": rvalue
@@ -226,15 +222,15 @@ def equality_op(lvalue, rvalue):
 def comma_op(*opcodes):
     for v in opcodes:
         check_is_opcode(v)
-    return RDHObject({
+    return PythonObject({
         "opcode": "comma",
-        "opcodes": RDHList(opcodes)
+        "opcodes": PythonList(opcodes)
     }, debug_reason="code")
 
 
 def loop_op(opcode, **kwargs):
     check_is_opcode(opcode)
-    return RDHObject(spread_dict({
+    return PythonObject(spread_dict({
         "opcode": "loop",
         "code": opcode
     }, **kwargs), debug_reason="code")
@@ -269,13 +265,13 @@ def transform_op(*args, **kwargs):
     if input:
         op["input"] = input
         op["code"] = code
-    return RDHObject(spread_dict(op, **kwargs), debug_reason="code")
+    return PythonObject(spread_dict(op, **kwargs), debug_reason="code")
 
 
 def shift_op(code, restart_type, **kwargs):
     check_is_opcode(code)
     check_is_opcode(restart_type)
-    return RDHObject(spread_dict({
+    return PythonObject(spread_dict({
         "opcode": "shift",
         "code": code,
         "restart_type": restart_type
@@ -303,7 +299,7 @@ def reset_op(*args, **kwargs):
         result["function"] = function
         result["argument"] = argument
 
-    return RDHObject(spread_dict(result, **kwargs), debug_reason="code")
+    return PythonObject(spread_dict(result, **kwargs), debug_reason="code")
 
 
 def return_op(code):
@@ -357,7 +353,7 @@ def continue_op(code):
 
 
 def context_op(**kwargs):
-    return RDHObject(spread_dict({
+    return PythonObject(spread_dict({
         "opcode": "context",
     }, **kwargs), debug_reason="code")
 
@@ -365,7 +361,7 @@ def context_op(**kwargs):
 def is_op(expression, type, **kwargs):
     check_is_opcode(expression)
     check_is_opcode(type)
-    return RDHObject(spread_dict({
+    return PythonObject(spread_dict({
         "opcode": "is",
         "expression": expression,
         "type": type
@@ -375,7 +371,7 @@ def is_op(expression, type, **kwargs):
 def dereference_op(of, reference, safe, **kwargs):
     check_is_opcode(of)
     check_is_opcode(reference)
-    return RDHObject(spread_dict({
+    return PythonObject(spread_dict({
         "opcode": "dereference",
         "of": of,
         "reference": reference,
@@ -386,7 +382,7 @@ def dereference_op(of, reference, safe, **kwargs):
 def dynamic_dereference_op(reference, **kwargs):
     if not isinstance(reference, basestring):
         raise FatalError()
-    return RDHObject(spread_dict({
+    return PythonObject(spread_dict({
         "opcode": "dynamic_dereference",
         "reference": reference
     }, **kwargs), debug_reason="code")
@@ -396,7 +392,7 @@ def assignment_op(of, reference, rvalue, **kwargs):
     check_is_opcode(of)
     check_is_opcode(reference)
     check_is_opcode(rvalue)
-    return RDHObject(spread_dict({
+    return PythonObject(spread_dict({
         "opcode": "assignment",
         "of": of,
         "reference": reference,
@@ -408,7 +404,7 @@ def insert_op(of, reference, rvalue):
     check_is_opcode(of)
     check_is_opcode(reference)
     check_is_opcode(rvalue)
-    return RDHObject({
+    return PythonObject({
         "opcode": "insert",
         "of": of,
         "reference": reference,
@@ -419,7 +415,7 @@ def insert_op(of, reference, rvalue):
 def map_op(composite, mapper):
     check_is_opcode(composite)
     check_is_opcode(mapper)
-    return RDHObject({
+    return PythonObject({
         "opcode": "map",
         "composite": composite,
         "mapper": mapper
@@ -430,7 +426,7 @@ def condition_op(condition, when_true, when_false):
     check_is_opcode(condition)
     check_is_opcode(when_true)
     check_is_opcode(when_false)
-    return RDHObject({
+    return PythonObject({
         "opcode": "conditional",
         "condition": condition,
         "when_true": when_true,
@@ -440,7 +436,7 @@ def condition_op(condition, when_true, when_false):
 
 def prepare_op(function_expression, **kwargs):
     check_is_opcode(function_expression)
-    return RDHObject(spread_dict({
+    return PythonObject(spread_dict({
         "opcode": "prepare",
         "code": function_expression
     }, **kwargs), debug_reason="code")
@@ -449,7 +445,7 @@ def prepare_op(function_expression, **kwargs):
 def close_op(function, context, **kwargs):
     check_is_opcode(function)
     check_is_opcode(context)
-    return RDHObject(spread_dict({
+    return PythonObject(spread_dict({
         "opcode": "close",
         "function": function,
         "outer_context": context
@@ -458,7 +454,7 @@ def close_op(function, context, **kwargs):
 
 def static_op(expression, **kwargs):
     check_is_opcode(expression)
-    return RDHObject(spread_dict({
+    return PythonObject(spread_dict({
         "opcode": "static",
         "code": expression
     }, **kwargs), debug_reason="code")
@@ -471,7 +467,7 @@ def invoke_op(function_expression, argument_expression=None, **kwargs):
         argument_expression = nop()
     check_is_opcode(function_expression)
     check_is_opcode(argument_expression)
-    return RDHObject(spread_dict({
+    return PythonObject(spread_dict({
         "opcode": "invoke",
         "function": function_expression,
         "argument": argument_expression
@@ -482,15 +478,15 @@ def match_op(value_expression, matchers):
     check_is_opcode(value_expression)
     for matcher in matchers:
         check_is_opcode(matcher)
-    return RDHObject({
+    return PythonObject({
         "opcode": "match",
         "value": value_expression,
-        "matchers": RDHList(matchers)
+        "matchers": PythonList(matchers)
     }, debug_reason="code")
 
 
 def nop():
-    return RDHObject({ "opcode": "nop" }, debug_reason="code")
+    return PythonObject({ "opcode": "nop" }, debug_reason="code")
 
 
 def no_value_type():
@@ -522,7 +518,7 @@ def combine_opcodes(opcodes):
     for opcode in opcodes:
         check_is_opcode(opcode)
     for opcode in opcodes:
-        if opcode.__dict__["opcode"] == "comma":
+        if opcode._get("opcode") == "comma":
             flattened_opcodes.extend(opcode.opcodes)
         else:
             flattened_opcodes.append(opcode)
@@ -536,7 +532,7 @@ def combine_opcodes(opcodes):
 
 def const_string_type():
     # TODO make neater
-    return literal_op(RDHObject({
+    return literal_op(PythonObject({
         "type": "String",
         "const": True
     }, debug_reason="type-literal"))
@@ -545,7 +541,7 @@ def const_string_type():
 def unbound_dereference(name, **kwargs):
     if not isinstance(name, basestring):
         raise FatalError()
-    return RDHObject(spread_dict({
+    return PythonObject(spread_dict({
         "opcode": "unbound_dereference",
         "reference": name
     }, **kwargs), debug_reason="code")
@@ -555,7 +551,7 @@ def unbound_assignment(name, rvalue):
     if not isinstance(name, basestring):
         raise FatalError()
     check_is_opcode(rvalue)
-    return RDHObject({
+    return PythonObject({
         "opcode": "unbound_assignment",
         "reference": name,
         "rvalue": rvalue

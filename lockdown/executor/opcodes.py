@@ -4,7 +4,6 @@ from __future__ import unicode_literals
 from abc import abstractmethod
 import ast
 
-from log import logger
 from lockdown.executor.ast_utils import compile_expression, compile_statement, \
     unwrap_modules, wrap_as_statement
 from lockdown.executor.exceptions import PreparationException
@@ -16,9 +15,6 @@ from lockdown.type_system.composites import CompositeType, scoped_bind, \
 from lockdown.type_system.core_types import AnyType, Type, merge_types, Const, \
     UnitType, NoValueType, PermittedValuesDoesNotExist, unwrap_types, IntegerType, \
     BooleanType, remove_type, OneOfType
-from lockdown.type_system.default_composite_types import rich_composite_type, \
-    readonly_rich_composite_type, \
-    READONLY_DEFAULT_OBJECT_TYPE
 from lockdown.type_system.dict_types import RDHDict, DictGetterType, \
     DictSetterType, DictWildcardGetterType, DictWildcardSetterType, RDHDictType
 from lockdown.type_system.exceptions import FatalError, InvalidDereferenceType, \
@@ -31,8 +27,10 @@ from lockdown.type_system.managers import get_type_of_value, get_manager
 from lockdown.type_system.object_types import RDHObject, RDHObjectType, \
     ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
     ObjectWildcardSetterType
+from lockdown.type_system.universal_type import UniversalObjectType
 from lockdown.utils import MISSING, NO_VALUE, is_debug, \
     runtime_type_information
+from log import logger
 
 
 class Opcode(object):
@@ -164,7 +162,7 @@ class TypeErrorFactory(object):
             "message": Const(UnitType(message or self.message)),
             "kwargs": Const(RDHDictType(AnyType()))
         }
-        return RDHObjectType(properties, wildcard_value_type=AnyType(), name="TypeError")
+        return UniversalObjectType(properties, wildcard_type=AnyType(), name="TypeError")
 
 
 class Nop(Opcode):
@@ -310,6 +308,7 @@ class ObjectTemplateOp(Opcode):
 
 class DictTemplateOp(Opcode):
     def __init__(self, data, visitor):
+        raise ValueError()
         super(DictTemplateOp, self).__init__(data, visitor)
         self.opcodes = [
             ( key, enrich_opcode(opcode, visitor) )
@@ -420,7 +419,7 @@ def get_context_type(context):
             value_type["prepare"] = readonly_rich_composite_type
         if hasattr(context, "static"):
             value_type["static"] = readonly_rich_composite_type
-        context_manager._context_type = RDHObjectType(value_type, name="context-type-{}".format(context_manager.debug_reason))
+        context_manager._context_type = UniversalObjectType(value_type, name="context-type-{}".format(context_manager.debug_reason))
 
     return context_manager._context_type
 
@@ -1200,7 +1199,7 @@ class ResetOp(Opcode):
             self.argument = enrich_opcode(data.argument, visitor)
 
     def get_value_and_continuation_block_type(self, out_break_type, in_break_type, continuation_break_types):
-        return RDHObjectType({
+        return UniversalObjectType({
             "value": Const(out_break_type),
             "continuation": Const(ClosedFunctionType(in_break_type, continuation_break_types))
         }, name="ValueAndContinuation")

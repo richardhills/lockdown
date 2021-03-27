@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
+
 from time import time
 
 from lockdown.executor.flow_control import FrameManager, \
@@ -13,10 +14,9 @@ from lockdown.executor.raw_code_factories import inferred_type, function_lit, \
     invoke_op, object_template_op, prepared_function, no_value_type, \
     assignment_op, dict_template_op, addition_op, reset_op, shift_op, \
     transform, local_function, map_op
-from lockdown.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
-    READONLY_DEFAULT_OBJECT_TYPE
 from lockdown.type_system.managers import get_manager
-from lockdown.type_system.object_types import RDHObject
+from lockdown.type_system.universal_type import PythonObject, \
+    DEFAULT_READONLY_UNIVERSAL_TYPE
 from lockdown.utils import NO_VALUE, print_code, MISSING
 
 
@@ -29,18 +29,18 @@ class BootstrapException(Exception):
     pass
 
 def get_default_global_context():
-    return RDHObject({
-        "static": RDHObject({
-            "any": RDHObject({
+    return PythonObject({
+        "static": PythonObject({
+            "any": PythonObject({
                 "type": "Any"
             }, debug_reason="default-global-context"),
-            "int": RDHObject({
+            "int": PythonObject({
                 "type": "Integer"
             }, debug_reason="default-global-context"),
-            "void": RDHObject({
+            "void": PythonObject({
                 "type": "NoValue"
             }, debug_reason="default-global-context"),
-            "var": RDHObject({
+            "var": PythonObject({
                 "type": "Inferred"
             }, debug_reason="default-global-context"),
             "range": prepare(
@@ -133,7 +133,7 @@ def get_default_global_context():
                 None, FrameManager()
             ).close(None),
         }, debug_reason="default-global-context")
-    }, bind=READONLY_DEFAULT_OBJECT_TYPE, debug_reason="default-global-context")
+    }, bind=DEFAULT_READONLY_UNIVERSAL_TYPE, debug_reason="default-global-context")
 
 def format_unhandled_break_type(break_type, raw_code):
     if not raw_code:
@@ -210,7 +210,7 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False,
     if context is None:
         context = get_default_global_context()
 
-    get_manager(context).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
+    get_manager(context).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
 
     frame_manager = FrameManager()
 

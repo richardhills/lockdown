@@ -141,9 +141,7 @@ class CompositeObjectManager(object):
         self.attached_type_counts = defaultdict(int)
         self.on_gc_callback = on_gc_callback
 
-        from lockdown.type_system.default_composite_types import EMPTY_COMPOSITE_TYPE
-
-        self.cached_effective_composite_type = EMPTY_COMPOSITE_TYPE
+        self.cached_effective_composite_type = None
 
         self.default_factory = None
         self.debug_reason = None

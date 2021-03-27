@@ -3,7 +3,6 @@ from __future__ import unicode_literals
 
 import ast
 
-from log import logger
 from lockdown.executor.ast_utils import unwrap_expr, \
     build_and_compile_ast_function, compile_module, compile_statement, \
     DependencyBuilder, compile_function, compile_ast_function_def, \
@@ -23,17 +22,17 @@ from lockdown.type_system.composites import prepare_lhs_type, \
     is_type_bindable_to_value
 from lockdown.type_system.core_types import Type, NoValueType, IntegerType, \
     AnyType
-from lockdown.type_system.default_composite_types import DEFAULT_OBJECT_TYPE, \
-    DEFAULT_DICT_TYPE, READONLY_DEFAULT_OBJECT_TYPE, \
-    readonly_rich_composite_type
 from lockdown.type_system.dict_types import RDHDict
-from lockdown.type_system.exceptions import FatalError, InvalidInferredType,\
+from lockdown.type_system.exceptions import FatalError, InvalidInferredType, \
     DanglingInferredType
 from lockdown.type_system.list_types import RDHList
 from lockdown.type_system.managers import get_manager, get_type_of_value
 from lockdown.type_system.object_types import RDHObject, RDHObjectType
+from lockdown.type_system.universal_type import PythonObject, \
+    UniversalObjectType, DEFAULT_READONLY_UNIVERSAL_TYPE
 from lockdown.utils import MISSING, is_debug, runtime_type_information, raise_from, \
     spread_dict
+from log import logger
 
 
 def prepare_piece_of_context(declared_type, suggested_type):
@@ -51,9 +50,9 @@ def prepare_piece_of_context(declared_type, suggested_type):
     return final_type
 
 def prepare(data, outer_context, frame_manager, immediate_context=None):
-    if not isinstance(data, RDHObject):
+    if not isinstance(data, (RDHObject, PythonObject)):
         raise FatalError()
-    get_manager(data).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
+    get_manager(data).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
 
     if not hasattr(data, "code"):
         raise PreparationException("Code missing from function")
@@ -62,7 +61,7 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
 
     context = RDHObject({
         "prepare": outer_context
-    }, bind=READONLY_DEFAULT_OBJECT_TYPE, debug_reason="static-prepare-context")
+    }, bind=DEFAULT_READONLY_UNIVERSAL_TYPE, debug_reason="static-prepare-context")
 
     static = evaluate(
         enrich_opcode(
@@ -72,7 +71,7 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
         context, frame_manager
     )
 
-    get_manager(static).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
+    get_manager(static).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
 
     argument_type = enrich_type(static.argument)
     outer_type = enrich_type(static.outer)
@@ -106,16 +105,16 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
 #            "local": local_type
         }, debug_reason="local-prepare-context")
     },
-        bind=READONLY_DEFAULT_OBJECT_TYPE,
+        bind=DEFAULT_READONLY_UNIVERSAL_TYPE,
         debug_reason="local-prepare-context"
     )
 
 # optimization to avoid generating context_type lazily
-    get_manager(context)._context_type = RDHObjectType({
+    get_manager(context)._context_type = UniversalObjectType({
         "outer": outer_type,
         "argument": argument_type,
 #        "local": local_type
-    }, wildcard_value_type=AnyType(), name="local-prepare-context-type")
+    }, wildcard_type=AnyType(), name="local-prepare-context-type")
 
     local_initializer = enrich_opcode(
         data.local_initializer,
@@ -127,7 +126,7 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
         frame_manager
     )
 
-    get_manager(context).remove_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
+    get_manager(context).remove_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
 
     if actual_local_type is MISSING:
         raise PreparationException("Actual local type missing")
@@ -151,7 +150,7 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
         mode: RDHList([enrich_break_type(break_type) for break_type in break_types]) for mode, break_types in static.break_types.__dict__.items()
     })
 
-    get_manager(declared_break_types).add_composite_type(DEFAULT_DICT_TYPE)
+    get_manager(declared_break_types).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
 
     context = RDHObject({
         "prepare": outer_context,
@@ -162,15 +161,15 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
             "local": local_type
         }, debug_reason="code-prepare-context")
     },
-        bind=READONLY_DEFAULT_OBJECT_TYPE,
+        bind=DEFAULT_READONLY_UNIVERSAL_TYPE,
         debug_reason="code-prepare-context"
     )
 
-    get_manager(context)._context_type = RDHObjectType({
+    get_manager(context)._context_type = UniversalObjectType({
         "outer": outer_type,
         "argument": argument_type,
         "local": local_type
-    }, wildcard_value_type=AnyType(), name="code-prepare-context-type")
+    }, wildcard_type=AnyType(), name="code-prepare-context-type")
 
     code = enrich_opcode(
         data.code,
@@ -179,7 +178,7 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
 
     code_break_types = code.get_break_types(context, frame_manager)
 
-    get_manager(context).remove_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
+    get_manager(context).remove_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
 
     actual_break_types_factory.merge(code_break_types)
 
@@ -314,11 +313,11 @@ class UnboundDereferenceBinder(object):
                 new_dereference = dereference_op(bound_countext_op, literal_op(reference), True, **debug_info)
                 if is_static:
                     new_dereference = static_op(new_dereference)
-                get_manager(new_dereference).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
+                get_manager(new_dereference).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
                 return new_dereference
             else:
                 new_dereference = dynamic_dereference_op(reference, **debug_info)
-                get_manager(new_dereference).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
+                get_manager(new_dereference).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
                 return new_dereference
 
         if getattr(expression, "opcode", None) == "unbound_assignment":
@@ -327,7 +326,7 @@ class UnboundDereferenceBinder(object):
 
             if bound_countext_op:
                 new_assignment = assignment_op(bound_countext_op, literal_op(reference), expression.rvalue, **debug_info)
-                get_manager(new_assignment).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
+                get_manager(new_assignment).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
                 return new_assignment
             else:
                 raise FatalError()  # TODO, dynamic assignment
@@ -357,7 +356,7 @@ def type_conditional_converter(expression):
             )
         ]
     )
-    get_manager(new_match).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
+    get_manager(new_match).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
     return new_match
 
 def combine(*funcs):
@@ -392,20 +391,20 @@ class OpenFunction(object):
             "argument": self.argument_type
         }, debug_reason="local-initialization-context")
 
-        self.local_initialization_context_type = RDHObjectType({
+        self.local_initialization_context_type = UniversalObjectType({
             "outer": self.outer_type,
             "argument": self.argument_type,
 #            "types": readonly_rich_composite_type
-        }, wildcard_value_type=AnyType(), name="local-initialization-context-type")
+        }, wildcard_type=AnyType(), name="local-initialization-context-type")
 
-        self.execution_context_type = RDHObjectType({
+        self.execution_context_type = UniversalObjectType({
 #            "prepare": readonly_rich_composite_type,
             "outer": self.outer_type,
             "argument": self.argument_type,
 #            "static": readonly_rich_composite_type,
             "local": self.local_type,
 #            "types": readonly_rich_composite_type
-        }, wildcard_value_type=AnyType(), name="code-execution-context-type")
+        }, wildcard_type=AnyType(), name="code-execution-context-type")
 
         if not self.execution_context_type.is_self_consistent():
             raise FatalError()

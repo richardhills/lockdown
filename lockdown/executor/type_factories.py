@@ -9,7 +9,6 @@ from lockdown.executor.function_type import enrich_break_type, \
 from lockdown.type_system.composites import InferredType, CompositeType
 from lockdown.type_system.core_types import UnitType, OneOfType, Const, AnyType, \
     IntegerType, BooleanType, NoValueType, StringType
-from lockdown.type_system.default_composite_types import DEFAULT_DICT_TYPE
 from lockdown.type_system.dict_types import RDHDict, DictGetterType, \
     DictSetterType, DictDeletterType, DictWildcardGetterType, \
     DictWildcardSetterType, DictWildcardDeletterType
@@ -20,6 +19,12 @@ from lockdown.type_system.list_types import RDHListType, RDHList, ListGetterType
 from lockdown.type_system.object_types import RDHObjectType, RDHObject, \
     ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
     ObjectWildcardSetterType, ObjectDeletterType, ObjectWildcardDeletterType
+from lockdown.type_system.universal_type import GetterMicroOpType, \
+    SetterMicroOpType, InsertStartMicroOpType, InsertEndMicroOpType, \
+    GetterWildcardMicroOpType, SetterWildcardMicroOpType, \
+    DeletterWildcardMicroOpType, RemoverWildcardMicroOpType, \
+    InserterWildcardMicroOpType, IterMicroOpType, UniversalObjectType, \
+    DEFAULT_READONLY_UNIVERSAL_TYPE
 
 
 def build_closed_function_type(data):
@@ -39,7 +44,7 @@ def build_closed_function_type(data):
         RDHDict({
             mode: RDHList([ enrich_break_type(b) for b in break_types ])
             for mode, break_types in data.break_types.items()
-        }, bind=DEFAULT_DICT_TYPE, debug_reason="type")
+        }, bind=DEFAULT_READONLY_UNIVERSAL_TYPE, debug_reason="type")
     )
 
 def build_unit_type(data):
@@ -61,17 +66,14 @@ def build_object_type(data):
         if getattr(type, "const", False):
             properties[name] = Const(properties[name])
 
-    wildcard_key_type = getattr(data, "wildcard_key_type", None)
-    wildcard_value_type = getattr(data, "wildcard_value_type", None)
+    wildcard_type = getattr(data, "wildcard_type", None)
 
-    if wildcard_key_type:
-        wildcard_key_type = enrich_type(wildcard_key_type)
-        wildcard_value_type = enrich_type(wildcard_value_type)
+    if wildcard_type:
+        wildcard_type = enrich_type(wildcard_type)
 
-    return RDHObjectType(
+    return UniversalObjectType(
         properties,
-        wildcard_key_type=wildcard_key_type,
-        wildcard_value_type=wildcard_value_type,
+        wildcard_type=wildcard_type,
         name="declared-object-type"
     )
 
@@ -88,6 +90,18 @@ def inferred_opcode_factory(*args, **kwargs):
     return None
 
 OPCODE_TYPE_FACTORIES = {
+    "universal": {
+        "get": GetterMicroOpType,
+        "set": SetterMicroOpType,
+        "insert-start": InsertStartMicroOpType,
+        "insert-end": InsertEndMicroOpType,
+        "get-wildcard": GetterWildcardMicroOpType,
+        "set-wildcard": SetterWildcardMicroOpType,
+        "delete-wildcard": DeletterWildcardMicroOpType,
+        "remove-wildcard": RemoverWildcardMicroOpType,
+        "insert-wildcard": InserterWildcardMicroOpType,
+        "iter": IterMicroOpType
+    },
     "object": {
         "get": ObjectGetterType,
         "set": ObjectSetterType,
