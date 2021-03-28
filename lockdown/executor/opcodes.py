@@ -14,7 +14,7 @@ from lockdown.type_system.composites import CompositeType, scoped_bind, \
     does_value_fit_through_type, is_type_bindable_to_value, Composite
 from lockdown.type_system.core_types import AnyType, Type, merge_types, Const, \
     UnitType, NoValueType, PermittedValuesDoesNotExist, unwrap_types, IntegerType, \
-    BooleanType, remove_type, OneOfType
+    BooleanType, remove_type, OneOfType, StringType
 from lockdown.type_system.dict_types import RDHDict, DictGetterType, \
     DictSetterType, DictWildcardGetterType, DictWildcardSetterType, RDHDictType
 from lockdown.type_system.exceptions import FatalError, InvalidDereferenceType, \
@@ -24,10 +24,12 @@ from lockdown.type_system.list_types import RDHList, ListGetterType, \
     ListWildcardDeletterType, ListInsertType, ListWildcardInsertType, \
     RDHListType, ListRangeGetterType
 from lockdown.type_system.managers import get_type_of_value, get_manager
-from lockdown.type_system.object_types import RDHObject, RDHObjectType, \
-    ObjectGetterType, ObjectSetterType, ObjectWildcardGetterType, \
-    ObjectWildcardSetterType
-from lockdown.type_system.universal_type import UniversalObjectType
+from lockdown.type_system.object_types import ObjectGetterType, ObjectSetterType, \
+    ObjectWildcardGetterType, ObjectWildcardSetterType
+from lockdown.type_system.universal_type import UniversalObjectType, \
+    DEFAULT_READONLY_COMPOSITE_TYPE, PythonList, UniversalListType, PythonObject, \
+    GetterMicroOpType, SetterMicroOpType, GetterWildcardMicroOpType, \
+    SetterWildcardMicroOpType, PythonDict
 from lockdown.utils import MISSING, NO_VALUE, is_debug, \
     runtime_type_information
 from log import logger
@@ -154,7 +156,7 @@ class TypeErrorFactory(object):
             "message": message or self.message,
             "kwargs": kwargs
         }
-        return RDHObject(data, bind=self.get_type(message), debug_reason="type-error")
+        return PythonObject(data, bind=self.get_type(message), debug_reason="type-error")
 
     def get_type(self, message=None):
         properties = {
@@ -210,7 +212,7 @@ class ObjectTemplateOp(Opcode):
 
     def __init__(self, data, visitor):
         super(ObjectTemplateOp, self).__init__(data, visitor)
-        if not isinstance(data.opcodes, RDHList):
+        if not isinstance(data.opcodes, PythonList):
             raise FatalError()
         for e in data.opcodes:
             if not isinstance(e, tuple) and len(e) != 2:
@@ -260,8 +262,8 @@ class ObjectTemplateOp(Opcode):
                 break_types.add("exception", self.NO_VALUE_ASSIGNMENT.get_type())
             else:
                 all_value_types.append(value_type)
-                micro_ops[("get", key)] = ObjectGetterType(key, value_type, False, False)
-                micro_ops[("set", key)] = ObjectSetterType(key, AnyType(), False, False)
+                micro_ops[("get", key)] = GetterMicroOpType(key, value_type)
+                micro_ops[("set", key)] = SetterMicroOpType(key, AnyType())
 
         if can_break_with_value_type:
             if len(all_value_types) == 0:
@@ -269,8 +271,8 @@ class ObjectTemplateOp(Opcode):
 
             combined_value_types = merge_types(all_value_types, "exact")
 
-            micro_ops[("get-wildcard",)] = ObjectWildcardGetterType(AnyType(), combined_value_types, True, False)
-            micro_ops[("set-wildcard",)] = ObjectWildcardSetterType(AnyType(), AnyType(), False, False)
+            micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(StringType(), combined_value_types, True)
+            micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(StringType(), AnyType(), True, True)
 
             value_type = CompositeType(micro_ops, name="ObjectTemplateOp")
 
@@ -287,7 +289,7 @@ class ObjectTemplateOp(Opcode):
                 if result[key] is NO_VALUE:
                     frame.exception(self.NO_VALUE_ASSIGNMENT())
 
-            return frame.value(RDHObject(result, debug_reason="object-template"))
+            return frame.value(PythonObject(result, debug_reason="object-template"))
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         parameters = {}
@@ -301,56 +303,95 @@ class ObjectTemplateOp(Opcode):
         })
         parameter_template = ",".join("{{key_ast{}}}: {{value_ast{}}}".format(id(key), id(key)) for key in self.opcodes)
         return compile_expression(
-            "RDHObject({{ " + parameter_template + " }})",
+            "PythonObject({{ " + parameter_template + " }})",
             context_name, dependency_builder, **parameters
         )
 
 
 class DictTemplateOp(Opcode):
+    NO_VALUE_ASSIGNMENT = TypeErrorFactory("DictTemplateOp: no_value_assignment")
+
     def __init__(self, data, visitor):
-        raise ValueError()
         super(DictTemplateOp, self).__init__(data, visitor)
+        if not isinstance(data.opcodes, PythonList):
+            raise FatalError()
+        for e in data.opcodes:
+            if not isinstance(e, tuple) and len(e) != 2:
+                raise FatalError()
         self.opcodes = [
-            ( key, enrich_opcode(opcode, visitor) )
+            ( enrich_opcode(key, visitor), enrich_opcode(opcode, visitor) )
             for key, opcode in data.opcodes
         ]
 
+    @abstractmethod
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
 
         micro_ops = {}
 
-        for key, opcode in self.opcodes:
-            value_type, other_break_types = get_expression_break_types(opcode, context, frame_manager)
-            break_types.merge(other_break_types)
-            value_type = flatten_out_types(value_type)
+        all_value_types = []
 
-            micro_ops[("get", key)] = DictGetterType(key, value_type, False, False)
-            micro_ops[("set", key)] = DictSetterType(key, AnyType(), False, False)
+        can_break_with_value_type = True
 
-            initial_value = MISSING
+        for key_opcode, value_opcode in self.opcodes:
+            key_type, other_key_break_types = get_expression_break_types(key_opcode, context, frame_manager, immediate_context=immediate_context)
+            break_types.merge(other_key_break_types)
+            value_type, other_value_break_types = get_expression_break_types(value_opcode, context, frame_manager, immediate_context=immediate_context)
+            break_types.merge(other_value_break_types)
+
+            if key_type is MISSING:
+                can_break_with_value_type = False
+                continue
+
+            key_type = flatten_out_types(key_type)
+            key = None
 
             try:
-                allowed_values = value_type.get_all_permitted_values()
-                if len(allowed_values) == 1:
-                    initial_value = allowed_values[0]
+                allowed_keys = key_type.get_all_permitted_values()
+                if len(allowed_keys) == 1:
+                    key = allowed_keys[0]
             except PermittedValuesDoesNotExist:
                 pass
 
-        micro_ops[("get-wildcard",)] = DictWildcardGetterType(AnyType(), rich_composite_type, True, False)
-        micro_ops[("set-wildcard",)] = DictWildcardSetterType(AnyType(), rich_composite_type, True, True)
+            if value_type is MISSING:
+                can_break_with_value_type = False
+                continue
 
-        break_types.add("value", CompositeType(micro_ops, is_revconst=True))
+            value_type = flatten_out_types(value_type)
+
+            if isinstance(value_type, NoValueType):
+                break_types.add("exception", self.NO_VALUE_ASSIGNMENT.get_type())
+            else:
+                all_value_types.append(value_type)
+                micro_ops[("get", key)] = GetterMicroOpType(key, StringType(), value_type)
+                micro_ops[("set", key)] = SetterMicroOpType(key, StringType(), AnyType())
+
+        if can_break_with_value_type:
+            if len(all_value_types) == 0:
+                all_value_types.append(AnyType())
+
+            combined_value_types = merge_types(all_value_types, "exact")
+
+            micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(StringType(), combined_value_types, True)
+            micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(StringType(), AnyType(), True, True)
+
+            value_type = CompositeType(micro_ops, name="ObjectTemplateOp")
+
+            break_types.add("value", value_type)
 
         return break_types.build()
 
     def jump(self, context, frame_manager, immediate_context=None):
         with frame_manager.get_next_frame(self) as frame:
             result = {}
-            for key, opcode in self.opcodes:
-                result[key] = frame.step(key, lambda: evaluate(opcode, context, frame_manager))
+            for index, (key_opcode, value_opcode) in enumerate(self.opcodes):
+                key = frame.step("key-{}".format(index), lambda: evaluate(key_opcode, context, frame_manager))
+                result[key] = frame.step("value-{}".format(index), lambda: evaluate(value_opcode, context, frame_manager))
+                if result[key] is NO_VALUE:
+                    frame.exception(self.NO_VALUE_ASSIGNMENT())
 
-            return frame.value(RDHDict(result))
+            return frame.value(PythonDict(result, debug_reason="object-template"))
+
 
 
 class ListTemplateOp(Opcode):
@@ -397,7 +438,7 @@ class ListTemplateOp(Opcode):
                 new_value = frame.step(index, lambda: evaluate(opcode, context, frame_manager))
                 result.append(new_value)
 
-            return frame.value(RDHList(result))
+            return frame.value(PythonList(result))
 
 
 def get_context_type(context):
@@ -416,9 +457,9 @@ def get_context_type(context):
             if hasattr(context.types, "outer"):
                 value_type["outer"] = context.types.outer
         if hasattr(context, "prepare"):
-            value_type["prepare"] = readonly_rich_composite_type
+            value_type["prepare"] = DEFAULT_READONLY_COMPOSITE_TYPE
         if hasattr(context, "static"):
-            value_type["static"] = readonly_rich_composite_type
+            value_type["static"] = DEFAULT_READONLY_COMPOSITE_TYPE
         context_manager._context_type = UniversalObjectType(value_type, name="context-type-{}".format(context_manager.debug_reason))
 
     return context_manager._context_type
@@ -961,7 +1002,7 @@ class MapOp(Opcode):
             composite = frame.step("composite", lambda: evaluate(self.composite, context, frame_manager))
             mapper = frame.step("mapper", lambda: evaluate(self.mapper, context, frame_manager))
 
-            if not isinstance(composite, RDHList):
+            if not isinstance(composite, PythonList):
                 raise FatalError() # Be more liberal
 
             with frame_manager.get_next_frame(self) as frame:
@@ -975,7 +1016,7 @@ class MapOp(Opcode):
                                 results.append(capturer.value)
                         if ender.value is not MISSING:
                             break
-                    return frame.value(RDHList(results))
+                    return frame.value(PythonList(results))
                 if breaker.value is not MISSING:
                     return frame.value(breaker.value)
 
@@ -1288,7 +1329,7 @@ class ResetOp(Opcode):
 
             restart_continuation_type = restart_continuation.get_type()
 
-            result = RDHObject({
+            result = PythonObject({
                 "value": capture_result.value,
                 "continuation": restart_continuation
             }, bind=self.get_value_and_continuation_block_type(
@@ -1370,7 +1411,7 @@ class LoopOp(Opcode):
                 continue_value_type = flatten_out_types(continue_value_type)
             else:
                 continue_value_type = None
-            break_types.add("value", RDHListType([], continue_value_type))
+            break_types.add("value", UniversalListType(continue_value_type))
 
         if mode_break_type is not MISSING:
             mode_break_type = flatten_out_types(mode_break_type)
@@ -1392,7 +1433,7 @@ class LoopOp(Opcode):
                         if capturer.value is not MISSING:
                             results.append(capturer.value)
                     if ender.value is not MISSING:
-                        return frame.value(RDHList(results))
+                        return frame.value(PythonList(results))
             if breaker.value is not MISSING:
                 return frame.value(breaker.value)
 
@@ -1589,7 +1630,7 @@ def create_readonly_static_type(value):
     if isinstance(value, Composite):
         # Only do ListTypes atm since that is what is needed for unit tests, but can be expanded...
         result = CompositeType({}, name="reasonable list type")
-        if isinstance(value, RDHList):
+        if isinstance(value, PythonList):
             types_of_values = [ create_readonly_static_type(v) for v in value._values() ]
             merged_types = merge_types(types_of_values, "exact")
 

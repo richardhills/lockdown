@@ -24,7 +24,7 @@ from lockdown.type_system.universal_type import GetterMicroOpType, \
     GetterWildcardMicroOpType, SetterWildcardMicroOpType, \
     DeletterWildcardMicroOpType, RemoverWildcardMicroOpType, \
     InserterWildcardMicroOpType, IterMicroOpType, UniversalObjectType, \
-    DEFAULT_READONLY_UNIVERSAL_TYPE
+    DEFAULT_READONLY_COMPOSITE_TYPE
 
 
 def build_closed_function_type(data):
@@ -44,7 +44,7 @@ def build_closed_function_type(data):
         RDHDict({
             mode: RDHList([ enrich_break_type(b) for b in break_types ])
             for mode, break_types in data.break_types.items()
-        }, bind=DEFAULT_READONLY_UNIVERSAL_TYPE, debug_reason="type")
+        }, bind=DEFAULT_READONLY_COMPOSITE_TYPE, debug_reason="type")
     )
 
 def build_unit_type(data):

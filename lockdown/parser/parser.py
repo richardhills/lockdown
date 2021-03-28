@@ -23,7 +23,7 @@ from lockdown.parser.grammar.langParser import langParser
 from lockdown.parser.grammar.langVisitor import langVisitor
 from lockdown.type_system.exceptions import FatalError
 from lockdown.type_system.object_types import RDHObject
-from lockdown.type_system.universal_type import DEFAULT_READONLY_UNIVERSAL_TYPE
+from lockdown.type_system.universal_type import DEFAULT_READONLY_COMPOSITE_TYPE
 from lockdown.utils import MISSING, default
 
 
@@ -34,7 +34,7 @@ class RDHLang5Visitor(langVisitor):
             pair = self.visit(pair)
             result[pair[0]] = pair[1]
 
-        return RDHObject(result, bind=DEFAULT_READONLY_UNIVERSAL_TYPE)
+        return RDHObject(result, bind=DEFAULT_READONLY_COMPOSITE_TYPE)
 
     def visitPair(self, ctx):
         return [ ctx.STRING().getText()[1:-1], self.visit(ctx.value()) ]

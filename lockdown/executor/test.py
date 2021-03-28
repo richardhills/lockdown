@@ -20,7 +20,7 @@ from lockdown.type_system.list_types import RDHList, RDHListType
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.object_types import PythonObjectType
 from lockdown.type_system.universal_type import PythonObject, \
-    DEFAULT_READONLY_UNIVERSAL_TYPE
+    DEFAULT_READONLY_COMPOSITE_TYPE
 from lockdown.utils import NO_VALUE, set_debug
 
 
@@ -76,8 +76,8 @@ class TestDereference(TestCase):
             })
         }, bind=PythonObjectType({
             "local": IntegerType(),
-            "types": DEFAULT_READONLY_UNIVERSAL_TYPE
-        }, wildcard_value_type=DEFAULT_READONLY_UNIVERSAL_TYPE))
+            "types": DEFAULT_READONLY_COMPOSITE_TYPE
+        }, wildcard_value_type=DEFAULT_READONLY_COMPOSITE_TYPE))
 
         result = bootstrap_function(func, context=context, check_safe_exit=True)
 
@@ -126,7 +126,7 @@ class TestDereference(TestCase):
             })
         }, bind=PythonObjectType({
             "local": RDHListType([ IntegerType(), IntegerType() ], None),
-            "types": DEFAULT_READONLY_UNIVERSAL_TYPE
+            "types": DEFAULT_READONLY_COMPOSITE_TYPE
         }))
 
         result = bootstrap_function(func, context=context, check_safe_exit=True)
@@ -205,7 +205,7 @@ class TestTemplates(TestCase):
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertTrue(isinstance(result.value, PythonObject))
-        get_manager(result.value).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
+        get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
         self.assertEquals(result.value.foo, 42)
 
     def test_nested_return(self):
@@ -221,7 +221,7 @@ class TestTemplates(TestCase):
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertTrue(isinstance(result.value, PythonObject))
-        get_manager(result.value).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
+        get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
         self.assertEquals(result.value.foo.bar, 42)
 
     def test_return_with_dereference1(self):
@@ -238,7 +238,7 @@ class TestTemplates(TestCase):
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertTrue(isinstance(result.value, PythonObject))
-        get_manager(result.value).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
+        get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
         self.assertEquals(result.value.foo, 42)
         self.assertEquals(result.value.bar, 42)
 
@@ -256,7 +256,7 @@ class TestTemplates(TestCase):
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertTrue(isinstance(result.value, PythonObject))
-        get_manager(result.value).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
+        get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
         self.assertEquals(result.value.foo, 42)
         self.assertEquals(result.value.bar, 42)
 
@@ -274,7 +274,7 @@ class TestTemplates(TestCase):
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertTrue(isinstance(result.value, PythonObject))
-        get_manager(result.value).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
+        get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
         self.assertEquals(result.value.foo, 42)
         self.assertEquals(result.value.bar, 42)
 
@@ -292,7 +292,7 @@ class TestTemplates(TestCase):
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertTrue(isinstance(result.value, PythonObject))
-        get_manager(result.value).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
+        get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
         self.assertEquals(result.value.foo, 42)
         self.assertEquals(result.value.bar, 42)
 
@@ -320,7 +320,7 @@ class TestTemplates(TestCase):
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertTrue(isinstance(result.value, PythonObject))
-        get_manager(result.value).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
+        get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
         self.assertEquals(result.value.foo.bar, 42)
 
 
@@ -868,7 +868,7 @@ class TestTryCatch(TestCase):
         result = bootstrap_function(func, argument="hello")
         self.assertEquals(result.caught_break_mode, "exception")
         self.assertIsInstance(result.value, PythonObject)
-        get_manager(result.value).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
+        get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
         self.assertEquals(result.value.type, "TypeError")
 
     def test_catch_real_exception(self):

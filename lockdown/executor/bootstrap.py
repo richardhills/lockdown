@@ -16,7 +16,7 @@ from lockdown.executor.raw_code_factories import inferred_type, function_lit, \
     transform, local_function, map_op
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.universal_type import PythonObject, \
-    DEFAULT_READONLY_UNIVERSAL_TYPE
+    DEFAULT_READONLY_COMPOSITE_TYPE
 from lockdown.utils import NO_VALUE, print_code, MISSING
 
 
@@ -133,7 +133,7 @@ def get_default_global_context():
                 None, FrameManager()
             ).close(None),
         }, debug_reason="default-global-context")
-    }, bind=DEFAULT_READONLY_UNIVERSAL_TYPE, debug_reason="default-global-context")
+    }, bind=DEFAULT_READONLY_COMPOSITE_TYPE, debug_reason="default-global-context")
 
 def format_unhandled_break_type(break_type, raw_code):
     if not raw_code:
@@ -210,7 +210,7 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False,
     if context is None:
         context = get_default_global_context()
 
-    get_manager(context).add_composite_type(DEFAULT_READONLY_UNIVERSAL_TYPE)
+    get_manager(context).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
 
     frame_manager = FrameManager()
 
