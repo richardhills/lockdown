@@ -66,11 +66,14 @@ class CompositeType(Type):
         """
         if self._is_self_consistent is None:
             self._is_self_consistent = True
-            for micro_op in self.micro_op_types.values():
-                if micro_op.conflicts_with(self, self):
-                    self._is_self_consistent = False
-                    break
+            self._is_self_consistent = not bool(self.find_first_self_inconsistent_micro_ops())
         return self._is_self_consistent
+
+    def find_first_self_inconsistent_micro_ops(self):
+        for micro_op in self.micro_op_types.values():
+            if micro_op.conflicts_with(self, self):
+                return micro_op
+        return None
 
     def is_copyable_from(self, other):
         if self is other:
@@ -100,6 +103,9 @@ class CompositeType(Type):
 
             cache[result_key] = True
 
+            if not self.get_first_non_derivable_micro_op(other) is None:
+                cache[result_key] = False
+
             for micro_op_type in self.micro_op_types.values():
                 if micro_op_type is None:
                     pass
@@ -111,6 +117,11 @@ class CompositeType(Type):
                 composite_type_is_copyable_cache._is_copyable_from_cache = None
 
         return cache[result_key]
+
+    def get_first_non_derivable_micro_op(self, other):
+        for micro_op_type in self.micro_op_types.values():
+            if not micro_op_type.is_derivable_from(other):
+                return micro_op_type
 
     def __repr__(self):
         return "{}<{}>".format(self.name, ", ".join([str(m) for m in self.micro_op_types.values()]))
@@ -355,7 +366,10 @@ def prepare_composite_lhs_type(composite_lhs_type, rhs_type, results_cache=None)
                 getter = result.get_micro_op_type(("get-wildcard", ))
         if getter:
             if micro_op.value_type is not getter.value_type:
-                result.micro_op_types[tag] = micro_op.clone(value_type=getter.value_type)
+                try:
+                    result.micro_op_types[tag] = micro_op.clone(value_type=getter.value_type)
+                except:
+                    print micro_op
                 something_changed = True
 
     # Add error codes to get-wildcard and set-wildcard if there are any getters or setters
@@ -396,13 +410,11 @@ def prepare_composite_lhs_type(composite_lhs_type, rhs_type, results_cache=None)
     left_shifts = []
 
     for tag, micro_op in result.micro_op_types.items():
-        if tag[0] == "insert":
-            right_shifts.append((tag[1], micro_op.value_type))
+        if tag[0] == "insert-start":
+            right_shifts.append((0, micro_op.value_type))
         if tag[0] == "insert-wildcard":
             right_shifts.append((0, micro_op.value_type))
 
-        if tag[0] == "delete":
-            left_shifts.append(tag[1])
         if tag[0] == "delete-wildcard":
             left_shifts.append(0)
 
@@ -530,12 +542,13 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
     for sub_type in unwrap_types(new_type):
         if isinstance(sub_type, CompositeType) and target_is_composite:
             if build_binding_map and not sub_type.is_self_consistent():
+                r = sub_type.find_first_self_inconsistent_micro_ops()
                 raise CompositeTypeIsInconsistent()
 
             micro_ops_checks_worked = True
 
             for key, micro_op in sub_type.micro_op_types.items():
-                if not micro_op.is_bindable_to(target):
+                if not micro_op.is_bindable_to(sub_type, target):
                     micro_ops_checks_worked = False
                     break
 
