@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+raise ValueError()
+
 from _abcoll import MutableSequence
 from collections import OrderedDict
 

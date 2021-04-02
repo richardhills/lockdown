@@ -145,7 +145,7 @@ class CompositeObjectManager(object):
     A Manage Object that exists alongside every Composite Object at runtime to manage
     type constraints that should be enforced at runtime.
     """
-    def __init__(self, obj, on_gc_callback):
+    def __init__(self, obj, on_gc_callback, is_sparse):
         self.obj_ref = weakref.ref(obj, self.obj_gced)
         self.obj_id = id(obj)
         self.attached_types = {}
@@ -156,6 +156,7 @@ class CompositeObjectManager(object):
 
         self.default_factory = None
         self.debug_reason = None
+        self.is_sparse = is_sparse
 
     def get_obj(self):
         return self.obj_ref()
@@ -401,9 +402,13 @@ def prepare_composite_lhs_type(composite_lhs_type, rhs_type, results_cache=None)
             new_value_type = prepare_lhs_type(micro_op.value_type, guide_micro_op_type, results_cache)
 
             if micro_op.value_type is not new_value_type:
-                result.micro_op_types[tag] = micro_op.clone(
-                    value_type=prepare_lhs_type(micro_op.value_type, guide_micro_op_type, results_cache)
-                )
+                try:
+                    result.micro_op_types[tag] = micro_op.clone(
+                        value_type=prepare_lhs_type(micro_op.value_type, guide_micro_op_type, results_cache)
+                    )
+                except TypeError:
+                    print micro_op
+                    raise
                 something_changed = True
 
     right_shifts = []

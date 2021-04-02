@@ -91,7 +91,11 @@ def build_break_types(return_type=None, exception_type=None, yield_types=None, v
 
 def infer_all():
     return {
-        "wildcard": list_template_op([ dict_template_op({ "out": inferred_type(), "in": inferred_type() }) ])
+        "wildcard": list_template_op([
+            dict_template_op({
+                "out": inferred_type(),
+                "in": inferred_type()
+            }) ])
     }
 
 
@@ -171,6 +175,10 @@ def dict_template_op(values):
     values_list = []
 
     for k, v in values.items():
+        if isinstance(k, basestring):
+            k = literal_op(k)
+
+        check_is_opcode(k)
         check_is_opcode(v)
         values_list.append(PythonList([ k, v ]))
 

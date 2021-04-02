@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+raise ValueError()
+
 from lockdown.executor.ast_utils import compile_statement, compile_expression
 from lockdown.type_system.composites import CompositeType, \
     Composite, unbind_key, bind_key, can_add_composite_type_with_filter, \

@@ -2,7 +2,6 @@
 from __future__ import unicode_literals
 
 from lockdown.type_system.exceptions import FatalError
-from lockdown.utils import InternalMarker
 
 
 class PermittedValuesDoesNotExist(Exception):

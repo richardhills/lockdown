@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+raise ValueError()
+
 from UserDict import DictMixin
 
 from lockdown.type_system.composites import CompositeType, \
@@ -468,6 +470,7 @@ class RDHDictType(CompositeType):
 
 class RDHDict(Composite, DictMixin, object):
     def __init__(self, initial_data, bind=None, debug_reason=None):
+        raise ValueError()
         self.wrapped = dict(initial_data)
         get_manager(self).debug_reason = debug_reason
         if isinstance(self.wrapped, RDHDict):

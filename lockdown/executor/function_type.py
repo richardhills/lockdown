@@ -2,8 +2,8 @@
 from __future__ import unicode_literals
 
 from lockdown.type_system.core_types import Type
-from lockdown.type_system.dict_types import RDHDict
 from lockdown.type_system.exceptions import FatalError
+from lockdown.type_system.universal_type import PythonDict
 
 
 def enrich_break_type(data):
@@ -13,7 +13,7 @@ def enrich_break_type(data):
     }
     if "in" in data:
         result["in"] = enrich_type(data.get("in"))
-    return RDHDict(result)
+    return PythonDict(result)
 
 def are_break_types_a_subset(self, other):
     if other is None or other.break_types is None:

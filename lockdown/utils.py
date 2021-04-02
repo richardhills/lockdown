@@ -49,19 +49,13 @@ def micro_op_repr(opname, key, key_error, type=None, type_error=None):
         return "{}.{}{}".format(opname, key, "!" if key_error else "")
 
 def print_code(ast):
-    from lockdown.type_system.dict_types import RDHDict
-    from lockdown.type_system.exceptions import FatalError
-    from lockdown.type_system.list_types import RDHList
-    from lockdown.type_system.object_types import RDHObject
-
     class RDHObjectEncoder(JSONEncoder):
         def default(self, o):
-            if isinstance(o, RDHObject):
-                return o.__dict__
-            if isinstance(o, RDHList):
+            from lockdown.type_system.universal_type import PythonList, Universal
+            if isinstance(o, PythonList):
                 return o._to_list()
-            if isinstance(o, RDHDict):
-                return dict(o.wrapped)
+            if isinstance(o, Universal):
+                return o._to_dict()
             return o
     print RDHObjectEncoder().encode(ast)
 

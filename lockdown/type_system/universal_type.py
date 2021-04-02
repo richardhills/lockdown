@@ -27,6 +27,8 @@ class Universal(Composite):
 
         manager = get_manager(self, "Universal")
 
+        if default_factory and not callable(default_factory):
+            raise FatalError()
         manager.default_factory = default_factory
         manager.is_sparse = is_sparse
         manager.debug_reason = debug_reason
@@ -115,6 +117,9 @@ class Universal(Composite):
     def _keys(self):
         manager = get_manager(self)
 
+        if not hasattr(manager, "is_sparse"):
+            pass
+
         if manager.is_sparse:
             for i in self._range():
                 yield i
@@ -127,6 +132,10 @@ class Universal(Composite):
         for k in self._keys():
             yield self._get(k)
 
+    def _items(self):
+        for k in self._keys():
+            yield (k, self._get(k))
+
     def _range(self):
         return range(self._length)
 
@@ -135,11 +144,16 @@ class Universal(Composite):
             self._get(i) for i in self._range()
         ]
 
+    def _to_dict(self):
+        return {
+            i: self._get(i) for i in self._keys()
+        }
+
     def __repr__(self):
-        return repr(self.__dict__)
+        return repr(self._wrapped)
 
     def __str__(self):
-        return str(self.__dict__)
+        return str(self._wrapped)
 
 
 class PythonObject(Universal):
@@ -181,7 +195,7 @@ class PythonObject(Universal):
             raise TypeError()
 
     def __getattribute__(self, key):
-        if key in ("__dict__", "__class__", "_contains", "_get", "_set", "_delete", "_keys", "_values", "wrapped", "_length", "_is_key_within_range", "_range"):
+        if key in ("__dict__", "__class__", "_contains", "_get", "_set", "_items", "_delete", "_keys", "_values", "wrapped", "_length", "_is_key_within_range", "_range", "_to_dict"):
             return super(PythonObject, self).__getattribute__(key)
 
         try:
@@ -327,7 +341,10 @@ class PythonDict(Universal, DictMixin, object):
                 raise FatalError()
             initial_wrapped[key] = value
 
-        super(PythonDict, self).__init__(True, initial_wrapped=initial_wrapped, *kwargs)
+        super(PythonDict, self).__init__(True, initial_wrapped=initial_wrapped, **kwargs)
+
+    def keys(self):
+        return self._keys()
 
     def __getitem__(self, key):
         try:
@@ -614,8 +631,11 @@ class InsertStartMicroOpType(MicroOpType):
             self.type_error or other_micro_op_type.type_error
         )
 
-    def clone(self):
-        return InsertStartMicroOpType(self.value_type, self.type_error)
+    def clone(self, value_type=MISSING):
+        return InsertStartMicroOpType(
+            default(value_type, self.value_type),
+            self.type_error
+        )
 
 
 class InsertEndMicroOpType(MicroOpType):
@@ -666,8 +686,11 @@ class InsertEndMicroOpType(MicroOpType):
             self.type_error or other_micro_op_type.type_error
         )
 
-    def clone(self):
-        return InsertEndMicroOpType(self.value_type, self.type_error)
+    def clone(self, value_type=MISSING):
+        return InsertEndMicroOpType(
+            default(value_type, self.value_type),
+            self.type_error
+        )
 
 
 class GetterWildcardMicroOpType(MicroOpType):
@@ -680,6 +703,8 @@ class GetterWildcardMicroOpType(MicroOpType):
 
     def invoke(self, target_manager, key, *args, **kwargs):
         try:
+            if key == "in":
+                pass
             obj = target_manager.get_obj()
             default_factory = target_manager.default_factory
 
@@ -751,10 +776,10 @@ class GetterWildcardMicroOpType(MicroOpType):
         return (target._values(), self.value_type)
 
     def merge(self, other_micro_op_type):
-        return GetterMicroOpType(
-            self.key,
+        return GetterWildcardMicroOpType(
             merge_types([ self.key_type, other_micro_op_type.key_type ], "sub"),
             merge_types([ self.value_type, other_micro_op_type.value_type ], "super"),
+            self.key_error or other_micro_op_type.key_error
         )
 
     def clone(self, value_type=MISSING, key_error=MISSING):
@@ -1125,8 +1150,8 @@ class IterMicroOpType(MicroOpType):
             merge_types([ self.value_type, other_micro_op_type.value_type ], "sub")
         )
 
-    def clone(self):
-        return IterMicroOpType(self.value_type, self.key_type, self.key_error)
+    def clone(self, value_type=MISSING):
+        return IterMicroOpType(default(value_type, self.value_type))
 
 
 def UniversalObjectType(properties, wildcard_type=None, has_default_factory=False, name=None):
@@ -1176,7 +1201,7 @@ def UniversalTupleType(properties, name=None):
             micro_ops[("set", index)] = SetterMicroOpType(index, type)
 
     if name is None:
-        name = "UniversalObjectType"
+        name = "UniversalTupleType"
 
     return CompositeType(micro_ops, name)
 
@@ -1246,7 +1271,7 @@ def UniversalLupleType(properties, element_type, is_sparse=False, name=None):
         micro_ops[("delete-wildcard",)] = DeletterWildcardMicroOpType(IntegerType(), True)
 
     if name is None:
-        name = "UniversalObjectType"
+        name = "UniversalLupleType"
 
     return CompositeType(micro_ops, name)
 

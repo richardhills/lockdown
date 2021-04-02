@@ -19,17 +19,14 @@ from lockdown.executor.raw_code_factories import dynamic_dereference_op, \
 from lockdown.executor.type_factories import enrich_type
 from lockdown.type_system.composites import prepare_lhs_type, \
     check_dangling_inferred_types, CompositeType, InferredType, \
-    is_type_bindable_to_value
+    is_type_bindable_to_value, Composite
 from lockdown.type_system.core_types import Type, NoValueType, IntegerType, \
     AnyType
-from lockdown.type_system.dict_types import RDHDict
 from lockdown.type_system.exceptions import FatalError, InvalidInferredType, \
     DanglingInferredType
-from lockdown.type_system.list_types import RDHList
 from lockdown.type_system.managers import get_manager, get_type_of_value
-from lockdown.type_system.object_types import RDHObject
 from lockdown.type_system.universal_type import PythonObject, \
-    UniversalObjectType, DEFAULT_READONLY_COMPOSITE_TYPE
+    UniversalObjectType, DEFAULT_READONLY_COMPOSITE_TYPE, PythonList, PythonDict
 from lockdown.utils import MISSING, is_debug, runtime_type_information, raise_from, \
     spread_dict
 from log import logger
@@ -50,7 +47,7 @@ def prepare_piece_of_context(declared_type, suggested_type):
     return final_type
 
 def prepare(data, outer_context, frame_manager, immediate_context=None):
-    if not isinstance(data, (RDHObject, PythonObject)):
+    if not isinstance(data, Composite):
         raise FatalError()
     get_manager(data).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
 
@@ -146,8 +143,10 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
 
     actual_break_types_factory.merge(local_other_break_types)
 
-    declared_break_types = RDHDict({
-        mode: RDHList([enrich_break_type(break_type) for break_type in break_types]) for mode, break_types in static.break_types.__dict__.items()
+    declared_break_types = PythonDict({
+        mode: PythonList([
+            enrich_break_type(break_type) for break_type in break_types
+        ]) for mode, break_types in static.break_types._items()
     })
 
     get_manager(declared_break_types).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
@@ -366,7 +365,7 @@ def combine(*funcs):
         return expression
     return wrapped
 
-class RDHFunction(object):
+class LockdownFunction(object):
     def get_type(self):
         raise NotImplementedError(self)
 
@@ -452,7 +451,7 @@ class {open_function_id}(object):
             "static": {static},
             "types": {types_context}
         }})
-        {context_name}.__dict__["local"] = {local_initializer}
+        {context_name}._set("local", {local_initializer})
         """ \
         +(
             """
@@ -513,7 +512,7 @@ class {open_function_id}(object):
     "static": {static},
     "types": {types_context}
 }})
-{context_name}.__dict__["local"] = {local_initializer}
+{context_name}._set("local", {local_initializer})
 {function_code}
             """,
             context_name, dependency_builder,
@@ -557,7 +556,7 @@ class {open_function_id}(object):
 
         return compile_ast_function_def(combined_ast, open_function_id, dependencies)
 
-class ClosedFunction(RDHFunction):
+class ClosedFunction(LockdownFunction):
     def __init__(self, open_function, outer_context):
         self.open_function = open_function
         self.outer_context = outer_context
@@ -639,7 +638,7 @@ class ClosedFunction(RDHFunction):
             return frame.value(result)
 
 
-class WrappedFunction(RDHFunction):
+class WrappedFunction(LockdownFunction):
     def __init__(self, wrapped):
         self.wrapped = wrapped
 
@@ -647,7 +646,7 @@ class WrappedFunction(RDHFunction):
         return self.wrapped(*args, **kwargs)
 
 
-class TranspiledFunction(RDHFunction):
+class TranspiledFunction(LockdownFunction):
     def __init__(self, body, dependency_builder, context_name):
         function_name = b"ClosedFunction_{}".format(id(self))
 
@@ -669,7 +668,7 @@ class TranspiledFunction(RDHFunction):
         return self.wrapped_function(argument, frame_manager)
 
 
-class Continuation(RDHFunction):
+class Continuation(LockdownFunction):
     __slots__ = [ "frame_manager", "frames", "callback", "restart_type", "break_types" ]
 
     def __init__(self, frame_manager, frames, callback, restart_type, break_types):

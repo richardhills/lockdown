@@ -15,21 +15,16 @@ from lockdown.type_system.composites import CompositeType, scoped_bind, \
 from lockdown.type_system.core_types import AnyType, Type, merge_types, Const, \
     UnitType, NoValueType, PermittedValuesDoesNotExist, unwrap_types, IntegerType, \
     BooleanType, remove_type, OneOfType, StringType
-from lockdown.type_system.dict_types import RDHDict, DictGetterType, \
-    DictSetterType, DictWildcardGetterType, DictWildcardSetterType, RDHDictType
 from lockdown.type_system.exceptions import FatalError, InvalidDereferenceType, \
     InvalidDereferenceKey, InvalidAssignmentType, InvalidAssignmentKey
-from lockdown.type_system.list_types import RDHList, ListGetterType, \
-    ListSetterType, ListWildcardGetterType, ListWildcardSetterType, \
-    ListWildcardDeletterType, ListInsertType, ListWildcardInsertType, \
-    RDHListType, ListRangeGetterType
 from lockdown.type_system.managers import get_type_of_value, get_manager
-from lockdown.type_system.object_types import ObjectGetterType, ObjectSetterType, \
-    ObjectWildcardGetterType, ObjectWildcardSetterType
 from lockdown.type_system.universal_type import UniversalObjectType, \
     DEFAULT_READONLY_COMPOSITE_TYPE, PythonList, UniversalListType, PythonObject, \
     GetterMicroOpType, SetterMicroOpType, GetterWildcardMicroOpType, \
-    SetterWildcardMicroOpType, PythonDict
+    SetterWildcardMicroOpType, PythonDict, UniversalDictType, \
+    InsertStartMicroOpType, InsertEndMicroOpType, DeletterWildcardMicroOpType, \
+    IterMicroOpType, RemoverWildcardMicroOpType, InserterWildcardMicroOpType, \
+    UniversalTupleType
 from lockdown.utils import MISSING, NO_VALUE, is_debug, \
     runtime_type_information
 from log import logger
@@ -120,7 +115,7 @@ def get_expression_break_types(expression, context, frame_manager, immediate_con
             if not isinstance(break_types, (list, tuple)):
                 raise FatalError()
             for break_type in break_types:
-                if not isinstance(break_type, (dict, RDHDict)):
+                if not isinstance(break_type, (dict, PythonDict)):
                     raise FatalError()
                 if "out" not in break_type:
                     raise FatalError()
@@ -138,7 +133,7 @@ def flatten_out_types(break_types):
         if not isinstance(break_types, list):
             raise FatalError()
         for b in break_types:
-            if not isinstance(b, (dict, RDHDict)):
+            if not isinstance(b, (dict, PythonDict)):
                 raise FatalError()
             if "out" not in b:
                 raise FatalError()
@@ -162,7 +157,7 @@ class TypeErrorFactory(object):
         properties = {
             "type": Const(UnitType("TypeError")),
             "message": Const(UnitType(message or self.message)),
-            "kwargs": Const(RDHDictType(AnyType()))
+            "kwargs": Const(UniversalDictType(StringType(), AnyType()))
         }
         return UniversalObjectType(properties, wildcard_type=AnyType(), name="TypeError")
 
@@ -412,20 +407,23 @@ class ListTemplateOp(Opcode):
             value_type = flatten_out_types(value_type)
             all_value_types.append(value_type)
 
-            micro_ops[("get", index)] = ListGetterType(index, value_type, False, False)
-            micro_ops[("set", index)] = ListSetterType(index, AnyType(), False, False)
+            micro_ops[("get", index)] = GetterMicroOpType(index, value_type)
+            micro_ops[("set", index)] = SetterMicroOpType(index, AnyType())
 
         if len(all_value_types) == 0:
             all_value_types.append(AnyType())
 
         combined_value_types = merge_types(all_value_types, "exact")
 
-        micro_ops[("get-wildcard",)] = ListWildcardGetterType(combined_value_types, True, False)
-        micro_ops[("set-wildcard",)] = ListWildcardSetterType(AnyType(), True, True)
-        micro_ops[("insert", 0)] = ListInsertType(0, AnyType(), False, False)
-        micro_ops[("delete-wildcard",)] = ListWildcardDeletterType(True)
-        micro_ops[("insert-wildcard",)] = ListWildcardInsertType(AnyType(), True, False)
-#        micro_ops[("get", "insert")] = BuiltInFunctionGetterType(ListInsertFunctionType(micro_ops[("insert-wildcard",)], combined_value_types))
+        micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(IntegerType(), combined_value_types, True)
+        micro_ops[("iter",)] = IterMicroOpType(combined_value_types)
+
+        micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(IntegerType(), AnyType(), True, True)
+        micro_ops[("remove-wildcard",)] = RemoverWildcardMicroOpType(IntegerType(), True, False)
+        micro_ops[("insert-wildcard",)] = InserterWildcardMicroOpType(AnyType(), True, False)
+        micro_ops[("insert-start",)] = InsertStartMicroOpType(AnyType(), False)
+        micro_ops[("insert-end",)] = InsertEndMicroOpType(AnyType(), False)
+        micro_ops[("delete-wildcard",)] = DeletterWildcardMicroOpType(IntegerType(), True)
 
         break_types.add("value", CompositeType(micro_ops, name="ListTemplateOp"))
 
@@ -981,14 +979,18 @@ class MapOp(Opcode):
 
                     if not ends and not skips:
                         for index in integer_keys:
-                            micro_ops[("get", index)] = ListGetterType(index, mapper_continue_type, False, False)
-                            micro_ops[("set", index)] = ListSetterType(index, AnyType(), False, False)
+                            micro_ops[("get", index)] = GetterMicroOpType(index, mapper_continue_type)
+                            micro_ops[("set", index)] = GetterMicroOpType(index, AnyType())
 
-                    micro_ops[("get-wildcard",)] = ListWildcardGetterType(mapper_continue_type, True, False)
-                    micro_ops[("set-wildcard",)] = ListWildcardSetterType(AnyType(), False, False)
-                    micro_ops[("insert", 0)] = ListInsertType(0, AnyType(), False, False)
-                    micro_ops[("delete-wildcard",)] = ListWildcardDeletterType(True)
-                    micro_ops[("insert-wildcard",)] = ListWildcardInsertType(AnyType(), True, False)
+                    micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(IntegerType(), mapper_continue_type, True)
+                    micro_ops[("iter",)] = IterMicroOpType(mapper_continue_type)
+
+                    micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(IntegerType(), AnyType(), True, True)
+                    micro_ops[("remove-wildcard",)] = RemoverWildcardMicroOpType(IntegerType(), True, False)
+                    micro_ops[("insert-wildcard",)] = InserterWildcardMicroOpType(AnyType(), True, False)
+                    micro_ops[("insert-start",)] = InsertStartMicroOpType(AnyType(), False)
+                    micro_ops[("insert-end",)] = InsertEndMicroOpType(AnyType(), False)
+                    micro_ops[("delete-wildcard",)] = DeletterWildcardMicroOpType(IntegerType(), True)
 
                     result = CompositeType(micro_ops, name="MapOp")
                     break_types.add("value", result)
@@ -1197,7 +1199,7 @@ class ShiftOp(Opcode):
         value_type, other_break_types = get_expression_break_types(self.opcode, context, frame_manager, immediate_context) 
 
         restart_type_value = evaluate(self.restart_type, context, frame_manager)
-        with scoped_bind(restart_type_value, READONLY_DEFAULT_OBJECT_TYPE):
+        with scoped_bind(restart_type_value, DEFAULT_READONLY_COMPOSITE_TYPE):
             self.restart_type = enrich_type(restart_type_value)
 
         value_type = flatten_out_types(value_type)
@@ -1406,12 +1408,12 @@ class LoopOp(Opcode):
         end_break = other_break_types.pop("end", MISSING)
         mode_break_type = other_break_types.pop("break", MISSING)
 
-        if end_break is not MISSING:
+        if end_break is not MISSING and continue_value_type is not MISSING:
             if continue_value_type is not MISSING:
                 continue_value_type = flatten_out_types(continue_value_type)
+                break_types.add("value", UniversalListType(continue_value_type))
             else:
-                continue_value_type = None
-            break_types.add("value", UniversalListType(continue_value_type))
+                break_types.add("value", UniversalTupleType([]))
 
         if mode_break_type is not MISSING:
             mode_break_type = flatten_out_types(mode_break_type)
@@ -1634,12 +1636,10 @@ def create_readonly_static_type(value):
             types_of_values = [ create_readonly_static_type(v) for v in value._values() ]
             merged_types = merge_types(types_of_values, "exact")
 
-            if not isinstance(merged_types, OneOfType):
-                result.micro_op_types[("get-range", len(value._length))] = ListRangeGetterType(value._length, merged_types, False, False)
-            else:
-                for key, type_of_value in zip(value._keys(), types_of_values):
-                    result.micro_op_types[("get", key)] = ListGetterType(key, type_of_value, False, False)
-                result.micro_op_types[("get-wildcard", )] = ListWildcardGetterType(merged_types, True, True)
+            for key, type_of_value in zip(value._keys(), types_of_values):
+                result.micro_op_types[("get", key)] = GetterMicroOpType(key, type_of_value)
+
+            result.micro_op_types[("get-wildcard", )] = GetterWildcardMicroOpType(StringType(), merged_types, True)
         return result
     else:
         return get_type_of_value(value)
@@ -1719,13 +1719,13 @@ class InvokeOp(Opcode):
 
     def jump(self, context, frame_manager, immediate_context=None):
         logger.debug("Invoke:jump")
-        from lockdown.executor.function import RDHFunction
+        from lockdown.executor.function import LockdownFunction
 
         with frame_manager.get_next_frame(self) as frame:
             function = frame.step("function", lambda: evaluate(self.function, context, frame_manager))
             argument = frame.step("argument", lambda: evaluate(self.argument, context, frame_manager))
 
-            if not isinstance(function, RDHFunction):
+            if not isinstance(function, LockdownFunction):
                 return frame.exception(self.INVALID_FUNCTION_TYPE(), self)
             if self.invalid_argument_type_exception_is_possible and not does_value_fit_through_type(argument, function.get_type().argument_type):
                 return frame.exception(self.INVALID_ARGUMENT_TYPE(), self) 

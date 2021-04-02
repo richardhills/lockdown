@@ -8,8 +8,6 @@ from lockdown.type_system.composites import CompositeType, InferredType, \
     check_dangling_inferred_types, prepare_lhs_type
 from lockdown.type_system.core_types import IntegerType, UnitType, StringType, \
     AnyType, Const, OneOfType, BooleanType, merge_types
-from lockdown.type_system.dict_types import DictGetterType, \
-    RDHDict
 from lockdown.type_system.exceptions import CompositeTypeIncompatibleWithTarget, \
     CompositeTypeIsInconsistent, FatalError, DanglingInferredType, \
     InvalidAssignmentType

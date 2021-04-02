@@ -39,8 +39,8 @@ def get_manager(obj, trigger=None):
     if isinstance(obj, Type):
         return None
 
-    from lockdown.executor.function import RDHFunction, OpenFunction
-    if isinstance(obj, (RDHFunction, OpenFunction)):
+    from lockdown.executor.function import LockdownFunction, OpenFunction
+    if isinstance(obj, (LockdownFunction, OpenFunction)):
         return None
 
     from lockdown.executor.opcodes import Opcode
@@ -51,37 +51,37 @@ def get_manager(obj, trigger=None):
 
     old_obj = obj
     if isinstance(obj, Composite):
-        manager = CompositeObjectManager(obj, obj_cleared_callback)
+        manager = CompositeObjectManager(obj, obj_cleared_callback, False)
     elif isinstance(obj, list):
         if is_debug() and not runtime_type_information():
             raise FatalError()
         from lockdown.type_system.universal_type import PythonList
         obj = PythonList(obj)
         replace_all_refs(old_obj, obj)            
-        manager = CompositeObjectManager(obj, obj_cleared_callback)
+        manager = CompositeObjectManager(obj, obj_cleared_callback, False)
     elif isinstance(obj, tuple):
         if is_debug() and not runtime_type_information():
             raise FatalError()
-        from lockdown.type_system.list_types import RDHList
-        obj = RDHList(obj)
+        from lockdown.type_system.universal_type import PythonList
+        obj = PythonList(obj)
         replace_all_refs(old_obj, obj)            
-        manager = CompositeObjectManager(obj, obj_cleared_callback)
+        manager = CompositeObjectManager(obj, obj_cleared_callback, False)
     elif isinstance(obj, dict):
         if is_debug() and not runtime_type_information():
             raise FatalError()
-        from lockdown.type_system.dict_types import RDHDict
-        obj = RDHDict(obj, debug_reason="monkey-patch")
+        from lockdown.type_system.universal_type import PythonDict
+        obj = PythonDict(obj, debug_reason="monkey-patch")
         replace_all_refs(old_obj, obj)
-        manager = CompositeObjectManager(obj, obj_cleared_callback)
+        manager = CompositeObjectManager(obj, obj_cleared_callback, True)
     elif isinstance(obj, object) and hasattr(obj, "__dict__"):
         if is_debug() and not runtime_type_information():
             raise FatalError()
         from lockdown.type_system.universal_type import PythonObject
         original_type = obj.__class__
-        new_type = type("RDH{}".format(original_type.__name__), (PythonObject, original_type,), {})
+        new_type = type("Lockdown{}".format(original_type.__name__), (PythonObject, original_type,), {})
         obj = new_type(obj.__dict__)
         replace_all_refs(old_obj, obj)
-        manager = CompositeObjectManager(obj, obj_cleared_callback)
+        manager = CompositeObjectManager(obj, obj_cleared_callback, True)
         manager.debug_reason = "monkey-patch"
     else:
         raise FatalError()
@@ -105,8 +105,8 @@ def get_type_of_value(value):
     if isinstance(value, Type):
         return NoValueType()
 
-    from lockdown.executor.function import RDHFunction, OpenFunction
-    if isinstance(value, (RDHFunction, OpenFunction)):
+    from lockdown.executor.function import LockdownFunction, OpenFunction
+    if isinstance(value, (LockdownFunction, OpenFunction)):
         return value.get_type()
 
     manager = get_manager(value, "get_type_of_value")

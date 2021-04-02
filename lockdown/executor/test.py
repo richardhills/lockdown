@@ -16,11 +16,10 @@ from lockdown.executor.raw_code_factories import function_lit, no_value_type, \
     string_type, bool_type, try_catch_op, throw_op, const_string_type, \
     function_type, close_op, shift_op
 from lockdown.type_system.core_types import IntegerType, StringType
-from lockdown.type_system.list_types import RDHList, RDHListType
 from lockdown.type_system.managers import get_manager
-from lockdown.type_system.object_types import PythonObjectType
 from lockdown.type_system.universal_type import PythonObject, \
-    DEFAULT_READONLY_COMPOSITE_TYPE
+    DEFAULT_READONLY_COMPOSITE_TYPE, PythonList, UniversalTupleType, \
+    UniversalObjectType
 from lockdown.utils import NO_VALUE, set_debug
 
 
@@ -74,10 +73,10 @@ class TestDereference(TestCase):
             "types": PythonObject({
                 "local": IntegerType()
             })
-        }, bind=PythonObjectType({
+        }, bind=UniversalObjectType({
             "local": IntegerType(),
             "types": DEFAULT_READONLY_COMPOSITE_TYPE
-        }, wildcard_value_type=DEFAULT_READONLY_COMPOSITE_TYPE))
+        }, wildcard_type=DEFAULT_READONLY_COMPOSITE_TYPE))
 
         result = bootstrap_function(func, context=context, check_safe_exit=True)
 
@@ -120,12 +119,12 @@ class TestDereference(TestCase):
         )
 
         context = PythonObject({
-            "local": RDHList([ 39, 3 ]),
+            "local": PythonList([ 39, 3 ]),
             "types": PythonObject({
-                "local": RDHListType([ IntegerType(), IntegerType() ], None)
+                "local": UniversalTupleType([ IntegerType(), IntegerType() ])
             })
-        }, bind=PythonObjectType({
-            "local": RDHListType([ IntegerType(), IntegerType() ], None),
+        }, bind=UniversalObjectType({
+            "local": UniversalTupleType([ IntegerType(), IntegerType() ]),
             "types": DEFAULT_READONLY_COMPOSITE_TYPE
         }))
 
@@ -701,7 +700,7 @@ class TestMatch(TestCase):
         )
 
         result = bootstrap_function(
-            func, check_safe_exit=True, argument=PythonObject({ "foo": 39 }, bind=PythonObjectType({ "foo": IntegerType() }))
+            func, check_safe_exit=True, argument=PythonObject({ "foo": 39 }, bind=UniversalObjectType({ "foo": IntegerType() }))
         )
 
         self.assertEquals(result.caught_break_mode, "return")

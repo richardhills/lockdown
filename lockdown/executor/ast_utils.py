@@ -120,10 +120,10 @@ def compile_ast_function_def(function_creator_ast, open_function_id, dependencie
 def default_globals():
     from lockdown.executor.flow_control import BreakException
     from lockdown.type_system.managers import get_manager
-    from lockdown.type_system.object_types import RDHObject
+    from lockdown.type_system.universal_type import PythonObject
     return {
         "__builtins": None,
-        "RDHObject": RDHObject,
+        "PythonObject": PythonObject,
         "BreakException": BreakException,
         "NoValue": NO_VALUE,
         "get_manager": get_manager

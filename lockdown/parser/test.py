@@ -8,10 +8,9 @@ from lockdown.executor.bootstrap import bootstrap_function
 from lockdown.executor.exceptions import PreparationException
 from lockdown.parser.parser import parse
 from lockdown.testing import miss_test
-from lockdown.type_system.list_types import RDHList
 from lockdown.type_system.managers import get_manager
-from lockdown.type_system.object_types import RDHObject
-from lockdown.type_system.universal_type import DEFAULT_READONLY_COMPOSITE_TYPE
+from lockdown.type_system.universal_type import DEFAULT_READONLY_COMPOSITE_TYPE, \
+    PythonList, PythonObject
 
 
 class TestJSONParsing(TestCase):
@@ -33,7 +32,7 @@ class TestJSONParsing(TestCase):
         ast = parse("""
             {}
         """)
-        self.assertEqual(ast.__dict__, { }) 
+        self.assertEqual(ast._to_dict(), { }) 
        
     def test_true(self):
         ast = parse("""
@@ -57,8 +56,8 @@ class TestJSONParsing(TestCase):
         ast = parse("""
             { "foo": "bar" }
         """)
-        CORRECT = RDHObject({ "foo": "bar" })
-        self.assertEqual(ast.__dict__, CORRECT.__dict__)
+        CORRECT = PythonObject({ "foo": "bar" })
+        self.assertEqual(ast._to_dict(), CORRECT._to_dict())
 
     def test_nested_object(self):
         ast = parse("""
@@ -114,7 +113,7 @@ class TestBasicFunction(TestCase):
         code = parse("""
             function(|Object { foo: int }|) { return foo; }
         """)
-        result = bootstrap_function(code, argument=RDHObject({ "foo": 42 }), check_safe_exit=True)
+        result = bootstrap_function(code, argument=PythonObject({ "foo": 42 }), check_safe_exit=True)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -307,7 +306,7 @@ class TestBuiltIns(TestCase):
         """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True)
         self.assertEquals(result.caught_break_mode, "value")
-        self.assertIsInstance(result.value, RDHList)
+        self.assertIsInstance(result.value, PythonList)
         get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
         self.assertEquals(len(result.value), 4)
         self.assertEquals(list(result.value), [ 1, 2, 3, 4 ])
