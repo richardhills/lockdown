@@ -93,63 +93,28 @@ def build_list_type(data):
 def inferred_opcode_factory(*args, **kwargs):
     return None
 
-OPCODE_TYPE_FACTORIES = {
-    "universal": {
-        "get": GetterMicroOpType,
-        "set": SetterMicroOpType,
-        "insert-start": InsertStartMicroOpType,
-        "insert-end": InsertEndMicroOpType,
-        "get-wildcard": GetterWildcardMicroOpType,
-        "set-wildcard": SetterWildcardMicroOpType,
-        "delete-wildcard": DeletterWildcardMicroOpType,
-        "remove-wildcard": RemoverWildcardMicroOpType,
-        "insert-wildcard": InserterWildcardMicroOpType,
-        "iter": IterMicroOpType
-    },
-#     "object": {
-#         "get": ObjectGetterType,
-#         "set": ObjectSetterType,
-#         "delete": ObjectDeletterType,
-#         "get-wildcard": lambda property: ObjectWildcardGetterType(enrich_type(property.key_type), enrich_type(property.value_type), property.key_error, property.type_error),
-#         "set-wildcard": lambda property: ObjectWildcardSetterType(enrich_type(property.key_type), enrich_type(property.value_type), property.key_error, property.type_error),
-#         "delete-wildcard": lambda property: ObjectWildcardDeletterType(property.key_error),
-#         "get-inferred": inferred_opcode_factory,
-#         "set-inferred": inferred_opcode_factory
-#     },
-#     "dict": {
-#         "get": DictGetterType,
-#         "set": DictSetterType,
-#         "delete": DictDeletterType,
-#         "get-wildcard": lambda property: DictWildcardGetterType(enrich_type(property.key_type), enrich_type(property.value_type), property.key_error, property.type_error),
-#         "set-wildcard": lambda property: DictWildcardSetterType(enrich_type(property.key_type), enrich_type(property.value_type), property.key_error, property.type_error),
-#         "delete-wildcard": lambda property: DictWildcardDeletterType(property.key_error),
-#         "get-inferred": inferred_opcode_factory,
-#         "set-inferred": inferred_opcode_factory
-#     },
-#     "list": {
-#         "get": ListGetterType,
-#         "set": ListSetterType,
-#         "delete": ListDeletterType,
-#         "get-wildcard": ListWildcardGetterType,
-#         "set-wildcard": ListWildcardSetterType,
-#         "delete-wildcard": ListWildcardDeletterType,
-#         "get-inferred": inferred_opcode_factory,
-#         "set-inferred": inferred_opcode_factory
-#     }
+MICRO_OP_FACTORIES = {
+    "get": GetterMicroOpType,
+    "set": SetterMicroOpType,
+    "insert-start": InsertStartMicroOpType,
+    "insert-end": InsertEndMicroOpType,
+    "get-wildcard": GetterWildcardMicroOpType,
+    "set-wildcard": SetterWildcardMicroOpType,
+    "delete-wildcard": DeletterWildcardMicroOpType,
+    "remove-wildcard": RemoverWildcardMicroOpType,
+    "insert-wildcard": InserterWildcardMicroOpType,
+    "iter": IterMicroOpType
 }
 
-def build_composite_type(data):    
+def build_universal_type(data):    
     micro_ops = OrderedDict({})
 
-    python_type_name = data.python_type
-    opcode_type_factory = OPCODE_TYPE_FACTORIES[python_type_name]
-
-    for property in data.properties:
+    for micro_op in data.micro_op:
         if hasattr(property, "name"):
             tag = ( property.opcode, property.name )
         else:
             tag = ( property.opcode, )
-        micro_ops[tag] = opcode_type_factory[property.opcode](property)
+        micro_ops[tag] = MICRO_OP_FACTORIES[micro_op.type](micro_op.params)
 
     return CompositeType(micro_ops, name="App")
 
@@ -157,7 +122,7 @@ TYPES = {
     "Any": lambda data: AnyType(),
     "Object": build_object_type,
     "List": build_list_type,
-    "Composite": build_composite_type,
+    "Universal": build_universal_type,
     "Function": build_closed_function_type,
     "OneOf": build_one_of_type,
     "Integer": lambda data: IntegerType(),

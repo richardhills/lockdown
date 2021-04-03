@@ -19,7 +19,7 @@ class MicroOpType(object):
         """
         raise NotImplementedError(self)
 
-    def is_derivable_from(self, other_type):
+    def is_derivable_from(self, other_type, reasoner):
         """
         Returns True if the MicroOp can be derived from the MicroOps on the other
         type (if it's a CompositeType).

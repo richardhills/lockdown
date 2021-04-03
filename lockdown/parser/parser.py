@@ -603,32 +603,29 @@ class RDHLang5Visitor(langVisitor):
 
         for index, expression in expressions:
             micro_ops.append(object_template_op({
-                "name": index,
-                "opcode": literal_op("get"),
-                "key_type": int_type(),
-                "value_type": expression,
-                "key_error": literal_op(False),
-                "type_error": literal_op(False)
+                "type": literal_op("get"),
+                "params": list_template_op([
+                    literal_op(index),
+                    expression
+                ])
             }))
             micro_ops.append(object_template_op({
-                "name": index,
-                "opcode": literal_op("set"),
-                "key_type": int_type(),
-                "value_type": any_type(),
-                "key_error": literal_op(False),
-                "type_error": literal_op(False)
+                "type": literal_op("set"),
+                "params": list_template_op([
+                    literal_op(index),
+                    any_type()
+                ])
             }))
 
         if inferred_splat_type:
-            # TODO use the splat type
             micro_ops.append(object_template_op({
-                "opcode": literal_op("get-inferred")
+                "type": literal_op("get-inferred")
             }))
             micro_ops.append(object_template_op({
-                "opcode": literal_op("set-inferred")
+                "type": literal_op("set-inferred")
             }))
 
-        return composite_type(micro_ops, "list")
+        return composite_type(micro_ops)
 
     def visitListType(self, ctx):
         type = self.visit(ctx.expression())
@@ -641,25 +638,29 @@ class RDHLang5Visitor(langVisitor):
 
         return composite_type([
             object_template_op({
-                "opcode": literal_op("get-wildcard"),
-                "key_type": key_type,
-                "value_type": value_type,
-                "key_error": literal_op(True),
-                "type_error": literal_op(False),
+                "type": literal_op("get-wildcard"),
+                "params": list_template_op([
+                    key_type,
+                    value_type,
+                    literal_op(True)
+                ])
             }),
             object_template_op({
-                "opcode": literal_op("set-wildcard"),
-                "key_type": key_type,
-                "value_type": value_type,
-                "key_error": literal_op(False),
-                "type_error": literal_op(False),
+                "type": literal_op("set-wildcard"),
+                "params": list_template_op([
+                    key_type,
+                    value_type,
+                    literal_op(False),
+                    literal_op(False),
+                ])
             }),
             object_template_op({
-                "opcode": literal_op("delete-wildcard"),
-                "key_type": key_type,
-                "key_error": literal_op(True),
+                "type": literal_op("delete-wildcard"),
+                "params": list_template_op([
+                    key_type, literal_op(True)
+                ])
             }),
-        ], "object")
+        ])
 
     def visitFunctionType(self, ctx):
         argument_type, return_type = ctx.expression()

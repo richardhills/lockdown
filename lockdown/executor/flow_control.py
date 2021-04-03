@@ -44,9 +44,6 @@ class BreakTypesFactory(object):
             raise FatalError()
         if in_type and not isinstance(in_type, Type):
             raise FatalError()
-        if isinstance(out_type, CompositeType):
-            if not out_type.is_self_consistent():
-                pass
         if opcode:
             out_type.from_opcode = opcode
         break_type = {

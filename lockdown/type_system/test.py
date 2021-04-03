@@ -12,6 +12,7 @@ from lockdown.type_system.exceptions import CompositeTypeIncompatibleWithTarget,
     CompositeTypeIsInconsistent, FatalError, DanglingInferredType, \
     InvalidAssignmentType
 from lockdown.type_system.managers import get_manager, get_type_of_value
+from lockdown.type_system.reasoner import Reasoner, DUMMY_REASONER
 from lockdown.type_system.universal_type import PythonObject, \
     DEFAULT_READONLY_COMPOSITE_TYPE, GetterMicroOpType, SetterMicroOpType, \
     UniversalObjectType, PythonList, UniversalTupleType, RICH_READONLY_TYPE, PythonDict, \
@@ -193,7 +194,7 @@ class TestRevConstType(TestCase):
             ("set", "foo"): SetterMicroOpType("foo", AnyType())
         }, name="test")
 
-        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type))
+        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type, DUMMY_REASONER))
 
     def test_rev_const_assigned_to_narrow_type(self):
         rev_const_type = CompositeType({
@@ -206,7 +207,7 @@ class TestRevConstType(TestCase):
             ("set", "foo"): SetterMicroOpType("foo", StringType())
         }, name="test")
 
-        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type))
+        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type, DUMMY_REASONER))
 
     def test_rev_const_can_not_be_added_to_object(self):
         rev_const_type = CompositeType({
@@ -233,7 +234,7 @@ class TestRevConstType(TestCase):
 
         self.assertTrue(isinstance(rev_const_type.micro_op_types[("set", "foo")].value_type, StringType))
 
-        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type))
+        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type, DUMMY_REASONER))
 
     def test_rev_const_wildcard(self):
         rev_const_type = CompositeType({
@@ -250,7 +251,7 @@ class TestRevConstType(TestCase):
 
         self.assertTrue(isinstance(rev_const_type.micro_op_types[("set-wildcard",)].value_type, StringType))
 
-        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type))
+        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type, DUMMY_REASONER))
 
     def test_rev_const_flatten_tuple(self):
         rev_const_type = CompositeType({
@@ -267,7 +268,7 @@ class TestRevConstType(TestCase):
 
         self.assertTrue(isinstance(rev_const_type.micro_op_types[("set", 0)].value_type, StringType))
 
-        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type))
+        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type, DUMMY_REASONER))
 
     def test_rev_const_flatten_list(self):
         rev_const_type = CompositeType({
@@ -284,9 +285,9 @@ class TestRevConstType(TestCase):
 
         rev_const_type = prepare_lhs_type(rev_const_type, None)
 
-        self.assertTrue(rev_const_type.is_self_consistent())
+        self.assertTrue(rev_const_type.is_self_consistent(DUMMY_REASONER))
 
-        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type))
+        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type, DUMMY_REASONER))
 
     def test_rev_const_merge_types_in_list(self):
         rev_const_type = CompositeType({
@@ -309,14 +310,13 @@ class TestRevConstType(TestCase):
             ("insert-start", ): InsertStartMicroOpType(StringType(), False),
         }, name="test")
 
-        self.assertFalse(rev_const_type.is_self_consistent())
+        self.assertFalse(rev_const_type.is_self_consistent(DUMMY_REASONER))
 
         rev_const_type = prepare_lhs_type(rev_const_type, None)
 
-        r = rev_const_type.find_first_self_inconsistent_micro_ops()
-        self.assertTrue(rev_const_type.is_self_consistent())
+        self.assertTrue(rev_const_type.is_self_consistent(DUMMY_REASONER))
 
-        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type))
+        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type, DUMMY_REASONER))
 
 class TestUniversalObjectType(TestCase):
     def test_basic_class(self):
@@ -329,8 +329,8 @@ class TestUniversalObjectType(TestCase):
             "bar": StringType()
         })
 
-        self.assertTrue(T.is_copyable_from(S))
-        self.assertFalse(S.is_copyable_from(T))
+        self.assertTrue(T.is_copyable_from(S, DUMMY_REASONER))
+        self.assertFalse(S.is_copyable_from(T, DUMMY_REASONER))
 
     def test_const_allows_broader_types(self):
         T = UniversalObjectType({
@@ -341,8 +341,8 @@ class TestUniversalObjectType(TestCase):
             "foo": IntegerType()
         })
 
-        self.assertTrue(T.is_copyable_from(S))
-        self.assertFalse(S.is_copyable_from(T))
+        self.assertTrue(T.is_copyable_from(S, DUMMY_REASONER))
+        self.assertFalse(S.is_copyable_from(T, DUMMY_REASONER))
 
     def test_broad_type_assignments_blocked(self):
         T = UniversalObjectType({
@@ -353,8 +353,8 @@ class TestUniversalObjectType(TestCase):
             "foo": IntegerType()
         })
 
-        self.assertFalse(T.is_copyable_from(S))
-        self.assertFalse(S.is_copyable_from(T))
+        self.assertFalse(T.is_copyable_from(S, DUMMY_REASONER))
+        self.assertFalse(S.is_copyable_from(T, DUMMY_REASONER))
 
     def test_simple_fields_are_required(self):
         T = UniversalObjectType({
@@ -364,8 +364,8 @@ class TestUniversalObjectType(TestCase):
             "foo": IntegerType()
         })
 
-        self.assertTrue(T.is_copyable_from(S))
-        self.assertFalse(S.is_copyable_from(T))
+        self.assertTrue(T.is_copyable_from(S, DUMMY_REASONER))
+        self.assertFalse(S.is_copyable_from(T, DUMMY_REASONER))
 
     def test_many_fields_are_required(self):
         T = UniversalObjectType({
@@ -379,8 +379,8 @@ class TestUniversalObjectType(TestCase):
             "baz": IntegerType()
         })
 
-        self.assertTrue(T.is_copyable_from(S))
-        self.assertFalse(S.is_copyable_from(T))
+        self.assertTrue(T.is_copyable_from(S, DUMMY_REASONER))
+        self.assertFalse(S.is_copyable_from(T, DUMMY_REASONER))
 
     def test_can_fail_micro_ops_are_enforced(self):
         foo = PythonObject({
@@ -426,7 +426,7 @@ class TestUniversalObjectType(TestCase):
         UniversalObjectType({
             "foo": IntegerType(),
             "bar": StringType()
-        }).is_copyable_from(object_type)
+        }).is_copyable_from(object_type, DUMMY_REASONER)
 
 
 class TestUnitTypes(TestCase):
@@ -771,7 +771,7 @@ class TestNestedPythonTypes(TestCase):
 class TestDefaultDict(TestCase):
     def test_default_dict_is_consistent_type(self):
         type = UniversalDefaultDictType(StringType(), StringType(), name="test")
-        self.assertTrue(type.is_self_consistent())
+        self.assertTrue(type.is_self_consistent(DUMMY_REASONER))
 
     def test_default_dict(self):
         def default_factory(target, key):
@@ -832,110 +832,110 @@ class TestTypeSystemMisc(TestCase):
 
     def test_misc3(self):
         t = UniversalTupleType([ IntegerType(), IntegerType() ])
-        self.assertTrue(t.is_self_consistent())
+        self.assertTrue(t.is_self_consistent(DUMMY_REASONER))
 
 class TestDefaultCompositeTypes(TestCase):
     def test_all_consistent(self):
-        self.assertTrue(DEFAULT_READONLY_COMPOSITE_TYPE.is_self_consistent())
-        self.assertTrue(DEFAULT_COMPOSITE_TYPE.is_self_consistent())
+        self.assertTrue(DEFAULT_READONLY_COMPOSITE_TYPE.is_self_consistent(DUMMY_REASONER))
+        self.assertTrue(DEFAULT_COMPOSITE_TYPE.is_self_consistent(DUMMY_REASONER))
 
 class TestUniversalListType(TestCase):
     def test_simple_list_assignment(self):
         foo = UniversalTupleType([], IntegerType())
         bar = UniversalTupleType([], IntegerType())
 
-        self.assertTrue(foo.is_copyable_from(bar))
+        self.assertTrue(foo.is_copyable_from(bar, DUMMY_REASONER))
 
     def test_simple_tuple_assignment(self):
         foo = UniversalTupleType([ IntegerType(), IntegerType() ], None)
         bar = UniversalTupleType([ IntegerType(), IntegerType() ], None)
 
-        self.assertTrue(foo.is_copyable_from(bar))
+        self.assertTrue(foo.is_copyable_from(bar, DUMMY_REASONER))
 
     def test_broadening_tuple_assignment_blocked(self):
         foo = UniversalTupleType([ AnyType(), AnyType() ], None)
         bar = UniversalTupleType([ IntegerType(), IntegerType() ], None)
 
-        self.assertFalse(foo.is_copyable_from(bar))
+        self.assertFalse(foo.is_copyable_from(bar, DUMMY_REASONER))
 
     def test_narrowing_tuple_assignment_blocked(self):
         foo = UniversalTupleType([ IntegerType(), IntegerType() ])
         bar = UniversalTupleType([ AnyType(), AnyType() ])
 
-        self.assertFalse(foo.is_copyable_from(bar))
+        self.assertFalse(foo.is_copyable_from(bar, DUMMY_REASONER))
 
     def test_broadening_tuple_assignment_allowed_with_const(self):
         foo = UniversalTupleType([ Const(AnyType()), Const(AnyType()) ])
         bar = UniversalTupleType([ IntegerType(), IntegerType() ])
 
-        self.assertTrue(foo.is_copyable_from(bar))
+        self.assertTrue(foo.is_copyable_from(bar, DUMMY_REASONER))
 
     def test_truncated_tuple_slice_assignment(self):
         foo = UniversalTupleType([ IntegerType() ])
         bar = UniversalTupleType([ IntegerType(), IntegerType() ])
 
-        self.assertTrue(foo.is_copyable_from(bar))
+        self.assertTrue(foo.is_copyable_from(bar, DUMMY_REASONER))
 
     def test_expanded_tuple_slice_assignment_blocked(self):
         foo = UniversalTupleType([ IntegerType(), IntegerType() ])
         bar = UniversalTupleType([ IntegerType() ])
 
-        self.assertFalse(foo.is_copyable_from(bar))
+        self.assertFalse(foo.is_copyable_from(bar, DUMMY_REASONER))
 
     def test_const_covariant_array_assignment_allowed(self):
         foo = UniversalListType(Const(AnyType()))
         bar = UniversalListType(IntegerType())
 
-        self.assertTrue(foo.is_copyable_from(bar))
+        self.assertTrue(foo.is_copyable_from(bar, DUMMY_REASONER))
 
     def test_convert_tuple_to_list_with_deletes_blocked(self):
         foo = UniversalListType(IntegerType())
         bar = UniversalTupleType([ IntegerType(), IntegerType() ], None)
 
-        self.assertFalse(foo.is_copyable_from(bar))
+        self.assertFalse(foo.is_copyable_from(bar, DUMMY_REASONER))
 
     def test_same_type_array_assignment(self):
         foo = UniversalListType(IntegerType())
         bar = UniversalListType(IntegerType())
 
-        self.assertTrue(foo.is_copyable_from(bar))
+        self.assertTrue(foo.is_copyable_from(bar, DUMMY_REASONER))
 
     def test_covariant_array_assignment_blocked(self):
         foo = UniversalListType(AnyType())
         bar = UniversalListType(IntegerType())
 
-        self.assertFalse(foo.is_copyable_from(bar))
+        self.assertFalse(foo.is_copyable_from(bar, DUMMY_REASONER))
 
     def test_narrowing_assignment_blocked(self):
         foo = UniversalListType(IntegerType())
         bar = UniversalListType(Const(AnyType()))
 
-        self.assertTrue(bar.is_copyable_from(foo))
-        self.assertFalse(foo.is_copyable_from(bar))
+        self.assertTrue(bar.is_copyable_from(foo, DUMMY_REASONER))
+        self.assertFalse(foo.is_copyable_from(bar, DUMMY_REASONER))
 
     def test_extreme_type1_contains_conflicts(self):
         foo = UniversalLupleType([ IntegerType() ], StringType())
-        self.assertFalse(foo.is_self_consistent())
+        self.assertFalse(foo.is_self_consistent(DUMMY_REASONER))
 
     def test_reified_extreme_type_contains_no_conflicts(self):
         foo = prepare_lhs_type(UniversalLupleType([ IntegerType() ], IntegerType()), None)
-        self.assertTrue(foo.is_self_consistent())
+        self.assertTrue(foo.is_self_consistent(DUMMY_REASONER))
 
     def test_simple_type1_has_no_conflicts(self):
         foo = UniversalListType(IntegerType())
-        self.assertTrue(foo.is_self_consistent())
+        self.assertTrue(foo.is_self_consistent(DUMMY_REASONER))
 
     def test_simple_type2_has_no_conflicts(self):
         foo = UniversalTupleType([ IntegerType() ])
-        self.assertTrue(foo.is_self_consistent())
+        self.assertTrue(foo.is_self_consistent(DUMMY_REASONER))
 
     def test_extreme_type_tamed1_has_no_conflicts(self):
         foo = UniversalLupleType([ IntegerType() ], IntegerType())
-        self.assertTrue(foo.is_self_consistent())
+        self.assertTrue(foo.is_self_consistent(DUMMY_REASONER))
 
     def test_extreme_type_tamed2_contains_conflicts(self):
         foo = UniversalLupleType([ IntegerType() ], AnyType())
-        self.assertTrue(foo.is_self_consistent())
+        self.assertTrue(foo.is_self_consistent(DUMMY_REASONER))
 
 class TestList(TestCase):
     def test_simple_list_assignment(self):
@@ -1016,7 +1016,7 @@ class TestList(TestCase):
             [ IntegerType(), IntegerType() ],
             IntegerType()
         )
-        self.assertTrue(type.is_self_consistent())
+        self.assertTrue(type.is_self_consistent(DUMMY_REASONER))
 
     def test_insert_on_short_tuple(self):
         foo = PythonList([ 4, 6, 8 ])
@@ -1143,9 +1143,9 @@ class TestInferredTypes(TestCase):
 
 class TestOneOfTypes(TestCase):
     def test_basic(self):
-        self.assertTrue(OneOfType([IntegerType(), StringType()]).is_copyable_from(IntegerType()))
-        self.assertTrue(OneOfType([IntegerType(), StringType()]).is_copyable_from(StringType()))
-        self.assertFalse(StringType().is_copyable_from(OneOfType([IntegerType(), StringType()])))
+        self.assertTrue(OneOfType([IntegerType(), StringType()]).is_copyable_from(IntegerType(), DUMMY_REASONER))
+        self.assertTrue(OneOfType([IntegerType(), StringType()]).is_copyable_from(StringType(), DUMMY_REASONER))
+        self.assertFalse(StringType().is_copyable_from(OneOfType([IntegerType(), StringType()]), DUMMY_REASONER))
 
     def test_nested(self):
         self.assertTrue(
@@ -1153,7 +1153,7 @@ class TestOneOfTypes(TestCase):
                 "foo": OneOfType([ IntegerType(), StringType() ])
             }).is_copyable_from(UniversalObjectType({
                 "foo": OneOfType([ IntegerType(), StringType() ])
-            }))
+            }), DUMMY_REASONER)
         )
 
         # Blocked because the receiver could set obj.foo = "hello", breaking the sender
@@ -1162,7 +1162,7 @@ class TestOneOfTypes(TestCase):
                 "foo": OneOfType([ IntegerType(), StringType() ])
             }).is_copyable_from(UniversalObjectType({
                 "foo": IntegerType()
-            }))
+            }), DUMMY_REASONER)
         )
 
         self.assertTrue(
@@ -1170,7 +1170,7 @@ class TestOneOfTypes(TestCase):
                 "foo": Const(OneOfType([ IntegerType(), StringType() ]))
             }).is_copyable_from(UniversalObjectType({
                 "foo": IntegerType()
-            }))
+            }), DUMMY_REASONER)
         )
 
     def test_runtime(self):
@@ -1259,14 +1259,14 @@ class TestRDHInstances(TestCase):
 
 class TestCoreTypes(TestCase):
     def test_ints_and_bools(self):
-        self.assertTrue(IntegerType().is_copyable_from(IntegerType()))
-        self.assertTrue(BooleanType().is_copyable_from(BooleanType()))
-        self.assertFalse(BooleanType().is_copyable_from(IntegerType()))
-        self.assertFalse(IntegerType().is_copyable_from(BooleanType()))
-        self.assertTrue(BooleanType().is_copyable_from(UnitType(True)))
-        self.assertTrue(IntegerType().is_copyable_from(UnitType(5)))
-        self.assertFalse(BooleanType().is_copyable_from(UnitType(5)))
-        self.assertFalse(IntegerType().is_copyable_from(UnitType(True)))
+        self.assertTrue(IntegerType().is_copyable_from(IntegerType(), DUMMY_REASONER))
+        self.assertTrue(BooleanType().is_copyable_from(BooleanType(), DUMMY_REASONER))
+        self.assertFalse(BooleanType().is_copyable_from(IntegerType(), DUMMY_REASONER))
+        self.assertFalse(IntegerType().is_copyable_from(BooleanType(), DUMMY_REASONER))
+        self.assertTrue(BooleanType().is_copyable_from(UnitType(True), DUMMY_REASONER))
+        self.assertTrue(IntegerType().is_copyable_from(UnitType(5), DUMMY_REASONER))
+        self.assertFalse(BooleanType().is_copyable_from(UnitType(5), DUMMY_REASONER))
+        self.assertFalse(IntegerType().is_copyable_from(UnitType(True), DUMMY_REASONER))
 
     def test_merge_singleton_basic_types(self):
         self.assertTrue(isinstance(merge_types([ IntegerType() ], "super"), IntegerType))

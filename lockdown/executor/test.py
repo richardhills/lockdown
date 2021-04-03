@@ -19,8 +19,9 @@ from lockdown.type_system.core_types import IntegerType, StringType
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.universal_type import PythonObject, \
     DEFAULT_READONLY_COMPOSITE_TYPE, PythonList, UniversalTupleType, \
-    UniversalObjectType
+    UniversalObjectType, RICH_READONLY_TYPE
 from lockdown.utils import NO_VALUE, set_debug
+from lockdown.type_system.reasoner import DUMMY_REASONER
 
 
 class TestPreparedFunction(TestCase):
@@ -76,7 +77,7 @@ class TestDereference(TestCase):
         }, bind=UniversalObjectType({
             "local": IntegerType(),
             "types": DEFAULT_READONLY_COMPOSITE_TYPE
-        }, wildcard_type=DEFAULT_READONLY_COMPOSITE_TYPE))
+        }, wildcard_type=RICH_READONLY_TYPE))
 
         result = bootstrap_function(func, context=context, check_safe_exit=True)
 
@@ -797,7 +798,7 @@ class TestMatch(TestCase):
         self.assertEquals(len(prepared_func.break_types), 1)
         self.assertTrue("return" in prepared_func.break_types)
         for return_break_type in prepared_func.break_types["return"]:
-            self.assertTrue(StringType().is_copyable_from(return_break_type["out"]))
+            self.assertTrue(StringType().is_copyable_from(return_break_type["out"], DUMMY_REASONER))
 
 
 class TestTryCatch(TestCase):

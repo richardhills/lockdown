@@ -18,6 +18,7 @@ from lockdown.type_system.core_types import AnyType, Type, merge_types, Const, \
 from lockdown.type_system.exceptions import FatalError, InvalidDereferenceType, \
     InvalidDereferenceKey, InvalidAssignmentType, InvalidAssignmentKey
 from lockdown.type_system.managers import get_type_of_value, get_manager
+from lockdown.type_system.reasoner import DUMMY_REASONER
 from lockdown.type_system.universal_type import UniversalObjectType, \
     DEFAULT_READONLY_COMPOSITE_TYPE, PythonList, UniversalListType, PythonObject, \
     GetterMicroOpType, SetterMicroOpType, GetterWildcardMicroOpType, \
@@ -267,7 +268,7 @@ class ObjectTemplateOp(Opcode):
             combined_value_types = merge_types(all_value_types, "exact")
 
             micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(StringType(), combined_value_types, True)
-            micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(StringType(), AnyType(), True, True)
+            micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(StringType(), AnyType(), True, False)
 
             value_type = CompositeType(micro_ops, name="ObjectTemplateOp")
 
@@ -368,7 +369,7 @@ class DictTemplateOp(Opcode):
             combined_value_types = merge_types(all_value_types, "exact")
 
             micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(StringType(), combined_value_types, True)
-            micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(StringType(), AnyType(), True, True)
+            micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(StringType(), AnyType(), True, False)
 
             value_type = CompositeType(micro_ops, name="ObjectTemplateOp")
 
@@ -418,8 +419,8 @@ class ListTemplateOp(Opcode):
         micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(IntegerType(), combined_value_types, True)
         micro_ops[("iter",)] = IterMicroOpType(combined_value_types)
 
-        micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(IntegerType(), AnyType(), True, True)
-        micro_ops[("remove-wildcard",)] = RemoverWildcardMicroOpType(IntegerType(), True, False)
+        micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(IntegerType(), AnyType(), True, False)
+        micro_ops[("remove-wildcard",)] = RemoverWildcardMicroOpType(True, False)
         micro_ops[("insert-wildcard",)] = InserterWildcardMicroOpType(AnyType(), True, False)
         micro_ops[("insert-start",)] = InsertStartMicroOpType(AnyType(), False)
         micro_ops[("insert-end",)] = InsertEndMicroOpType(AnyType(), False)
@@ -714,8 +715,7 @@ class AssignmentOp(Opcode):
                                         self.micro_ops[reference] = False, micro_op
 
                             if micro_op:
-                                if not micro_op.value_type.is_copyable_from(rvalue_type):
-                                    micro_op.value_type.is_copyable_from(rvalue_type)
+                                if not micro_op.value_type.is_copyable_from(rvalue_type, DUMMY_REASONER):
                                     self.invalid_rvalue_error = True
 
                                 if micro_op.type_error or micro_op.key_error:
@@ -854,7 +854,7 @@ class InsertOp(Opcode):
                                         self.wildcard_micro_ops[reference] = micro_op
 
                             if micro_op:
-                                if not micro_op.value_type.is_copyable_from(rvalue_type):
+                                if not micro_op.value_type.is_copyable_from(rvalue_type, DUMMY_REASONER):
                                     self.invalid_rvalue_error = True
 
                                 break_types.add("value", NoValueType())
@@ -886,14 +886,14 @@ class InsertOp(Opcode):
             try:
                 direct_micro_op_type = self.direct_micro_ops.get(reference, None)
                 if direct_micro_op_type:
-                    if self.invalid_rvalue_error and not direct_micro_op_type.value_type.is_copyable_from(get_type_of_value(rvalue)):
+                    if self.invalid_rvalue_error and not direct_micro_op_type.value_type.is_copyable_from(get_type_of_value(rvalue), DUMMY_REASONER):
                         return frame.exception(self.INVALID_RVALUE())
 
                     return frame.value(direct_micro_op_type.invoke(manager, rvalue, shortcut_checks=True))
 
                 wildcard_micro_op_type = self.wildcard_micro_ops.get(reference, None)
                 if wildcard_micro_op_type:
-                    if self.invalid_rvalue_error and not wildcard_micro_op_type.value_type.is_copyable_from(get_type_of_value(rvalue)):
+                    if self.invalid_rvalue_error and not wildcard_micro_op_type.value_type.is_copyable_from(get_type_of_value(rvalue), DUMMY_REASONER):
                         return frame.exception(self.INVALID_RVALUE())
 
                     return frame.value(wildcard_micro_op_type.invoke(manager, reference, rvalue, shortcut_checks=True))
@@ -985,8 +985,8 @@ class MapOp(Opcode):
                     micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(IntegerType(), mapper_continue_type, True)
                     micro_ops[("iter",)] = IterMicroOpType(mapper_continue_type)
 
-                    micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(IntegerType(), AnyType(), True, True)
-                    micro_ops[("remove-wildcard",)] = RemoverWildcardMicroOpType(IntegerType(), True, False)
+                    micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(IntegerType(), AnyType(), True, False)
+                    micro_ops[("remove-wildcard",)] = RemoverWildcardMicroOpType(True, False)
                     micro_ops[("insert-wildcard",)] = InserterWildcardMicroOpType(AnyType(), True, False)
                     micro_ops[("insert-start",)] = InsertStartMicroOpType(AnyType(), False)
                     micro_ops[("insert-end",)] = InsertEndMicroOpType(AnyType(), False)
@@ -1050,7 +1050,7 @@ def BinaryOp(name, symbol, func, argument_type, result_type, number_op=None, cmp
             if lvalue_type is not MISSING and rvalue_type is not MISSING:
                 break_types.add("value", result_type)
             self.missing_operands_exception = False
-            if not argument_type.is_copyable_from(lvalue_type) or not argument_type.is_copyable_from(rvalue_type):
+            if not argument_type.is_copyable_from(lvalue_type, DUMMY_REASONER) or not argument_type.is_copyable_from(rvalue_type, DUMMY_REASONER):
                 self.missing_operands_exception = True
                 break_types.add("exception", self.MISSING_OPERANDS.get_type())
 
@@ -1060,13 +1060,13 @@ def BinaryOp(name, symbol, func, argument_type, result_type, number_op=None, cmp
             with frame_manager.get_next_frame(self) as frame:
                 def get_lvalue():
                     lvalue = frame.step("lvalue", lambda: evaluate(self.lvalue, context, frame_manager))
-                    if self.missing_operands_exception and not argument_type.is_copyable_from(get_type_of_value(lvalue)):
+                    if self.missing_operands_exception and not argument_type.is_copyable_from(get_type_of_value(lvalue), DUMMY_REASONER):
                         raise BreakException(*frame.exception(self.MISSING_OPERANDS()))
                     return lvalue
     
                 def get_rvalue():
                     rvalue = frame.step("rvalue", lambda: evaluate(self.rvalue, context, frame_manager))
-                    if self.missing_operands_exception and not argument_type.is_copyable_from(get_type_of_value(rvalue)):
+                    if self.missing_operands_exception and not argument_type.is_copyable_from(get_type_of_value(rvalue), DUMMY_REASONER):
                         raise BreakException(*frame.exception(self.MISSING_OPERANDS()))
                     return rvalue
 
@@ -1216,7 +1216,7 @@ class ShiftOp(Opcode):
                 restart_value = frame.pop_restart_value()
 
                 if is_debug():
-                    if not self.restart_type.is_copyable_from(get_type_of_value(restart_value)):
+                    if not self.restart_type.is_copyable_from(get_type_of_value(restart_value), DUMMY_REASONER):
                         raise FatalError()
 
                 return frame.unwind("value", restart_value, None, None)
@@ -1466,7 +1466,7 @@ class ConditionalOp(Opcode):
         when_true_type, when_true_break_types = get_expression_break_types(self.when_true, context, frame_manager)
         when_false_type, when_false_break_types = get_expression_break_types(self.when_false, context, frame_manager)
 
-        if BooleanType().is_copyable_from(condition_type):
+        if BooleanType().is_copyable_from(condition_type, DUMMY_REASONER):
             # TODO be more liberal
             raise FatalError()
 
@@ -1588,7 +1588,7 @@ class CloseOp(Opcode):
         if function_type is not MISSING and outer_context_type is not MISSING:
             if isinstance(function_type, OpenFunctionType):
                 break_types.add("value", ClosedFunctionType(function_type.argument_type, function_type.break_types))
-                if function_type.outer_type.is_copyable_from(outer_context_type):
+                if function_type.outer_type.is_copyable_from(outer_context_type, DUMMY_REASONER):
                     self.outer_context_type_error = False
             else:
                 break_types.add("value", AnyType())
@@ -1707,7 +1707,7 @@ class InvokeOp(Opcode):
 
             if isinstance(function_type, ClosedFunctionType):
                 break_types.merge(function_type.break_types)
-                if function_type.argument_type.is_copyable_from(argument_type):
+                if function_type.argument_type.is_copyable_from(argument_type, DUMMY_REASONER):
                     self.invalid_argument_type_exception_is_possible = False
             else:
                 break_types.add("exception", self.INVALID_FUNCTION_TYPE.get_type(), opcode=self)
@@ -1797,7 +1797,7 @@ class MatchOp(Opcode):
             break_types.merge(matcher_break_types)
             break_types.merge(matcher_function_type.break_types)
 
-            if matcher_function_type.argument_type.is_copyable_from(value_type):
+            if matcher_function_type.argument_type.is_copyable_from(value_type, DUMMY_REASONER):
                 break
 
             value_type = remove_type(value_type, matcher_function_type.argument_type)

@@ -23,8 +23,10 @@ from lockdown.type_system.composites import prepare_lhs_type, \
 from lockdown.type_system.core_types import Type, NoValueType, IntegerType, \
     AnyType
 from lockdown.type_system.exceptions import FatalError, InvalidInferredType, \
-    DanglingInferredType
+    DanglingInferredType, CompositeTypeIsInconsistent, \
+    CompositeTypeIncompatibleWithTarget
 from lockdown.type_system.managers import get_manager, get_type_of_value
+from lockdown.type_system.reasoner import DUMMY_REASONER, Reasoner
 from lockdown.type_system.universal_type import PythonObject, \
     UniversalObjectType, DEFAULT_READONLY_COMPOSITE_TYPE, PythonList, PythonDict
 from lockdown.utils import MISSING, is_debug, runtime_type_information, raise_from, \
@@ -41,7 +43,7 @@ def prepare_piece_of_context(declared_type, suggested_type):
     if not check_dangling_inferred_types(final_type):
         raise PreparationException("Invalid inferred types")
 
-    if isinstance(final_type, CompositeType) and not final_type.is_self_consistent():
+    if isinstance(final_type, CompositeType) and not final_type.is_self_consistent(DUMMY_REASONER):
         raise FatalError()
 
     return final_type
@@ -138,8 +140,10 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
 
     local_type = prepare_piece_of_context(local_type, actual_local_type)
 
-    if not local_type.is_copyable_from(actual_local_type):
-        raise PreparationException("Invalid local type: {} != {}".format(local_type, actual_local_type))
+    local_type_reasoner = Reasoner()
+
+    if not local_type.is_copyable_from(actual_local_type, local_type_reasoner):
+        raise PreparationException("Invalid local type: {} != {}: {}".format(local_type, actual_local_type, local_type_reasoner.to_message()))
 
     actual_break_types_factory.merge(local_other_break_types)
 
@@ -205,8 +209,8 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
 #                 if declared_in is not None and actual_in is None:
 #                     continue
 
-                out_is_compatible = final_out.is_copyable_from(actual_out)
-                in_is_compatible = final_in is None or actual_in.is_copyable_from(final_in)
+                out_is_compatible = final_out.is_copyable_from(actual_out, DUMMY_REASONER)
+                in_is_compatible = final_in is None or actual_in.is_copyable_from(final_in, DUMMY_REASONER)
 
                 if out_is_compatible and in_is_compatible:
                     final_declared_break_types.add(mode, final_out, final_in)
@@ -405,7 +409,7 @@ class OpenFunction(object):
 #            "types": readonly_rich_composite_type
         }, wildcard_type=AnyType(), name="code-execution-context-type")
 
-        if not self.execution_context_type.is_self_consistent():
+        if not self.execution_context_type.is_self_consistent(DUMMY_REASONER):
             raise FatalError()
 
         self.compiled_ast = None
@@ -610,8 +614,11 @@ class ClosedFunction(LockdownFunction):
                 raise FatalError()
 
             logger.debug("ClosedFunction:code_context")
+            code_context_binding_reasoner = Reasoner()
             try:
-                new_context = frame.step("code_execution_context", lambda: PythonObject({
+                new_context = frame.step(
+                    "code_execution_context",
+                    lambda: PythonObject({
                         "prepare": self.open_function.prepare_context,
                         "outer": self.outer_context,
                         "argument": argument,
@@ -620,9 +627,14 @@ class ClosedFunction(LockdownFunction):
                         "types": self.open_function.types_context
                     },
                         bind=self.open_function.execution_context_type if runtime_type_information() else None,
-                        debug_reason="code-execution-context"
+                        debug_reason="code-execution-context",
+                        reasoner=code_context_binding_reasoner
                     )
                 )
+            except CompositeTypeIncompatibleWithTarget:
+                raise FatalError(code_context_binding_reasoner.to_message())
+            except CompositeTypeIsInconsistent as e:
+                raise raise_from(FatalError, e)
             except Exception as e:
                 raise raise_from(FatalError, e)
 
@@ -691,7 +703,7 @@ class Continuation(LockdownFunction):
         return ClosedFunctionType(self.restart_type, self.break_types)
 
     def invoke(self, restart_value, frame_manager):
-        if not self.restart_type.is_copyable_from(get_type_of_value(restart_value)):
+        if not self.restart_type.is_copyable_from(get_type_of_value(restart_value), DUMMY_REASONER):
             raise FatalError()
         self.restarted = True
         if self.frame_manager.fully_wound():

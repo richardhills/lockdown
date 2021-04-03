@@ -2,10 +2,11 @@
 from __future__ import unicode_literals
 
 from UserDict import DictMixin
+
 from _abcoll import MutableSequence
 
 from lockdown.type_system.composites import Composite, CompositeType, \
-    does_value_fit_through_type, unbind_key, bind_key,\
+    does_value_fit_through_type, unbind_key, bind_key, \
     can_add_composite_type_with_filter
 from lockdown.type_system.core_types import merge_types, Const, Type, StringType, \
     IntegerType, OneOfType, AnyType
@@ -14,15 +15,14 @@ from lockdown.type_system.exceptions import FatalError, MissingMicroOp, \
     raise_if_safe
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.micro_ops import MicroOpType
-from lockdown.utils import MISSING, default
-from __builtin__ import True
+from lockdown.utils import MISSING, default, micro_op_repr
 
 
 SPARSE_ELEMENT = object()
 
 
 class Universal(Composite):
-    def __init__(self, is_sparse, default_factory=None, bind=None, debug_reason=None, initial_wrapped=None, initial_length=0):
+    def __init__(self, is_sparse, default_factory=None, bind=None, debug_reason=None, initial_wrapped=None, initial_length=0, reasoner=None):
         self.wrapped = initial_wrapped or {}
 
         manager = get_manager(self, "Universal")
@@ -36,7 +36,7 @@ class Universal(Composite):
         self._length = initial_length
 
         if bind:
-            manager.add_composite_type(bind)
+            manager.add_composite_type(bind, reasoner=None)
 
     def _set(self, key, value):
         manager = get_manager(self)
@@ -421,11 +421,11 @@ class GetterMicroOpType(MicroOpType):
         except TypeError:
             raise FatalError()
 
-    def is_derivable_from(self, other_type):
+    def is_derivable_from(self, other_type, reasoner):
         other_micro_op_type = other_type.get_micro_op_type(("get", self.key))
         return (
             other_micro_op_type
-            and self.value_type.is_copyable_from(other_micro_op_type.value_type)
+            and self.value_type.is_copyable_from(other_micro_op_type.value_type, reasoner)
         )
 
     def is_bindable_to(self, our_type, target):
@@ -443,22 +443,28 @@ class GetterMicroOpType(MicroOpType):
     def would_be_bindable_to(self, manager, key):
         return manager.get_obj()._contains(key) or manager.default_factory
 
-    def conflicts_with(self, our_type, other_type):
+    def conflicts_with(self, our_type, other_type, reasoner):
         wildcard_insert = other_type.get_micro_op_type(("insert-wildcard",))
-        if wildcard_insert and not wildcard_insert.type_error and not self.value_type.is_copyable_from(wildcard_insert.value_type):
+        if wildcard_insert and not wildcard_insert.type_error and not self.value_type.is_copyable_from(wildcard_insert.value_type, reasoner):
+            reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_insert)
             return True
 
         insert_first = other_type.get_micro_op_type(("insert-first",))
-        if insert_first and not insert_first.type_error and not self.value_type.is_copyable_from(insert_first.value_type):
+        if insert_first and not insert_first.type_error and not self.value_type.is_copyable_from(insert_first.value_type, reasoner):
+            reasoner.push_micro_op_conflicts_with_micro_op(self, insert_first)
             return True
 
         wildcard_setter = other_type.get_micro_op_type(("set-wildcard",))
-        if wildcard_setter and not wildcard_setter.type_error and not self.value_type.is_copyable_from(wildcard_setter.value_type):
+        if wildcard_setter and not wildcard_setter.type_error and not self.value_type.is_copyable_from(wildcard_setter.value_type, reasoner):
+            reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_setter)
             return True
 
         detail_setter = other_type.get_micro_op_type(("set", self.key))
-        if detail_setter and not self.value_type.is_copyable_from(detail_setter.value_type):
+        if detail_setter and not self.value_type.is_copyable_from(detail_setter.value_type, reasoner):
+            reasoner.push_micro_op_conflicts_with_micro_op(self, detail_setter)
             return True
+
+        return False
 
     def prepare_bind(self, target, key_filter, substitute_value):
         if key_filter is None or key_filter == self.key:
@@ -479,6 +485,9 @@ class GetterMicroOpType(MicroOpType):
             self.key,
             default(value_type, self.value_type)
         )
+
+    def __repr__(self):
+        return micro_op_repr("get", self.key, False, type=self.value_type)
 
 
 class SetterMicroOpType(MicroOpType):
@@ -502,11 +511,11 @@ class SetterMicroOpType(MicroOpType):
         except TypeError:
             raise FatalError()
 
-    def is_derivable_from(self, other_type):
+    def is_derivable_from(self, other_type, reasoner):
         other_micro_op_type = other_type.get_micro_op_type(("set", self.key))
         return (
             other_micro_op_type
-            and other_micro_op_type.value_type.is_copyable_from(self.value_type)
+            and other_micro_op_type.value_type.is_copyable_from(self.value_type, reasoner)
         )
 
     def is_bindable_to(self, our_type, target):
@@ -521,13 +530,15 @@ class SetterMicroOpType(MicroOpType):
 
         return True
 
-    def conflicts_with(self, our_type, other_type):
+    def conflicts_with(self, our_type, other_type, reasoner):
         wildcard_getter = other_type.get_micro_op_type(("get-wildcard",))
-        if wildcard_getter and not wildcard_getter.value_type.is_copyable_from(self.value_type):
+        if wildcard_getter and not wildcard_getter.value_type.is_copyable_from(self.value_type, reasoner):
+            reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_getter)
             return True
 
         detail_getter = other_type.get_micro_op_type(("get", self.key))
-        if detail_getter and not detail_getter.value_type.is_copyable_from(self.value_type):
+        if detail_getter and not detail_getter.value_type.is_copyable_from(self.value_type, reasoner):
+            reasoner.push_micro_op_conflicts_with_micro_op(self, detail_getter)
             return True
 
         return False
@@ -546,6 +557,9 @@ class SetterMicroOpType(MicroOpType):
             self.key,
             default(value_type, self.value_type)
         )
+
+    def __repr__(self):
+        return micro_op_repr("set", self.key, False, type=self.value_type)
 
 
 class InsertStartMicroOpType(MicroOpType):
@@ -586,11 +600,11 @@ class InsertStartMicroOpType(MicroOpType):
         except TypeError:
             raise FatalError()
 
-    def is_derivable_from(self, other_type):
+    def is_derivable_from(self, other_type, reasoner):
         other_micro_op_type = other_type.get_micro_op_type(("insert-start",))
         return (
             other_micro_op_type
-            and self.value_type.is_copyable_from(other_micro_op_type.value_type)
+            and other_micro_op_type.value_type.is_copyable_from(self.value_type, reasoner)
         )
 
     def is_bindable_to(self, our_type, target):
@@ -609,15 +623,17 @@ class InsertStartMicroOpType(MicroOpType):
 
         return True
 
-    def conflicts_with(self, our_type, other_type):
+    def conflicts_with(self, our_type, other_type, reasoner):
         if not self.type_error:
             wildcard_getter = other_type.get_micro_op_type(("get-wildcard",))
-            if wildcard_getter and not wildcard_getter.value_type.is_copyable_from(self.value_type):
+            if wildcard_getter and not wildcard_getter.value_type.is_copyable_from(self.value_type, reasoner):
+                reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_getter)
                 return True
 
             for tag, possible_detail_getter in other_type.micro_op_types.items():
                 if len(tag) == 2 and tag[0] == "get":
-                    if not possible_detail_getter.value_type.is_copyable_from(self.value_type):
+                    if not possible_detail_getter.value_type.is_copyable_from(self.value_type, reasoner):
+                        reasoner.push_micro_op_conflicts_with_micro_op(self, possible_detail_getter)
                         return True
 
         return False
@@ -637,6 +653,8 @@ class InsertStartMicroOpType(MicroOpType):
             self.type_error
         )
 
+    def __repr__(self):
+        return micro_op_repr("insert", 0, False, type=self.value_type, type_error=self.type_error)
 
 class InsertEndMicroOpType(MicroOpType):
     key_error = False
@@ -658,11 +676,11 @@ class InsertEndMicroOpType(MicroOpType):
         except TypeError:
             raise FatalError()
 
-    def is_derivable_from(self, other_type):
+    def is_derivable_from(self, other_type, reasoner):
         other_micro_op_type = other_type.get_micro_op_type(("insert-end",))
         return (
             other_micro_op_type
-            and self.value_type.is_copyable_from(other_micro_op_type.value_type)
+            and other_micro_op_type.value_type.is_copyable_from(self.value_type, reasoner)
         )
 
     def is_bindable_to(self, our_type, target):
@@ -674,7 +692,7 @@ class InsertEndMicroOpType(MicroOpType):
 
         return True
 
-    def conflicts_with(self, our_type, other_type):
+    def conflicts_with(self, our_type, other_type, reasoner):
         return False
 
     def prepare_bind(self, target, key_filter, substitute_value):
@@ -691,6 +709,9 @@ class InsertEndMicroOpType(MicroOpType):
             default(value_type, self.value_type),
             self.type_error
         )
+
+    def __repr__(self):
+        return micro_op_repr("insert", -1, False, type=self.value_type, type_error=self.type_error)
 
 
 class GetterWildcardMicroOpType(MicroOpType):
@@ -724,12 +745,12 @@ class GetterWildcardMicroOpType(MicroOpType):
         except TypeError:
             raise FatalError()
 
-    def is_derivable_from(self, other_type):
+    def is_derivable_from(self, other_type, reasoner):
         other_micro_op_type = other_type.get_micro_op_type(("get-wildcard",))
         return (
             other_micro_op_type
-            and other_micro_op_type.key_type.is_copyable_from(self.key_type)
-            and self.value_type.is_copyable_from(other_micro_op_type.value_type)
+            and other_micro_op_type.key_type.is_copyable_from(self.key_type, reasoner)
+            and self.value_type.is_copyable_from(other_micro_op_type.value_type, reasoner)
         )
 
     def is_bindable_to(self, our_type, target):
@@ -744,26 +765,30 @@ class GetterWildcardMicroOpType(MicroOpType):
 
         return True
 
-    def conflicts_with(self, our_type, other_type):
+    def conflicts_with(self, our_type, other_type, reasoner):
         # We ignore Deletters and Removers because they either:
         # 1. Throw a KeyError
         # 2. Don't throw a KeyError and have a DefaultFactory
         wildcard_insert = other_type.get_micro_op_type(("insert-wildcard",))
-        if wildcard_insert and not wildcard_insert.type_error and not self.value_type.is_copyable_from(wildcard_insert.value_type):
+        if wildcard_insert and not wildcard_insert.type_error and not self.value_type.is_copyable_from(wildcard_insert.value_type, reasoner):
+            reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_insert)
             return True
 
         insert_first = other_type.get_micro_op_type(("insert-first",))
-        if insert_first and not insert_first.type_error and not self.value_type.is_copyable_from(insert_first.value_type):
+        if insert_first and not insert_first.type_error and not self.value_type.is_copyable_from(insert_first.value_type, reasoner):
+            reasoner.push_micro_op_conflicts_with_micro_op(self, insert_first)
             return True
 
         wildcard_setter = other_type.get_micro_op_type(("set-wildcard",))
-        if wildcard_setter and not wildcard_setter.type_error and not self.value_type.is_copyable_from(wildcard_setter.value_type):
+        if wildcard_setter and not wildcard_setter.type_error and not self.value_type.is_copyable_from(wildcard_setter.value_type, reasoner):
+            reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_setter)
             return True
 
         for tag in other_type.micro_op_types.keys():
             if len(tag) == 2 and tag[0] == "set":
                 detail_setter = other_type.get_micro_op_type(("set", tag[1]))
-                if detail_setter and not self.value_type.is_copyable_from(detail_setter.value_type):
+                if detail_setter and not self.value_type.is_copyable_from(detail_setter.value_type, reasoner):
+                    reasoner.push_micro_op_conflicts_with_micro_op(self, detail_setter)
                     return True
 
     def prepare_bind(self, target, key_filter, substitute_value):
@@ -789,6 +814,9 @@ class GetterWildcardMicroOpType(MicroOpType):
             default(key_error, self.key_error)
         )
 
+    def __repr__(self):
+        return micro_op_repr("get", "*", self.key_error, type=self.value_type, type_error=self.type_error)
+
 
 class SetterWildcardMicroOpType(MicroOpType):
     def __init__(self, key_type, value_type, key_error, type_error):
@@ -813,14 +841,14 @@ class SetterWildcardMicroOpType(MicroOpType):
         except TypeError:
             raise FatalError()
 
-    def is_derivable_from(self, other_type):
+    def is_derivable_from(self, other_type, reasoner):
         other_micro_op_type = other_type.get_micro_op_type(("set-wildcard",))
         return (
             other_micro_op_type
             and (not other_micro_op_type.key_error or self.key_error) 
             and (not other_micro_op_type.type_error or self.type_error) 
-            and other_micro_op_type.key_type.is_copyable_from(self.key_type)
-            and other_micro_op_type.value_type.is_copyable_from(self.value_type)
+            and other_micro_op_type.key_type.is_copyable_from(self.key_type, reasoner)
+            and other_micro_op_type.value_type.is_copyable_from(self.value_type, reasoner)
         )
 
     def is_bindable_to(self, our_type, target):
@@ -832,15 +860,17 @@ class SetterWildcardMicroOpType(MicroOpType):
 
         return True
 
-    def conflicts_with(self, our_type, other_type):
+    def conflicts_with(self, our_type, other_type, reasoner):
         if not self.type_error:
             wildcard_getter = other_type.get_micro_op_type(("get-wildcard",))
-            if wildcard_getter and not wildcard_getter.value_type.is_copyable_from(self.value_type):
+            if wildcard_getter and not wildcard_getter.value_type.is_copyable_from(self.value_type, reasoner):
+                reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_getter)
                 return True
 
             for tag, possible_detail_getter in other_type.micro_op_types.items():
                 if len(tag) == 2 and tag[0] == "get":
-                    if not possible_detail_getter.value_type.is_copyable_from(self.value_type):
+                    if not possible_detail_getter.value_type.is_copyable_from(self.value_type, reasoner):
+                        reasoner.push_micro_op_conflicts_with_micro_op(self, possible_detail_getter)
                         return True
 
         return False
@@ -864,6 +894,9 @@ class SetterWildcardMicroOpType(MicroOpType):
             default(type_error, self.type_error)
         )
 
+    def __repr__(self):
+        return micro_op_repr("set", "*", self.key_error, type=self.value_type, type_error=self.type_error)
+
 
 class DeletterWildcardMicroOpType(MicroOpType):
     def __init__(self, key_type, key_error):
@@ -881,12 +914,12 @@ class DeletterWildcardMicroOpType(MicroOpType):
         except TypeError:
             raise FatalError()
 
-    def is_derivable_from(self, other_type):
+    def is_derivable_from(self, other_type, reasoner):
         other_micro_op_type = other_type.get_micro_op_type(("delete-wildcard",))
         return (
             other_micro_op_type
             and (not other_micro_op_type.key_error or self.key_error) 
-            and other_micro_op_type.key_type.is_copyable_from(self.key_type)
+            and other_micro_op_type.key_type.is_copyable_from(self.key_type, reasoner)
         )
 
     def is_bindable_to(self, our_type, target):
@@ -901,7 +934,7 @@ class DeletterWildcardMicroOpType(MicroOpType):
 
         return True
 
-    def conflicts_with(self, our_type, other_type):
+    def conflicts_with(self, our_type, other_type, reasoner):
         # We ignore other Getters because:
         # 1. If we generate KeyErrors, having Getters (which don't throw key errors)
         # 2. If we don't generate KeyErrors, we've got to have a DefaultFactory, so Getters are safe
@@ -919,10 +952,11 @@ class DeletterWildcardMicroOpType(MicroOpType):
     def clone(self):
         return DeletterWildcardMicroOpType(self.key_type, self.key_error)
 
+    def __repr__(self):
+        return micro_op_repr("delete", "*", self.key_error)
 
 class RemoverWildcardMicroOpType(MicroOpType):
-    def __init__(self, key_type, key_error, type_error):
-        self.key_type = key_type
+    def __init__(self, key_error, type_error):
         self.key_error = key_error
         self.type_error = type_error
 
@@ -950,12 +984,11 @@ class RemoverWildcardMicroOpType(MicroOpType):
         except TypeError:
             raise FatalError()
 
-    def is_derivable_from(self, other_type):
+    def is_derivable_from(self, other_type, reasoner):
         other_micro_op_type = other_type.get_micro_op_type(("remove-wildcard",))
         return (
             other_micro_op_type
             and (not other_micro_op_type.key_error or self.key_error) 
-            and other_micro_op_type.key_type.is_copyable_from(self.key_type)
         )
 
     def is_bindable_to(self, our_type, target):
@@ -977,7 +1010,7 @@ class RemoverWildcardMicroOpType(MicroOpType):
 
         return True
 
-    def conflicts_with(self, our_type, other_type):
+    def conflicts_with(self, our_type, other_type, reasoner):
         return False
 
     def prepare_bind(self, target, key_filter, substitute_value):
@@ -985,13 +1018,15 @@ class RemoverWildcardMicroOpType(MicroOpType):
 
     def merge(self, other_micro_op_type):
         return RemoverWildcardMicroOpType(
-            merge_types([ self.key_type, other_micro_op_type.key_type ], "sub"),
             self.key_error or other_micro_op_type.key_error,
             self.type_error or other_micro_op_type.type_error
         )
 
     def clone(self):
-        return RemoverWildcardMicroOpType(self.key_type, self.key_error)
+        return RemoverWildcardMicroOpType(self.key_error, self.type_error)
+
+    def __repr__(self):
+        return micro_op_repr("remove", "*", self.key_error, type_error=self.type_error)
 
 
 class InserterWildcardMicroOpType(MicroOpType):
@@ -1028,15 +1063,16 @@ class InserterWildcardMicroOpType(MicroOpType):
         except KeyError:
             raise FatalError()
         except TypeError:
+            raise
             raise FatalError()
 
-    def is_derivable_from(self, other_type):
+    def is_derivable_from(self, other_type, reasoner):
         other_micro_op_type = other_type.get_micro_op_type(("insert-wildcard",))
         return (
             other_micro_op_type
             and (not other_micro_op_type.key_error or self.key_error) 
             and (not other_micro_op_type.type_error or self.type_error) 
-            and self.value_type.is_copyable_from(other_micro_op_type.value_type)
+            and other_micro_op_type.value_type.is_copyable_from(self.value_type, reasoner)
         )
 
     def is_bindable_to(self, our_type, target):
@@ -1055,15 +1091,17 @@ class InserterWildcardMicroOpType(MicroOpType):
 
         return True
 
-    def conflicts_with(self, our_type, other_type):
+    def conflicts_with(self, our_type, other_type, reasoner):
         wildcard_getter = other_type.get_micro_op_type(("get-wildcard",))
-        if wildcard_getter and not wildcard_getter.value_type.is_copyable_from(self.value_type):
+        if wildcard_getter and not wildcard_getter.value_type.is_copyable_from(self.value_type, reasoner):
+            reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_getter)
             return True
 
         if not self.type_error:
             for tag, getter in other_type.micro_op_types.items():
                 if len(tag) == 2 and tag[0] == "get":
-                    if not getter.value_type.is_copyable_from(self.value_type):
+                    if not getter.value_type.is_copyable_from(self.value_type, reasoner):
+                        reasoner.push_micro_op_conflicts_with_micro_op(self, getter)
                         return True
 
         return False
@@ -1078,9 +1116,15 @@ class InserterWildcardMicroOpType(MicroOpType):
             self.type_error or other_micro_op_type.type_error,
         )
 
-    def clone(self):
-        return InserterWildcardMicroOpType(self.value_type, self.key_type, self.key_error)
+    def clone(self, value_type):
+        return InserterWildcardMicroOpType(
+            default(value_type, self.value_type),
+            self.key_error,
+            self.type_error
+        )
 
+    def __repr__(self):
+        return micro_op_repr("insert", "*", self.key_error, type=self.value_type, type_error=self.type_error)
 
 class IterMicroOpType(MicroOpType):
     key_error = False
@@ -1099,11 +1143,11 @@ class IterMicroOpType(MicroOpType):
         except TypeError:
             raise FatalError()
 
-    def is_derivable_from(self, other_type):
+    def is_derivable_from(self, other_type, reasoner):
         other_micro_op_type = other_type.get_micro_op_type(("iter",))
         return (
             other_micro_op_type
-            and self.value_type.is_copyable_from(other_micro_op_type.value_type)
+            and self.value_type.is_copyable_from(other_micro_op_type.value_type, reasoner)
         )
 
     def is_bindable_to(self, our_type, target):
@@ -1115,23 +1159,27 @@ class IterMicroOpType(MicroOpType):
 
         return True
 
-    def conflicts_with(self, our_type, other_type):
+    def conflicts_with(self, our_type, other_type, reasoner):
         wildcard_insert = other_type.get_micro_op_type(("insert-wildcard",))
-        if wildcard_insert and not wildcard_insert.type_error and not self.value_type.is_copyable_from(wildcard_insert.value_type):
+        if wildcard_insert and not wildcard_insert.type_error and not self.value_type.is_copyable_from(wildcard_insert.value_type, reasoner):
+            reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_insert)
             return True
 
         insert_first = other_type.get_micro_op_type(("insert-first",))
-        if insert_first and not insert_first.type_error and not self.value_type.is_copyable_from(insert_first.value_type):
+        if insert_first and not insert_first.type_error and not self.value_type.is_copyable_from(insert_first.value_type, reasoner):
+            reasoner.push_micro_op_conflicts_with_micro_op(self, insert_first)
             return True
 
         wildcard_setter = other_type.get_micro_op_type(("set-wildcard",))
-        if wildcard_setter and not wildcard_setter.type_error and not self.value_type.is_copyable_from(wildcard_setter.value_type):
+        if wildcard_setter and not wildcard_setter.type_error and not self.value_type.is_copyable_from(wildcard_setter.value_type, reasoner):
+            reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_setter)
             return True
 
         for tag in other_type.micro_op_types.keys():
             if len(tag) == 2 and tag[0] == "set":
                 detail_setter = other_type.get_micro_op_type(("set", tag[1]))
-                if detail_setter and not self.value_type.is_copyable_from(detail_setter.value_type):
+                if detail_setter and not self.value_type.is_copyable_from(detail_setter.value_type, reasoner):
+                    reasoner.push_micro_op_conflicts_with_micro_op(self, detail_setter)
                     return True
 
         return False
@@ -1152,6 +1200,9 @@ class IterMicroOpType(MicroOpType):
 
     def clone(self, value_type=MISSING):
         return IterMicroOpType(default(value_type, self.value_type))
+
+    def __repr__(self):
+        return micro_op_repr("iter", "-", False, type=self.value_type)
 
 
 def UniversalObjectType(properties, wildcard_type=None, has_default_factory=False, name=None):
@@ -1222,8 +1273,8 @@ def UniversalListType(child_type, is_sparse=False, name=None):
 
     if not is_const:
         micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(IntegerType(), child_type, not is_sparse, False)
-        micro_ops[("remove-wildcard",)] = RemoverWildcardMicroOpType(IntegerType(), True, False)
-        micro_ops[("insert-wildcard",)] = InserterWildcardMicroOpType(IntegerType(), not is_sparse, False)
+        micro_ops[("remove-wildcard",)] = RemoverWildcardMicroOpType(True, False)
+        micro_ops[("insert-wildcard",)] = InserterWildcardMicroOpType(child_type, not is_sparse, False)
         micro_ops[("insert-start",)] = InsertStartMicroOpType(child_type, False)
         micro_ops[("insert-end",)] = InsertEndMicroOpType(child_type, False)
 
@@ -1262,7 +1313,7 @@ def UniversalLupleType(properties, element_type, is_sparse=False, name=None):
 
     micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(IntegerType(), element_type, True)
     micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(IntegerType(), element_type, not is_sparse, True)
-    micro_ops[("remove-wildcard",)] = RemoverWildcardMicroOpType(IntegerType(), True, True)
+    micro_ops[("remove-wildcard",)] = RemoverWildcardMicroOpType(True, True)
     micro_ops[("insert-wildcard",)] = InserterWildcardMicroOpType(IntegerType(), not is_sparse, True)
     micro_ops[("insert-end",)] = InsertEndMicroOpType(element_type, True)
     micro_ops[("iter",)] = IterMicroOpType(element_type)

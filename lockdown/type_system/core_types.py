@@ -2,6 +2,7 @@
 from __future__ import unicode_literals
 
 from lockdown.type_system.exceptions import FatalError
+from lockdown.type_system.reasoner import DUMMY_REASONER
 
 
 class PermittedValuesDoesNotExist(Exception):
@@ -14,7 +15,7 @@ class Type(object):
     Supports 2 methods: is_copyable_from(other_type) and get_all_permitted_values(), which can
     throw for types without a finite set of values.
     """
-    def is_copyable_from(self, other):
+    def is_copyable_from(self, other, reasoner):
         raise NotImplementedError()
 
     def get_all_permitted_values(self):
@@ -33,7 +34,7 @@ class AnyType(Type):
 
     https://en.wikipedia.org/wiki/Top_type
     """
-    def is_copyable_from(self, other):
+    def is_copyable_from(self, other, reasoner):
         return True
 
     def __repr__(self):
@@ -59,10 +60,13 @@ class NoValueType(Type):
     To indicate that an expression does not terminate in a particular break mode (return, value, exception etc)
     the expression should simply exclude that break mode from the list of break modes that it supports.
     """
-    def is_copyable_from(self, other):
+    def is_copyable_from(self, other, reasoner):
         if isinstance(other, OneOfType):
             return other.is_copyable_to(self)
-        return isinstance(other, NoValueType)
+        if not isinstance(other, NoValueType):
+            reasoner.push_not_copyable_type(self, other)
+            return False
+        return True
 
     def __repr__(self):
         return "NoValueType"
@@ -74,12 +78,16 @@ class UnitType(Type):
     def __init__(self, value):
         self.value = value
 
-    def is_copyable_from(self, other):
+    def is_copyable_from(self, other, reasoner):
         if isinstance(other, OneOfType):
-            return other.is_copyable_to(self)
+            return other.is_copyable_to(self, reasoner)
         if not isinstance(other, UnitType):
+            reasoner.push_not_copyable_type(self, other)
             return False
-        return other.value == self.value
+        if other.value != self.value:
+            reasoner.push_not_copyable_type(self, other)
+            return False
+        return True
 
     def get_all_permitted_values(self):
         return [ self.value ]
@@ -94,10 +102,13 @@ class StringType(Type):
     """
     A Lockdown type that supports unicode strings, backed by Python's unicode/str objects
     """
-    def is_copyable_from(self, other):
+    def is_copyable_from(self, other, reasoner):
         if isinstance(other, OneOfType):
-            return other.is_copyable_to(self)
-        return isinstance(other, StringType) or (isinstance(other, UnitType) and isinstance(other.value, basestring))
+            return other.is_copyable_to(self, reasoner)
+        if not (isinstance(other, StringType) or (isinstance(other, UnitType) and isinstance(other.value, basestring))):
+            reasoner.push_not_copyable_type(self, other)
+            return False
+        return True
 
     def __repr__(self):
         return "StringType"
@@ -107,10 +118,13 @@ class IntegerType(Type):
     """
     An Lockdown type that supports ints, backed by Python's int type
     """
-    def is_copyable_from(self, other):
+    def is_copyable_from(self, other, reasoner):
         if isinstance(other, OneOfType):
-            return other.is_copyable_to(self)
-        return isinstance(other, IntegerType) or (isinstance(other, UnitType) and isinstance(other.value, int) and not isinstance(other.value, bool))
+            return other.is_copyable_to(self, reasoner)
+        if not (isinstance(other, IntegerType) or (isinstance(other, UnitType) and isinstance(other.value, int) and not isinstance(other.value, bool))):
+            reasoner.push_not_copyable_type(self, other)
+            return False
+        return True
 
     def __repr__(self):
         return "IntegerType"
@@ -119,10 +133,13 @@ class BooleanType(Type):
     """
     An Lockdown type that supports ints, backed by Python's bool
     """
-    def is_copyable_from(self, other):
+    def is_copyable_from(self, other, reasoner):
         if isinstance(other, OneOfType):
-            return other.is_copyable_to(self)
-        return isinstance(other, BooleanType) or (isinstance(other, UnitType) and isinstance(other.value, bool))
+            return other.is_copyable_to(self, reasoner)
+        if not (isinstance(other, BooleanType) or (isinstance(other, UnitType) and isinstance(other.value, bool))):
+            reasoner.push_not_copyable_type(self, other)
+            return False
+        return True
 
     def __repr__(self):
         return "BooleanType"
@@ -133,7 +150,7 @@ def unwrap_types(type):
     return [ type ]
 
 def remove_type(target, subtype):
-    return merge_types([t for t in unwrap_types(target) if not subtype.is_copyable_from(t)], "exact")
+    return merge_types([t for t in unwrap_types(target) if not subtype.is_copyable_from(t, DUMMY_REASONER)], "exact")
 
 def merge_types(types, mode):
     if mode not in ("exact", "super", "sub"):
@@ -146,7 +163,7 @@ def merge_types(types, mode):
     to_drop = []
     for i1, t1 in enumerate(types):
         for i2, t2 in enumerate(types):
-            if i1 > i2 and t1.is_copyable_from(t2) and t2.is_copyable_from(t1):
+            if i1 > i2 and t1.is_copyable_from(t2, DUMMY_REASONER) and t2.is_copyable_from(t1, DUMMY_REASONER):
                 to_drop.append(i1)
 
     types = [t for i, t in enumerate(types) if i not in to_drop]
@@ -155,7 +172,7 @@ def merge_types(types, mode):
     if mode != "exact":
         for i1, t1 in enumerate(types):
             for i2, t2 in enumerate(types):
-                if i1 != i2 and t1.is_copyable_from(t2):
+                if i1 != i2 and t1.is_copyable_from(t2, DUMMY_REASONER):
                     if mode == "super":
                         to_drop.append(i2)
                     elif mode == "sub":
@@ -180,20 +197,22 @@ class OneOfType(Type):
             raise FatalError()
         self.types = types
 
-    def is_copyable_from(self, other):
+    def is_copyable_from(self, other, reasoner):
         for other_sub_type in unwrap_types(other):
             for t in self.types:
-                if t.is_copyable_from(other_sub_type):
+                if t.is_copyable_from(other_sub_type, reasoner):
                     break
             else:
+                reasoner.push_not_copyable_type(self, other)
                 return False
         return True
 
-    def is_copyable_to(self, other):
+    def is_copyable_to(self, other, reasoner):
         if isinstance(other, OneOfType):
             raise FatalError()
         for t in self.types:
-            if not other.is_copyable_from(t):
+            if not other.is_copyable_from(t, reasoner):
+                reasoner.push_not_copyable_type(other, t)
                 return False
         return True
 

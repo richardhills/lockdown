@@ -15,7 +15,7 @@ def enrich_break_type(data):
         result["in"] = enrich_type(data.get("in"))
     return PythonDict(result)
 
-def are_break_types_a_subset(self, other):
+def are_break_types_a_subset(self, other, reasoner):
     if other is None or other.break_types is None:
         raise FatalError
     for mode, other_break_types_for_mode in other.break_types.items():
@@ -34,8 +34,8 @@ def are_break_types_a_subset(self, other):
                 if our_in is not None and other_in is None:
                     continue
 
-                out_is_compatible = our_out.is_copyable_from(other_out)
-                in_is_compatible = our_in is None or other_in.is_copyable_from(our_in)
+                out_is_compatible = our_out.is_copyable_from(other_out, reasoner)
+                in_is_compatible = our_in is None or other_in.is_copyable_from(our_in, reasoner)
 
                 if out_is_compatible and in_is_compatible:
                     break
@@ -49,14 +49,14 @@ class OpenFunctionType(Type):
         self.outer_type = outer_type
         self.break_types = break_types
 
-    def is_copyable_from(self, other):
+    def is_copyable_from(self, other, reasoner):
         if not isinstance(other, OpenFunctionType):
             return False
-        if not other.argument_type.is_copyable_from(self.argument_type):
+        if not other.argument_type.is_copyable_from(self.argument_type, reasoner):
             return False
-        if not other.outer_type.is_copyable_from(self.outer_type):
+        if not other.outer_type.is_copyable_from(self.outer_type, reasoner):
             return False
-        if not are_break_types_a_subset(self, other):
+        if not are_break_types_a_subset(self, other, reasoner):
             return False
         return True
 
@@ -69,13 +69,12 @@ class ClosedFunctionType(Type):
         if break_types is None:
             raise FatalError()
 
-    def is_copyable_from(self, other):
+    def is_copyable_from(self, other, reasoner):
         if not isinstance(other, ClosedFunctionType):
             return False
-        if not other.argument_type.is_copyable_from(self.argument_type):
+        if not other.argument_type.is_copyable_from(self.argument_type, reasoner):
             return False
-        if not are_break_types_a_subset(self, other):
-            are_break_types_a_subset(self, other)
+        if not are_break_types_a_subset(self, other, reasoner):
             return False
         return True
 

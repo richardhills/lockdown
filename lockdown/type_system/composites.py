@@ -13,6 +13,7 @@ from lockdown.type_system.exceptions import FatalError, IsNotCompositeType, \
     DanglingInferredType
 from lockdown.type_system.managers import get_manager, get_type_of_value
 from lockdown.type_system.micro_ops import merge_composite_types
+from lockdown.type_system.reasoner import Reasoner, DUMMY_REASONER
 from lockdown.utils import MISSING
 
 
@@ -52,7 +53,7 @@ class CompositeType(Type):
     def get_micro_op_type(self, tag):
         return self.micro_op_types.get(tag, None)
 
-    def is_self_consistent(self):
+    def is_self_consistent(self, reasoner):
         """
         Returns True if the CompositeType is self_consistent.
 
@@ -66,20 +67,20 @@ class CompositeType(Type):
         """
         if self._is_self_consistent is None:
             self._is_self_consistent = True
-            self._is_self_consistent = not bool(self.find_first_self_inconsistent_micro_ops())
+
+            for micro_op in self.micro_op_types.values():
+                if micro_op.conflicts_with(self, self, reasoner):
+                    reasoner.push_micro_op_conflicts_with_type(micro_op, self)
+                    self._is_self_consistent = False
+                    break
+
         return self._is_self_consistent
 
-    def find_first_self_inconsistent_micro_ops(self):
-        for micro_op in self.micro_op_types.values():
-            if micro_op.conflicts_with(self, self):
-                return micro_op
-        return None
-
-    def is_copyable_from(self, other):
+    def is_copyable_from(self, other, reasoner):
         if self is other:
             return True        
         if isinstance(other, OneOfType):
-            return other.is_copyable_to(self)
+            return other.is_copyable_to(self, reasoner)
         if not isinstance(other, CompositeType):
             return IsNotCompositeType()
         if self.micro_op_types is other.micro_op_types:
@@ -103,13 +104,15 @@ class CompositeType(Type):
 
             cache[result_key] = True
 
-            if not self.get_first_non_derivable_micro_op(other) is None:
-                cache[result_key] = False
+            for micro_op_type in self.micro_op_types.values():
+                if not micro_op_type.is_derivable_from(other, reasoner):
+                    cache[result_key] = False
+                    break
 
             for micro_op_type in self.micro_op_types.values():
                 if micro_op_type is None:
                     pass
-                if not micro_op_type.is_derivable_from(other):
+                if not micro_op_type.is_derivable_from(other, reasoner):
                     cache[result_key] = False
                     break
         finally:
@@ -118,13 +121,8 @@ class CompositeType(Type):
 
         return cache[result_key]
 
-    def get_first_non_derivable_micro_op(self, other):
-        for micro_op_type in self.micro_op_types.values():
-            if not micro_op_type.is_derivable_from(other):
-                return micro_op_type
-
     def __repr__(self):
-        return "{}<{}>".format(self.name, ", ".join([str(m) for m in self.micro_op_types.values()]))
+        return "{}[{}]".format(self.name, ";".join([str(m) for m in self.micro_op_types.values()]))
 
     def short_str(self):
         return "Composite<{}>".format(self.name)
@@ -211,20 +209,20 @@ class CompositeObjectManager(object):
         effective_composite_type = self.get_effective_composite_type()
         return effective_composite_type.micro_op_types.get(tag, None)
 
-    def add_composite_type(self, new_type):
+    def add_composite_type(self, new_type, reasoner=None):
         # TODO: remove
-        add_composite_type(self, new_type)
+        add_composite_type(self, new_type, reasoner=None)
 
-    def remove_composite_type(self, remove_type):
+    def remove_composite_type(self, remove_type, reasoner=None):
         # TODO: remove
-        remove_composite_type(self, remove_type)
+        remove_composite_type(self, remove_type, reasoner=None)
 
 class InferredType(Type):
     """
     A placeholder Type that should be replaced by a real type before getting new the actual verification
     or run time systems.
     """
-    def is_copyable_from(self, other):
+    def is_copyable_from(self, other, reasoner):
         raise FatalError()
 
     def __repr__(self):
@@ -459,7 +457,7 @@ def prepare_composite_lhs_type(composite_lhs_type, rhs_type, results_cache=None)
 
     return result
 
-def add_composite_type(target_manager, new_type, key_filter=None, multiplier=1):
+def add_composite_type(target_manager, new_type, reasoner=None, key_filter=None, multiplier=1):
     """
     Safely adds a new CompositeType to a CompositeObjectManager, so that run time verification
     of mutations to the object owned by the CompositeObjectManager can be enforced.
@@ -468,8 +466,11 @@ def add_composite_type(target_manager, new_type, key_filter=None, multiplier=1):
     have been added previously. If it is found to conflict, this function raises a
     CompositeTypeIncompatibleWithTarget exception.
     """
+    if not reasoner:
+        reasoner = Reasoner()
+
     types_to_bind = {}
-    succeeded = build_binding_map_for_type(None, new_type, target_manager.get_obj(), target_manager, key_filter, MISSING, {}, types_to_bind)
+    succeeded = build_binding_map_for_type(None, new_type, target_manager.get_obj(), target_manager, key_filter, MISSING, {}, types_to_bind, reasoner)
     if not succeeded:
         raise CompositeTypeIncompatibleWithTarget()
 
@@ -477,9 +478,12 @@ def add_composite_type(target_manager, new_type, key_filter=None, multiplier=1):
         get_manager(target).attach_type(type, multiplier=multiplier)
 
 
-def remove_composite_type(target_manager, remove_type, key_filter=None, multiplier=1):
+def remove_composite_type(target_manager, remove_type, reasoner=None, key_filter=None, multiplier=1):
+    if not reasoner:
+        reasoner = Reasoner()
+
     types_to_bind = {}
-    succeeded = build_binding_map_for_type(None, remove_type, target_manager.get_obj(), target_manager, key_filter, MISSING, {}, types_to_bind)
+    succeeded = build_binding_map_for_type(None, remove_type, target_manager.get_obj(), target_manager, key_filter, MISSING, {}, types_to_bind, reasoner)
     if not succeeded:
         raise CompositeTypeIncompatibleWithTarget()
 
@@ -487,13 +491,13 @@ def remove_composite_type(target_manager, remove_type, key_filter=None, multipli
         get_manager(target).detach_type(type, multiplier=multiplier)
 
 def can_add_composite_type_with_filter(target, new_type, key_filter, substitute_value):
-    return build_binding_map_for_type(None, new_type, target, get_manager(target), key_filter, substitute_value, {}, {})
+    return build_binding_map_for_type(None, new_type, target, get_manager(target), key_filter, substitute_value, {}, {}, DUMMY_REASONER)
 
 def is_type_bindable_to_value(value, type):
-    return build_binding_map_for_type(None, type, value, get_manager(value), None, MISSING, {}, {})
+    return build_binding_map_for_type(None, type, value, get_manager(value), None, MISSING, {}, {}, DUMMY_REASONER)
 
 def does_value_fit_through_type(value, type):
-    return build_binding_map_for_type(None, type, value, get_manager(value), None, MISSING, {}, None, build_binding_map=False)
+    return build_binding_map_for_type(None, type, value, get_manager(value), None, MISSING, {}, None, DUMMY_REASONER, build_binding_map=False)
 
 def bind_key(manager, key_filter):
     for attached_type in manager.attached_types.values():
@@ -515,7 +519,7 @@ def unbind_key(manager, key_filter):
         )
 
 
-def build_binding_map_for_type(source_micro_op, new_type, target, target_manager, key_filter, substitute_value, cache, types_to_bind, build_binding_map=True):
+def build_binding_map_for_type(source_micro_op, new_type, target, target_manager, key_filter, substitute_value, cache, types_to_bind, reasoner, build_binding_map=True):
     """
     Builds a binding map of the Type new_type against the object target.
 
@@ -543,12 +547,18 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
     if target_manager:
         target_effective_type = target_manager.get_effective_composite_type()
 
+    child_reasoners = []
+
     atleast_one_sub_type_worked = False
     for sub_type in unwrap_types(new_type):
+        child_reasoner = Reasoner()
+        child_reasoners.append(child_reasoner)
+
         if isinstance(sub_type, CompositeType) and target_is_composite:
-            if build_binding_map and not sub_type.is_self_consistent():
-                r = sub_type.find_first_self_inconsistent_micro_ops()
-                raise CompositeTypeIsInconsistent()
+            sub_type_consistent_reasoner = Reasoner()
+            if not sub_type.is_self_consistent(sub_type_consistent_reasoner):
+                child_reasoner.push_inconsistent_type(sub_type)
+                raise CompositeTypeIsInconsistent(sub_type_consistent_reasoner.to_message())
 
             micro_ops_checks_worked = True
 
@@ -557,7 +567,7 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
                     micro_ops_checks_worked = False
                     break
 
-                if micro_op.conflicts_with(sub_type, target_effective_type):
+                if micro_op.conflicts_with(sub_type, target_effective_type, child_reasoner):
                     micro_ops_checks_worked = False
                     break
 
@@ -565,7 +575,7 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
 
                 for next_target in next_targets:
                     if not build_binding_map_for_type(
-                        micro_op, next_new_type, next_target, get_manager(next_target), None, MISSING, cache, extra_types_to_bind, build_binding_map=build_binding_map
+                        micro_op, next_new_type, next_target, get_manager(next_target), None, MISSING, cache, extra_types_to_bind, child_reasoner, build_binding_map=build_binding_map
                     ):
                         micro_ops_checks_worked = False
                         break
@@ -579,13 +589,14 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
             atleast_one_sub_type_worked = True
 
         if not isinstance(sub_type, CompositeType) and not target_is_composite:
-            if sub_type.is_copyable_from(get_type_of_value(target)):
+            if sub_type.is_copyable_from(get_type_of_value(target), child_reasoner):
                 atleast_one_sub_type_worked = True
 
     if atleast_one_sub_type_worked and build_binding_map:
         types_to_bind.update(extra_types_to_bind)
     if not atleast_one_sub_type_worked:
         cache[result_key] = False
+        reasoner.attach_child_reasoners(child_reasoners)
 
     return atleast_one_sub_type_worked
 

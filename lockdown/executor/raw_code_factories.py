@@ -56,11 +56,10 @@ def list_type(entry_types, wildcard_type):
     return object_template_op(type, debug_reason="type-literal")
 
 
-def composite_type(properties, python_type):
+def composite_type(micro_ops):
     return object_template_op({
         "type": literal_op("Composite"),
-        "python_type": literal_op(python_type),
-        "properties": list_template_op(properties)
+        "micro_ops": list_template_op(micro_ops)
     })
 
 
