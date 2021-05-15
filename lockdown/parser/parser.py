@@ -15,14 +15,14 @@ from lockdown.executor.raw_code_factories import function_lit, nop, comma_op, \
     unbound_assignment, list_template_op, list_type, context_op, \
     loop_op, condition_op, binary_integer_op, equality_op, dereference, \
     local_function, reset_op, inferred_type, prepare_function_lit, transform, \
-    continue_op, check_is_opcode, is_op, function_type, dict_template_op, \
+    continue_op, check_is_opcode, is_op, function_type, \
     composite_type, static_op, map_op, insert_op, prepared_function, int_type, \
     any_type
 from lockdown.parser.grammar.langLexer import langLexer
 from lockdown.parser.grammar.langParser import langParser
 from lockdown.parser.grammar.langVisitor import langVisitor
 from lockdown.type_system.exceptions import FatalError
-from lockdown.type_system.universal_type import DEFAULT_READONLY_COMPOSITE_TYPE,\
+from lockdown.type_system.universal_type import DEFAULT_READONLY_COMPOSITE_TYPE, \
     PythonObject
 from lockdown.utils import MISSING, default
 
@@ -78,7 +78,7 @@ class RDHLang5Visitor(langVisitor):
         if ctx.return_type:
             return_type = self.visit(ctx.return_type)
             function_builder.set_breaks_types({
-                "value": list_template_op([dict_template_op({ "out": return_type })])
+                "value": list_template_op([object_template_op({ "out": return_type })])
             })
 
         function_name = None
@@ -604,6 +604,7 @@ class RDHLang5Visitor(langVisitor):
         for index, expression in expressions:
             micro_ops.append(object_template_op({
                 "type": literal_op("get"),
+                "index": literal_op(index),
                 "params": list_template_op([
                     literal_op(index),
                     expression
@@ -611,6 +612,7 @@ class RDHLang5Visitor(langVisitor):
             }))
             micro_ops.append(object_template_op({
                 "type": literal_op("set"),
+                "index": literal_op(index),
                 "params": list_template_op([
                     literal_op(index),
                     any_type()
@@ -619,10 +621,10 @@ class RDHLang5Visitor(langVisitor):
 
         if inferred_splat_type:
             micro_ops.append(object_template_op({
-                "type": literal_op("get-inferred")
+                "type": literal_op("get-inferred-key")
             }))
             micro_ops.append(object_template_op({
-                "type": literal_op("set-inferred")
+                "type": literal_op("set-inferred-key")
             }))
 
         return composite_type(micro_ops)
@@ -670,7 +672,7 @@ class RDHLang5Visitor(langVisitor):
         argument_type = list_type([ argument_type ], None)
 
         return function_type(argument_type, {
-            "value": list_template_op([ dict_template_op({ "out": return_type }) ])
+            "value": list_template_op([ object_template_op({ "out": return_type }) ])
         })
 
     def visitToFunctionExpression(self, ctx):

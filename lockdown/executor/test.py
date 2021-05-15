@@ -17,11 +17,11 @@ from lockdown.executor.raw_code_factories import function_lit, no_value_type, \
     function_type, close_op, shift_op
 from lockdown.type_system.core_types import IntegerType, StringType
 from lockdown.type_system.managers import get_manager
+from lockdown.type_system.reasoner import DUMMY_REASONER
 from lockdown.type_system.universal_type import PythonObject, \
     DEFAULT_READONLY_COMPOSITE_TYPE, PythonList, UniversalTupleType, \
-    UniversalObjectType, RICH_READONLY_TYPE
+    UniversalObjectType, RICH_READONLY_TYPE, Universal
 from lockdown.utils import NO_VALUE, set_debug
-from lockdown.type_system.reasoner import DUMMY_REASONER
 
 
 class TestPreparedFunction(TestCase):
@@ -204,9 +204,9 @@ class TestTemplates(TestCase):
         )
 
         self.assertEquals(result.caught_break_mode, "return")
-        self.assertTrue(isinstance(result.value, PythonObject))
+        self.assertTrue(isinstance(result.value, Universal))
         get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
-        self.assertEquals(result.value.foo, 42)
+        self.assertEquals(result.value._get("foo"), 42)
 
     def test_nested_return(self):
         result = bootstrap_function(
@@ -220,9 +220,9 @@ class TestTemplates(TestCase):
         )
 
         self.assertEquals(result.caught_break_mode, "return")
-        self.assertTrue(isinstance(result.value, PythonObject))
+        self.assertTrue(isinstance(result.value, Universal))
         get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
-        self.assertEquals(result.value.foo.bar, 42)
+        self.assertEquals(result.value._get("foo")._get("bar"), 42)
 
     def test_return_with_dereference1(self):
         result = bootstrap_function(
@@ -237,10 +237,10 @@ class TestTemplates(TestCase):
         )
 
         self.assertEquals(result.caught_break_mode, "return")
-        self.assertTrue(isinstance(result.value, PythonObject))
+        self.assertTrue(isinstance(result.value, Universal))
         get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
-        self.assertEquals(result.value.foo, 42)
-        self.assertEquals(result.value.bar, 42)
+        self.assertEquals(result.value._get("foo"), 42)
+        self.assertEquals(result.value._get("bar"), 42)
 
     def test_return_with_dereference2(self):
         result = bootstrap_function(
@@ -255,10 +255,10 @@ class TestTemplates(TestCase):
         )
 
         self.assertEquals(result.caught_break_mode, "return")
-        self.assertTrue(isinstance(result.value, PythonObject))
+        self.assertTrue(isinstance(result.value, Universal))
         get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
-        self.assertEquals(result.value.foo, 42)
-        self.assertEquals(result.value.bar, 42)
+        self.assertEquals(result.value._get("foo"), 42)
+        self.assertEquals(result.value._get("bar"), 42)
 
     def test_return_with_dereference3(self):
         result = bootstrap_function(
@@ -273,10 +273,10 @@ class TestTemplates(TestCase):
         )
 
         self.assertEquals(result.caught_break_mode, "return")
-        self.assertTrue(isinstance(result.value, PythonObject))
+        self.assertTrue(isinstance(result.value, Universal))
         get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
-        self.assertEquals(result.value.foo, 42)
-        self.assertEquals(result.value.bar, 42)
+        self.assertEquals(result.value._get("foo"), 42)
+        self.assertEquals(result.value._get("bar"), 42)
 
     def test_return_with_dereference4(self):
         result = bootstrap_function(
@@ -291,10 +291,10 @@ class TestTemplates(TestCase):
         )
 
         self.assertEquals(result.caught_break_mode, "return")
-        self.assertTrue(isinstance(result.value, PythonObject))
+        self.assertTrue(isinstance(result.value, Universal))
         get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
-        self.assertEquals(result.value.foo, 42)
-        self.assertEquals(result.value.bar, 42)
+        self.assertEquals(result.value._get("foo"), 42)
+        self.assertEquals(result.value._get("bar"), 42)
 
     def test_return_with_dereference5(self):
         with self.assertRaises(Exception):
@@ -319,9 +319,9 @@ class TestTemplates(TestCase):
         )
 
         self.assertEquals(result.caught_break_mode, "return")
-        self.assertTrue(isinstance(result.value, PythonObject))
+        self.assertTrue(isinstance(result.value, Universal))
         get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
-        self.assertEquals(result.value.foo.bar, 42)
+        self.assertEquals(result.value._get("foo")._get("bar"), 42)
 
 
 class TestLocals(TestCase):

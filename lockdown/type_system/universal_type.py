@@ -16,6 +16,7 @@ from lockdown.type_system.exceptions import FatalError, MissingMicroOp, \
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.micro_ops import MicroOpType
 from lockdown.utils import MISSING, default, micro_op_repr
+from lockdown.type_system.reasoner import DUMMY_REASONER
 
 
 SPARSE_ELEMENT = object()
@@ -23,7 +24,7 @@ SPARSE_ELEMENT = object()
 
 class Universal(Composite):
     def __init__(self, is_sparse, default_factory=None, bind=None, debug_reason=None, initial_wrapped=None, initial_length=0, reasoner=None):
-        self.wrapped = initial_wrapped or {}
+        self._wrapped = initial_wrapped or {}
 
         manager = get_manager(self, "Universal")
 
@@ -44,19 +45,22 @@ class Universal(Composite):
         if isinstance(key, int) and not manager.is_sparse and not self._is_key_within_range(key):
             raise IndexError()
 
-        self.wrapped[key] = value
+        self._wrapped[key] = value
 
         if isinstance(key, int):
             self._length = max(self._length, key + 1)
 
-    def _get(self, key):
+    def _get(self, key, default=MISSING):
         manager = get_manager(self)
 
-        if key in self.wrapped:
-            return self.wrapped[key]
+        if key in self._wrapped:
+            return self._wrapped[key]
 
         if isinstance(key, int) and manager.is_sparse and self._is_key_within_range(key):
             return SPARSE_ELEMENT
+
+        if default != MISSING:
+            return default
 
         raise IndexError()
 
@@ -75,7 +79,7 @@ class Universal(Composite):
         if isinstance(key, int) and not self._is_key_within_range(key):
             raise KeyError()
 
-        del self.wrapped[key]
+        del self._wrapped[key]
 
     def _remove(self, key):
         if not isinstance(key, int):
@@ -84,11 +88,11 @@ class Universal(Composite):
         if not self._is_key_within_range(key):
             raise KeyError()
 
-        del self.wrapped[key]
+        del self._wrapped[key]
 
-        keys_above_key = sorted([k for k in self.wrapped.keys() if isinstance(k, int) and k > key])
+        keys_above_key = sorted([k for k in self._wrapped.keys() if isinstance(k, int) and k > key])
         for k in keys_above_key:
-            self.wrapped[k - 1] = self.wrapped.pop(k)
+            self._wrapped[k - 1] = self._wrapped.pop(k)
         self._length -= 1
 
     def _insert(self, key, value):
@@ -100,10 +104,10 @@ class Universal(Composite):
         if not manager.is_sparse and not self._is_key_within_range(key, for_insert=True):
             raise KeyError()
 
-        keys_above_key = reversed(sorted([k for k in self.wrapped.keys() if isinstance(k, int) and k >= key]))
+        keys_above_key = reversed(sorted([k for k in self._wrapped.keys() if isinstance(k, int) and k >= key]))
         for k in keys_above_key:
-            self.wrapped[k + 1] = self.wrapped.pop(k)
-        self.wrapped[key] = value
+            self._wrapped[k + 1] = self._wrapped.pop(k)
+        self._wrapped[key] = value
         self._length = max(self._length + 1, key + 1)
 
     def _contains(self, key):
@@ -112,7 +116,7 @@ class Universal(Composite):
         if isinstance(key, int) and manager.is_sparse:
             return 0 <= key < self._length
 
-        return key in self.wrapped
+        return key in self._wrapped
 
     def _keys(self):
         manager = get_manager(self)
@@ -124,7 +128,7 @@ class Universal(Composite):
             for i in self._range():
                 yield i
 
-        for k in self.wrapped.keys():
+        for k in self._wrapped.keys():
             if not (manager.is_sparse and isinstance(k, int)):
                 yield k
 
@@ -168,7 +172,7 @@ class PythonObject(Universal):
 
     def __setattr__(self, key, value):
         try:
-            if key in ("wrapped", "_length"):
+            if key in ("_wrapped", "_length"):
                 return super(PythonObject, self).__setattr__(key, value)
 
             manager = get_manager(self, "PythonObject.__setattr__")
@@ -195,7 +199,7 @@ class PythonObject(Universal):
             raise TypeError()
 
     def __getattribute__(self, key):
-        if key in ("__dict__", "__class__", "_contains", "_get", "_set", "_items", "_delete", "_keys", "_values", "wrapped", "_length", "_is_key_within_range", "_range", "_to_dict"):
+        if key in ("__dict__", "__class__", "_contains", "_get", "_set", "_items", "_delete", "_keys", "_values", "_wrapped", "_length", "_is_key_within_range", "_range", "_to_dict"):
             return super(PythonObject, self).__getattribute__(key)
 
         try:
@@ -444,15 +448,16 @@ class GetterMicroOpType(MicroOpType):
         return manager.get_obj()._contains(key) or manager.default_factory
 
     def conflicts_with(self, our_type, other_type, reasoner):
-        wildcard_insert = other_type.get_micro_op_type(("insert-wildcard",))
-        if wildcard_insert and not wildcard_insert.type_error and not self.value_type.is_copyable_from(wildcard_insert.value_type, reasoner):
-            reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_insert)
-            return True
+        if isinstance(self.key, int):
+            wildcard_insert = other_type.get_micro_op_type(("insert-wildcard",))
+            if wildcard_insert and not wildcard_insert.type_error and not self.value_type.is_copyable_from(wildcard_insert.value_type, reasoner):
+                reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_insert)
+                return True
 
-        insert_first = other_type.get_micro_op_type(("insert-first",))
-        if insert_first and not insert_first.type_error and not self.value_type.is_copyable_from(insert_first.value_type, reasoner):
-            reasoner.push_micro_op_conflicts_with_micro_op(self, insert_first)
-            return True
+            insert_first = other_type.get_micro_op_type(("insert-first",))
+            if insert_first and not insert_first.type_error and not self.value_type.is_copyable_from(insert_first.value_type, reasoner):
+                reasoner.push_micro_op_conflicts_with_micro_op(self, insert_first)
+                return True
 
         wildcard_setter = other_type.get_micro_op_type(("set-wildcard",))
         if wildcard_setter and not wildcard_setter.type_error and not self.value_type.is_copyable_from(wildcard_setter.value_type, reasoner):
@@ -631,7 +636,7 @@ class InsertStartMicroOpType(MicroOpType):
                 return True
 
             for tag, possible_detail_getter in other_type.micro_op_types.items():
-                if len(tag) == 2 and tag[0] == "get":
+                if len(tag) == 2 and tag[0] == "get" and isinstance(tag[1], int):
                     if not possible_detail_getter.value_type.is_copyable_from(self.value_type, reasoner):
                         reasoner.push_micro_op_conflicts_with_micro_op(self, possible_detail_getter)
                         return True
@@ -718,6 +723,10 @@ class GetterWildcardMicroOpType(MicroOpType):
     type_error = False
 
     def __init__(self, key_type, value_type, key_error):
+        if not isinstance(key_type, Type):
+            raise FatalError()
+        if not isinstance(value_type, Type):
+            raise FatalError()
         self.key_type = key_type
         self.value_type = value_type
         self.key_error = key_error
@@ -769,15 +778,16 @@ class GetterWildcardMicroOpType(MicroOpType):
         # We ignore Deletters and Removers because they either:
         # 1. Throw a KeyError
         # 2. Don't throw a KeyError and have a DefaultFactory
-        wildcard_insert = other_type.get_micro_op_type(("insert-wildcard",))
-        if wildcard_insert and not wildcard_insert.type_error and not self.value_type.is_copyable_from(wildcard_insert.value_type, reasoner):
-            reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_insert)
-            return True
+        if IntegerType().is_copyable_from(self.key_type, DUMMY_REASONER):
+            wildcard_insert = other_type.get_micro_op_type(("insert-wildcard",))
+            if wildcard_insert and not wildcard_insert.type_error and not self.value_type.is_copyable_from(wildcard_insert.value_type, reasoner):
+                reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_insert)
+                return True
 
-        insert_first = other_type.get_micro_op_type(("insert-first",))
-        if insert_first and not insert_first.type_error and not self.value_type.is_copyable_from(insert_first.value_type, reasoner):
-            reasoner.push_micro_op_conflicts_with_micro_op(self, insert_first)
-            return True
+            insert_first = other_type.get_micro_op_type(("insert-first",))
+            if insert_first and not insert_first.type_error and not self.value_type.is_copyable_from(insert_first.value_type, reasoner):
+                reasoner.push_micro_op_conflicts_with_micro_op(self, insert_first)
+                return True
 
         wildcard_setter = other_type.get_micro_op_type(("set-wildcard",))
         if wildcard_setter and not wildcard_setter.type_error and not self.value_type.is_copyable_from(wildcard_setter.value_type, reasoner):
@@ -815,7 +825,7 @@ class GetterWildcardMicroOpType(MicroOpType):
         )
 
     def __repr__(self):
-        return micro_op_repr("get", "*", self.key_error, type=self.value_type, type_error=self.type_error)
+        return micro_op_repr("get", "*({})".format(self.key_type), self.key_error, type=self.value_type, type_error=self.type_error)
 
 
 class SetterWildcardMicroOpType(MicroOpType):
@@ -868,7 +878,7 @@ class SetterWildcardMicroOpType(MicroOpType):
                 return True
 
             for tag, possible_detail_getter in other_type.micro_op_types.items():
-                if len(tag) == 2 and tag[0] == "get":
+                if len(tag) == 2 and tag[0] == "get" and does_value_fit_through_type(tag[1], self.key_type):
                     if not possible_detail_getter.value_type.is_copyable_from(self.value_type, reasoner):
                         reasoner.push_micro_op_conflicts_with_micro_op(self, possible_detail_getter)
                         return True
@@ -1099,7 +1109,7 @@ class InserterWildcardMicroOpType(MicroOpType):
 
         if not self.type_error:
             for tag, getter in other_type.micro_op_types.items():
-                if len(tag) == 2 and tag[0] == "get":
+                if len(tag) == 2 and tag[0] == "get" and isinstance(tag[1], int):
                     if not getter.value_type.is_copyable_from(self.value_type, reasoner):
                         reasoner.push_micro_op_conflicts_with_micro_op(self, getter)
                         return True
@@ -1124,7 +1134,7 @@ class InserterWildcardMicroOpType(MicroOpType):
         )
 
     def __repr__(self):
-        return micro_op_repr("insert", "*", self.key_error, type=self.value_type, type_error=self.type_error)
+        return micro_op_repr("insert", "*(int)", self.key_error, type=self.value_type, type_error=self.type_error)
 
 class IterMicroOpType(MicroOpType):
     key_error = False
@@ -1217,7 +1227,7 @@ def UniversalObjectType(properties, wildcard_type=None, has_default_factory=Fals
         if not isinstance(name, basestring):
             raise FatalError()
         if not isinstance(type, Type):
-            raise FatalError()
+            raise FatalError(name, type)
 
         micro_ops[("get", name)] = GetterMicroOpType(name, type)
         if not const:

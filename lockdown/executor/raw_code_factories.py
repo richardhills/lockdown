@@ -58,7 +58,7 @@ def list_type(entry_types, wildcard_type):
 
 def composite_type(micro_ops):
     return object_template_op({
-        "type": literal_op("Composite"),
+        "type": literal_op("Universal"),
         "micro_ops": list_template_op(micro_ops)
     })
 
@@ -69,7 +69,7 @@ def function_type(argument_type, break_types):
     return object_template_op({
         "type": literal_op("Function"),
         "argument": argument_type,
-        "break_types": dict_template_op(break_types)
+        "break_types": object_template_op(break_types)
     }, debug_reason="type-literal")
 
 
@@ -77,13 +77,13 @@ def build_break_types(return_type=None, exception_type=None, yield_types=None, v
     break_types = {}
 
     if return_type:
-        break_types["return"] = list_template_op([ dict_template_op({ "out": return_type }) ])
+        break_types["return"] = list_template_op([ object_template_op({ "out": return_type }) ])
     if yield_types:
-        break_types["yield"] = list_template_op([ dict_template_op(yield_types) ])
+        break_types["yield"] = list_template_op([ object_template_op(yield_types) ])
     if exception_type:
-        break_types["exception"] = list_template_op([ dict_template_op({ "out": exception_type }) ])
+        break_types["exception"] = list_template_op([ object_template_op({ "out": exception_type }) ])
     if value_type:
-        break_types["value"] = list_template_op([ dict_template_op({ "out": value_type }) ])
+        break_types["value"] = list_template_op([ object_template_op({ "out": value_type }) ])
 
     return break_types
 
@@ -91,7 +91,7 @@ def build_break_types(return_type=None, exception_type=None, yield_types=None, v
 def infer_all():
     return {
         "wildcard": list_template_op([
-            dict_template_op({
+            object_template_op({
                 "out": inferred_type(),
                 "in": inferred_type()
             }) ])
@@ -165,34 +165,19 @@ def object_template_op(values, debug_reason="code", **kwargs):
         values_list.append(PythonList([ k, v ]))
 
     return PythonObject(spread_dict({
-        "opcode": "object_template",
+        "opcode": "template",
         "opcodes": PythonList(values_list, debug_reason=debug_reason)
     }, **kwargs), debug_reason=debug_reason)
-
-
-def dict_template_op(values):
-    values_list = []
-
-    for k, v in values.items():
-        if isinstance(k, basestring):
-            k = literal_op(k)
-
-        check_is_opcode(k)
-        check_is_opcode(v)
-        values_list.append(PythonList([ k, v ]))
-
-    return PythonObject({
-        "opcode": "dict_template",
-        "opcodes": PythonList(values_list, debug_reason="code")
-    }, debug_reason="code")
 
 
 def list_template_op(values):
     for v in values:
         check_is_opcode(v)
     return PythonObject({
-        "opcode": "list_template",
-        "opcodes": PythonList(values)
+        "opcode": "template",
+        "opcodes": PythonList([
+            PythonList([ literal_op(i), v ]) for i, v in enumerate(values)
+        ])
     }, debug_reason="code")
 
 

@@ -43,8 +43,9 @@ def prepare_piece_of_context(declared_type, suggested_type):
     if not check_dangling_inferred_types(final_type):
         raise PreparationException("Invalid inferred types")
 
-    if isinstance(final_type, CompositeType) and not final_type.is_self_consistent(DUMMY_REASONER):
-        raise FatalError()
+    is_piece_self_consistent_reasoner = Reasoner()
+    if isinstance(final_type, CompositeType) and not final_type.is_self_consistent(is_piece_self_consistent_reasoner):
+        raise FatalError(is_piece_self_consistent_reasoner.to_message())
 
     return final_type
 
@@ -72,8 +73,8 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
 
     get_manager(static).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
 
-    argument_type = enrich_type(static.argument)
-    outer_type = enrich_type(static.outer)
+    argument_type = enrich_type(static._get("argument"))
+    outer_type = enrich_type(static._get("outer"))
 
     suggested_argument_type = suggested_outer_type = None
 
@@ -93,7 +94,7 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
     except DanglingInferredType:
         raise PreparationException("Failed to infer outer types in {} from {}".format(argument_type, suggested_argument_type))
 
-    local_type = enrich_type(static.local)
+    local_type = enrich_type(static._get("local"))
 
     context = PythonObject({
         "prepare": outer_context,
@@ -149,8 +150,8 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
 
     declared_break_types = PythonDict({
         mode: PythonList([
-            enrich_break_type(break_type) for break_type in break_types
-        ]) for mode, break_types in static.break_types._items()
+            enrich_break_type(break_type) for break_type in break_types._values()
+        ]) for mode, break_types in static._get("break_types")._items()
     })
 
     get_manager(declared_break_types).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)

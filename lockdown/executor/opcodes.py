@@ -25,7 +25,7 @@ from lockdown.type_system.universal_type import UniversalObjectType, \
     SetterWildcardMicroOpType, PythonDict, UniversalDictType, \
     InsertStartMicroOpType, InsertEndMicroOpType, DeletterWildcardMicroOpType, \
     IterMicroOpType, RemoverWildcardMicroOpType, InserterWildcardMicroOpType, \
-    UniversalTupleType
+    UniversalTupleType, Universal
 from lockdown.utils import MISSING, NO_VALUE, is_debug, \
     runtime_type_information
 from log import logger
@@ -85,6 +85,7 @@ class Opcode(object):
             "{return_value_jump}({context_name}, _frame_manager)",
             context_name, dependency_builder, return_value_jump=self.return_value_jump
         )
+
 
 def evaluate(expression, context, frame_manager, immediate_context=None):
     if not is_debug():
@@ -176,6 +177,7 @@ class Nop(Opcode):
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         return compile_expression("NoValue", context_name, dependency_builder)
 
+
 class LiteralOp(Opcode):
     def __init__(self, data, visitor):
         super(LiteralOp, self).__init__(data, visitor)
@@ -203,18 +205,18 @@ class LiteralOp(Opcode):
         return "LiteralOp<{}>".format(self.value)
 
 
-class ObjectTemplateOp(Opcode):
-    NO_VALUE_ASSIGNMENT = TypeErrorFactory("ObjectTemplateOp: no_value_assignment")
+class TemplateOp(Opcode):
+    NO_VALUE_ASSIGNMENT = TypeErrorFactory("TemplateOp: no_value_assignment")
 
     def __init__(self, data, visitor):
-        super(ObjectTemplateOp, self).__init__(data, visitor)
+        super(TemplateOp, self).__init__(data, visitor)
         if not isinstance(data.opcodes, PythonList):
             raise FatalError()
         for e in data.opcodes:
             if not isinstance(e, tuple) and len(e) != 2:
                 raise FatalError()
         self.opcodes = [
-            ( enrich_opcode(key, visitor), enrich_opcode(opcode, visitor) )
+            (enrich_opcode(key, visitor), enrich_opcode(opcode, visitor))
             for key, opcode in data.opcodes
         ]
 
@@ -264,13 +266,21 @@ class ObjectTemplateOp(Opcode):
         if can_break_with_value_type:
             if len(all_value_types) == 0:
                 all_value_types.append(AnyType())
-
             combined_value_types = merge_types(all_value_types, "exact")
 
-            micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(StringType(), combined_value_types, True)
-            micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(StringType(), AnyType(), True, False)
+            wildcard_key_type = OneOfType([ StringType(), IntegerType() ])
 
-            value_type = CompositeType(micro_ops, name="ObjectTemplateOp")
+            micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(wildcard_key_type, combined_value_types, False)
+            micro_ops[("iter",)] = IterMicroOpType(combined_value_types)
+
+            micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(wildcard_key_type, AnyType(), False, False)
+            micro_ops[("remove-wildcard",)] = RemoverWildcardMicroOpType(False, False)
+            micro_ops[("insert-wildcard",)] = InserterWildcardMicroOpType(AnyType(), False, False)
+            micro_ops[("insert-start",)] = InsertStartMicroOpType(AnyType(), False)
+            micro_ops[("insert-end",)] = InsertEndMicroOpType(AnyType(), False)
+            micro_ops[("delete-wildcard",)] = DeletterWildcardMicroOpType(wildcard_key_type, False)
+
+            value_type = CompositeType(micro_ops, name="TemplateOp")
 
             break_types.add("value", value_type)
 
@@ -279,13 +289,26 @@ class ObjectTemplateOp(Opcode):
     def jump(self, context, frame_manager, immediate_context=None):
         with frame_manager.get_next_frame(self) as frame:
             result = {}
+
+            max_index = 0
+
             for index, (key_opcode, value_opcode) in enumerate(self.opcodes):
                 key = frame.step("key-{}".format(index), lambda: evaluate(key_opcode, context, frame_manager))
                 result[key] = frame.step("value-{}".format(index), lambda: evaluate(value_opcode, context, frame_manager))
                 if result[key] is NO_VALUE:
                     frame.exception(self.NO_VALUE_ASSIGNMENT())
 
-            return frame.value(PythonObject(result, debug_reason="object-template"))
+                if isinstance(key, int):
+                    max_index = max([ key, max_index ])
+
+            return frame.value(
+                Universal(
+                    False,
+                    initial_wrapped=result,
+                    initial_length=max_index + 1,
+                    debug_reason="object-template"
+                )
+            )
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         parameters = {}
@@ -303,143 +326,142 @@ class ObjectTemplateOp(Opcode):
             context_name, dependency_builder, **parameters
         )
 
-
-class DictTemplateOp(Opcode):
-    NO_VALUE_ASSIGNMENT = TypeErrorFactory("DictTemplateOp: no_value_assignment")
-
-    def __init__(self, data, visitor):
-        super(DictTemplateOp, self).__init__(data, visitor)
-        if not isinstance(data.opcodes, PythonList):
-            raise FatalError()
-        for e in data.opcodes:
-            if not isinstance(e, tuple) and len(e) != 2:
-                raise FatalError()
-        self.opcodes = [
-            ( enrich_opcode(key, visitor), enrich_opcode(opcode, visitor) )
-            for key, opcode in data.opcodes
-        ]
-
-    @abstractmethod
-    def get_break_types(self, context, frame_manager, immediate_context=None):
-        break_types = BreakTypesFactory(self)
-
-        micro_ops = {}
-
-        all_value_types = []
-
-        can_break_with_value_type = True
-
-        for key_opcode, value_opcode in self.opcodes:
-            key_type, other_key_break_types = get_expression_break_types(key_opcode, context, frame_manager, immediate_context=immediate_context)
-            break_types.merge(other_key_break_types)
-            value_type, other_value_break_types = get_expression_break_types(value_opcode, context, frame_manager, immediate_context=immediate_context)
-            break_types.merge(other_value_break_types)
-
-            if key_type is MISSING:
-                can_break_with_value_type = False
-                continue
-
-            key_type = flatten_out_types(key_type)
-            key = None
-
-            try:
-                allowed_keys = key_type.get_all_permitted_values()
-                if len(allowed_keys) == 1:
-                    key = allowed_keys[0]
-            except PermittedValuesDoesNotExist:
-                pass
-
-            if value_type is MISSING:
-                can_break_with_value_type = False
-                continue
-
-            value_type = flatten_out_types(value_type)
-
-            if isinstance(value_type, NoValueType):
-                break_types.add("exception", self.NO_VALUE_ASSIGNMENT.get_type())
-            else:
-                all_value_types.append(value_type)
-                micro_ops[("get", key)] = GetterMicroOpType(key, StringType(), value_type)
-                micro_ops[("set", key)] = SetterMicroOpType(key, StringType(), AnyType())
-
-        if can_break_with_value_type:
-            if len(all_value_types) == 0:
-                all_value_types.append(AnyType())
-
-            combined_value_types = merge_types(all_value_types, "exact")
-
-            micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(StringType(), combined_value_types, True)
-            micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(StringType(), AnyType(), True, False)
-
-            value_type = CompositeType(micro_ops, name="ObjectTemplateOp")
-
-            break_types.add("value", value_type)
-
-        return break_types.build()
-
-    def jump(self, context, frame_manager, immediate_context=None):
-        with frame_manager.get_next_frame(self) as frame:
-            result = {}
-            for index, (key_opcode, value_opcode) in enumerate(self.opcodes):
-                key = frame.step("key-{}".format(index), lambda: evaluate(key_opcode, context, frame_manager))
-                result[key] = frame.step("value-{}".format(index), lambda: evaluate(value_opcode, context, frame_manager))
-                if result[key] is NO_VALUE:
-                    frame.exception(self.NO_VALUE_ASSIGNMENT())
-
-            return frame.value(PythonDict(result, debug_reason="object-template"))
-
-
-
-class ListTemplateOp(Opcode):
-    def __init__(self, data, visitor):
-        super(ListTemplateOp, self).__init__(data, visitor)
-        self.opcodes = [ enrich_opcode(opcode, visitor) for opcode in data.opcodes ]
-
-    def get_break_types(self, context, frame_manager, immediate_context=None):
-        break_types = BreakTypesFactory(self)
-
-        micro_ops = {}
-
-        all_value_types = []
-
-        for index, opcode in enumerate(self.opcodes):
-            value_type, other_break_types = get_expression_break_types(opcode, context, frame_manager)
-            break_types.merge(other_break_types)
-            value_type = flatten_out_types(value_type)
-            all_value_types.append(value_type)
-
-            micro_ops[("get", index)] = GetterMicroOpType(index, value_type)
-            micro_ops[("set", index)] = SetterMicroOpType(index, AnyType())
-
-        if len(all_value_types) == 0:
-            all_value_types.append(AnyType())
-
-        combined_value_types = merge_types(all_value_types, "exact")
-
-        micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(IntegerType(), combined_value_types, True)
-        micro_ops[("iter",)] = IterMicroOpType(combined_value_types)
-
-        micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(IntegerType(), AnyType(), True, False)
-        micro_ops[("remove-wildcard",)] = RemoverWildcardMicroOpType(True, False)
-        micro_ops[("insert-wildcard",)] = InserterWildcardMicroOpType(AnyType(), True, False)
-        micro_ops[("insert-start",)] = InsertStartMicroOpType(AnyType(), False)
-        micro_ops[("insert-end",)] = InsertEndMicroOpType(AnyType(), False)
-        micro_ops[("delete-wildcard",)] = DeletterWildcardMicroOpType(IntegerType(), True)
-
-        break_types.add("value", CompositeType(micro_ops, name="ListTemplateOp"))
-
-        return break_types.build()
-
-    def jump(self, context, frame_manager, immediate_context=None):
-        with frame_manager.get_next_frame(self) as frame:
-            result = []
-            for index, opcode in enumerate(self.opcodes):
-                new_value = frame.step(index, lambda: evaluate(opcode, context, frame_manager))
-                result.append(new_value)
-
-            return frame.value(PythonList(result))
-
-
+# class DictTemplateOp(Opcode):
+#     NO_VALUE_ASSIGNMENT = TypeErrorFactory("DictTemplateOp: no_value_assignment")
+# 
+#     def __init__(self, data, visitor):
+#         super(DictTemplateOp, self).__init__(data, visitor)
+#         if not isinstance(data.opcodes, PythonList):
+#             raise FatalError()
+#         for e in data.opcodes:
+#             if not isinstance(e, tuple) and len(e) != 2:
+#                 raise FatalError()
+#         self.opcodes = [
+#             ( enrich_opcode(key, visitor), enrich_opcode(opcode, visitor) )
+#             for key, opcode in data.opcodes
+#         ]
+# 
+#     @abstractmethod
+#     def get_break_types(self, context, frame_manager, immediate_context=None):
+#         break_types = BreakTypesFactory(self)
+# 
+#         micro_ops = {}
+# 
+#         all_value_types = []
+# 
+#         can_break_with_value_type = True
+# 
+#         for key_opcode, value_opcode in self.opcodes:
+#             key_type, other_key_break_types = get_expression_break_types(key_opcode, context, frame_manager, immediate_context=immediate_context)
+#             break_types.merge(other_key_break_types)
+#             value_type, other_value_break_types = get_expression_break_types(value_opcode, context, frame_manager, immediate_context=immediate_context)
+#             break_types.merge(other_value_break_types)
+# 
+#             if key_type is MISSING:
+#                 can_break_with_value_type = False
+#                 continue
+# 
+#             key_type = flatten_out_types(key_type)
+#             key = None
+# 
+#             try:
+#                 allowed_keys = key_type.get_all_permitted_values()
+#                 if len(allowed_keys) == 1:
+#                     key = allowed_keys[0]
+#             except PermittedValuesDoesNotExist:
+#                 pass
+# 
+#             if value_type is MISSING:
+#                 can_break_with_value_type = False
+#                 continue
+# 
+#             value_type = flatten_out_types(value_type)
+# 
+#             if isinstance(value_type, NoValueType):
+#                 break_types.add("exception", self.NO_VALUE_ASSIGNMENT.get_type())
+#             else:
+#                 all_value_types.append(value_type)
+#                 micro_ops[("get", key)] = GetterMicroOpType(key, StringType(), value_type)
+#                 micro_ops[("set", key)] = SetterMicroOpType(key, StringType(), AnyType())
+# 
+#         if can_break_with_value_type:
+#             if len(all_value_types) == 0:
+#                 all_value_types.append(AnyType())
+# 
+#             combined_value_types = merge_types(all_value_types, "exact")
+# 
+#             micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(StringType(), combined_value_types, True)
+#             micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(StringType(), AnyType(), True, False)
+# 
+#             value_type = CompositeType(micro_ops, name="ObjectTemplateOp")
+# 
+#             break_types.add("value", value_type)
+# 
+#         return break_types.build()
+# 
+#     def jump(self, context, frame_manager, immediate_context=None):
+#         with frame_manager.get_next_frame(self) as frame:
+#             result = {}
+#             for index, (key_opcode, value_opcode) in enumerate(self.opcodes):
+#                 key = frame.step("key-{}".format(index), lambda: evaluate(key_opcode, context, frame_manager))
+#                 result[key] = frame.step("value-{}".format(index), lambda: evaluate(value_opcode, context, frame_manager))
+#                 if result[key] is NO_VALUE:
+#                     frame.exception(self.NO_VALUE_ASSIGNMENT())
+# 
+#             return frame.value(PythonDict(result, debug_reason="object-template"))
+# 
+# 
+# 
+# class ListTemplateOp(Opcode):
+#     def __init__(self, data, visitor):
+#         super(ListTemplateOp, self).__init__(data, visitor)
+#         self.opcodes = [ enrich_opcode(opcode, visitor) for opcode in data.opcodes ]
+# 
+#     def get_break_types(self, context, frame_manager, immediate_context=None):
+#         break_types = BreakTypesFactory(self)
+# 
+#         micro_ops = {}
+# 
+#         all_value_types = []
+# 
+#         for index, opcode in enumerate(self.opcodes):
+#             value_type, other_break_types = get_expression_break_types(opcode, context, frame_manager)
+#             break_types.merge(other_break_types)
+#             value_type = flatten_out_types(value_type)
+#             all_value_types.append(value_type)
+# 
+#             micro_ops[("get", index)] = GetterMicroOpType(index, value_type)
+#             micro_ops[("set", index)] = SetterMicroOpType(index, AnyType())
+# 
+#         if len(all_value_types) == 0:
+#             all_value_types.append(AnyType())
+# 
+#         combined_value_types = merge_types(all_value_types, "exact")
+# 
+#         micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(IntegerType(), combined_value_types, True)
+#         micro_ops[("iter",)] = IterMicroOpType(combined_value_types)
+# 
+#         micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(IntegerType(), AnyType(), True, False)
+#         micro_ops[("remove-wildcard",)] = RemoverWildcardMicroOpType(True, False)
+#         micro_ops[("insert-wildcard",)] = InserterWildcardMicroOpType(AnyType(), True, False)
+#         micro_ops[("insert-start",)] = InsertStartMicroOpType(AnyType(), False)
+#         micro_ops[("insert-end",)] = InsertEndMicroOpType(AnyType(), False)
+#         micro_ops[("delete-wildcard",)] = DeletterWildcardMicroOpType(IntegerType(), True)
+# 
+#         break_types.add("value", CompositeType(micro_ops, name="ListTemplateOp"))
+# 
+#         return break_types.build()
+# 
+#     def jump(self, context, frame_manager, immediate_context=None):
+#         with frame_manager.get_next_frame(self) as frame:
+#             result = []
+#             for index, opcode in enumerate(self.opcodes):
+#                 new_value = frame.step(index, lambda: evaluate(opcode, context, frame_manager))
+#                 result.append(new_value)
+# 
+#             return frame.value(PythonList(result))
+ 
+ 
 def get_context_type(context):
     if context is None:
         return NoValueType()
@@ -460,7 +482,7 @@ def get_context_type(context):
         if hasattr(context, "static"):
             value_type["static"] = DEFAULT_READONLY_COMPOSITE_TYPE
         context_manager._context_type = UniversalObjectType(value_type, name="context-type-{}".format(context_manager.debug_reason))
-
+ 
     return context_manager._context_type
 
 
@@ -920,6 +942,7 @@ class InsertOp(Opcode):
             except InvalidAssignmentKey:
                 return frame.exception(self.INVALID_ASSIGNMENT())
 
+
 class MapOp(Opcode):
     MISSING_COMPOSITE_TYPE = TypeErrorFactory("{}: missing_integers")
     MISSING_MAPPER_FUNCTION = TypeErrorFactory("{}: missing_mapper_function")
@@ -941,7 +964,7 @@ class MapOp(Opcode):
             immediate_context = immediate_context or {}
 
             getter_value_types = [micro_op.value_type for key, micro_op in composite_type.micro_op_types.items() if key[0] == "get"]
-            wildcard_getter = composite_type.get_micro_op_type(("get-wildcard", ))
+            wildcard_getter = composite_type.get_micro_op_type(("get-wildcard",))
             if wildcard_getter:
                 getter_value_types.append(wildcard_getter.value_type)
 
@@ -1005,7 +1028,7 @@ class MapOp(Opcode):
             mapper = frame.step("mapper", lambda: evaluate(self.mapper, context, frame_manager))
 
             if not isinstance(composite, PythonList):
-                raise FatalError() # Be more liberal
+                raise FatalError()  # Be more liberal
 
             with frame_manager.get_next_frame(self) as frame:
                 with frame_manager.capture("break") as breaker:
@@ -1023,6 +1046,7 @@ class MapOp(Opcode):
                     return frame.value(breaker.value)
 
             raise FatalError()
+
 
 def BinaryOp(name, symbol, func, argument_type, result_type, number_op=None, cmp_op=None):
     class _BinaryOp(Opcode):
@@ -1186,6 +1210,7 @@ def TransformOpTryCatcher{opcode_id}({context_name}, _frame_manager):
                 )
         else:
             return super(TransformOp, self).to_ast(context_name)
+
 
 class ShiftOp(Opcode):
     def __init__(self, data, visitor):
@@ -1396,6 +1421,7 @@ class CommaOp(Opcode):
                 "{comma_function}({context_name}, _frame_manager)",
                 context_name, dependency_builder, comma_function=comma_function
             )
+
 
 class LoopOp(Opcode):
     def __init__(self, data, visitor):
@@ -1624,6 +1650,7 @@ class CloseOp(Opcode):
             outer_context=self.outer_context.to_ast(context_name, dependency_builder)
         )
 
+
 def create_readonly_static_type(value):
     """
     For the StaticOp, for a given static value, produces a Type that opcodes
@@ -1639,10 +1666,11 @@ def create_readonly_static_type(value):
             for key, type_of_value in zip(value._keys(), types_of_values):
                 result.micro_op_types[("get", key)] = GetterMicroOpType(key, type_of_value)
 
-            result.micro_op_types[("get-wildcard", )] = GetterWildcardMicroOpType(StringType(), merged_types, True)
+            result.micro_op_types[("get-wildcard",)] = GetterWildcardMicroOpType(StringType(), merged_types, True)
         return result
     else:
         return get_type_of_value(value)
+
 
 class StaticOp(Opcode):
     def __init__(self, data, visitor):
@@ -1868,9 +1896,7 @@ OPCODES = {
     "shift": ShiftOp,
     "reset": ResetOp,
     "literal": LiteralOp,
-    "object_template": ObjectTemplateOp,
-    "dict_template": DictTemplateOp,
-    "list_template": ListTemplateOp,
+    "template": TemplateOp,
     "multiplication": BinaryOp(
         "Multiplication", "*",
         lambda lvalue, rvalue: lvalue() * rvalue(), IntegerType(), IntegerType(), number_op=ast.Mult()

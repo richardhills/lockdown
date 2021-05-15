@@ -293,16 +293,10 @@ def prepare_lhs_type(lhs_type, rhs_type, results_cache=None):
     if isinstance(lhs_type, InferredType):
         if rhs_type is None:
             raise DanglingInferredType()
-        return prepare_lhs_type(rhs_type, None, results_cache=results_cache)
+        lhs_type = rhs_type
 
     if isinstance(lhs_type, CompositeType):
-        return prepare_composite_lhs_type(lhs_type, rhs_type, results_cache)
-
-    if isinstance(lhs_type, OneOfType):
-        if rhs_type is None:
-            return lhs_type
-        # TODO
-        raise FatalError()
+        lhs_type = prepare_composite_lhs_type(lhs_type, rhs_type, results_cache)
 
     return lhs_type
 
@@ -326,6 +320,13 @@ def prepare_composite_lhs_type(composite_lhs_type, rhs_type, results_cache=None)
         name="{}<LHSPrepared>".format(composite_lhs_type.name)
     )
 
+    rhs_composite_type = None
+    if isinstance(rhs_type, CompositeType):
+        rhs_composite_type = CompositeType(
+            dict(rhs_type.micro_op_types),
+            name="{}<RHSComposite>".format(rhs_type.name)
+        )
+
     # TODO: do this better
     if hasattr(composite_lhs_type, "from_opcode"):
         result.from_opcode = composite_lhs_type.from_opcode
@@ -335,11 +336,28 @@ def prepare_composite_lhs_type(composite_lhs_type, rhs_type, results_cache=None)
     results_cache[cache_key] = result
     something_changed = False
 
-    # Replace InferredKeys and InferredMicroOps
+    # Call recursively on both LHS and RHS types to start 
+    for tag, micro_op in result.micro_op_types.items():
+        if hasattr(micro_op, "value_type"):
+            guide_micro_op_type = None
+
+            if isinstance(rhs_type, CompositeType):
+                guide_op = rhs_type.get_micro_op_type(tag)
+                guide_micro_op_type = guide_op.value_type
+
+            new_value_type = prepare_lhs_type(micro_op.value_type, guide_micro_op_type, results_cache)
+
+            if micro_op.value_type is not new_value_type:
+                result.micro_op_types[tag] = micro_op.clone(
+                    value_type=prepare_lhs_type(micro_op.value_type, guide_micro_op_type, results_cache)
+                )
+                something_changed = True
+
+    # Replace all inferred types in the LHS by taking types from the RHS
     for lhs_tag, micro_op in result.micro_op_types.items():
         if len(lhs_tag) != 1:
             continue
-        if lhs_tag[0] in ("get-inferred", "set-inferred"):
+        if lhs_tag[0] in ("get-inferred-key", "set-inferred-key"):
             lhs_method = lhs_tag[0][:3] # get or set
             if not isinstance(rhs_type, CompositeType):
                 raise DanglingInferredType()
@@ -354,6 +372,10 @@ def prepare_composite_lhs_type(composite_lhs_type, rhs_type, results_cache=None)
                     if new_tag not in result.micro_op_types:
                         result.micro_op_types[new_tag] = rhs_micro_op
 
+
+
+
+
     # Take any overlapping getter/setter types (typically get X, set Any) and transform so that they
     # are compatible (typically get X, set X)
     for tag, micro_op in result.micro_op_types.items():
@@ -365,22 +387,20 @@ def prepare_composite_lhs_type(composite_lhs_type, rhs_type, results_cache=None)
                 getter = result.get_micro_op_type(("get-wildcard", ))
         if getter:
             if micro_op.value_type is not getter.value_type:
-                try:
-                    result.micro_op_types[tag] = micro_op.clone(value_type=getter.value_type)
-                except:
-                    print micro_op
+                result.micro_op_types[tag] = micro_op.clone(value_type=getter.value_type)
                 something_changed = True
 
-    # Add error codes to get-wildcard and set-wildcard if there are any getters or setters
-    setter_or_getter_found = any([ t[0] in ("get", "set") for t in result.micro_op_types.keys() ])
-    if setter_or_getter_found:
-        wildcard_getter = result.get_micro_op_type(("get-wildcard", ))
-        if wildcard_getter:
-            result.micro_op_types[("get-wildcard", )] = wildcard_getter.clone(key_error=True)
-        wildcard_setter = result.get_micro_op_type(("set-wildcard", ))
-        if wildcard_setter:
-            result.micro_op_types[("set-wildcard", )] = wildcard_setter.clone(key_error=True, type_error=True)
+#     # Add error codes to get-wildcard and set-wildcard if there are any getters or setters
+#     setter_or_getter_found = any([ t[0] in ("get", "set") for t in result.micro_op_types.keys() ])
+#     if setter_or_getter_found:
+#         wildcard_getter = result.get_micro_op_type(("get-wildcard", ))
+#         if wildcard_getter:
+#             result.micro_op_types[("get-wildcard", )] = wildcard_getter.clone(key_error=True)
+#         wildcard_setter = result.get_micro_op_type(("set-wildcard", ))
+#         if wildcard_setter:
+#             result.micro_op_types[("set-wildcard", )] = wildcard_setter.clone(key_error=True, type_error=True)
 
+    # Replace set.x.Any + get.x.T with set.x.T + get.x.T
     for tag, micro_op in result.micro_op_types.items():
         if hasattr(micro_op, "value_type"):
             guide_micro_op_type = None
@@ -400,13 +420,9 @@ def prepare_composite_lhs_type(composite_lhs_type, rhs_type, results_cache=None)
             new_value_type = prepare_lhs_type(micro_op.value_type, guide_micro_op_type, results_cache)
 
             if micro_op.value_type is not new_value_type:
-                try:
-                    result.micro_op_types[tag] = micro_op.clone(
-                        value_type=prepare_lhs_type(micro_op.value_type, guide_micro_op_type, results_cache)
-                    )
-                except TypeError:
-                    print micro_op
-                    raise
+                result.micro_op_types[tag] = micro_op.clone(
+                    value_type=prepare_lhs_type(micro_op.value_type, guide_micro_op_type, results_cache)
+                )
                 something_changed = True
 
     right_shifts = []

@@ -7,13 +7,12 @@ from lockdown.executor.flow_control import FrameManager, \
     break_exception_to_string
 from lockdown.executor.function import prepare
 from lockdown.executor.opcodes import get_context_type
-from lockdown.executor.raw_code_factories import inferred_type, function_lit, \
-    int_type, infer_all, dereference, loop_op, comma_op, condition_op, \
-    binary_integer_op, nop, list_type, \
-    function_type, list_template_op, insert_op, transform_op, literal_op, \
-    invoke_op, object_template_op, prepared_function, no_value_type, \
-    assignment_op, dict_template_op, addition_op, reset_op, shift_op, \
-    transform, local_function, map_op
+from lockdown.executor.raw_code_factories import function_lit, list_type, \
+    int_type, infer_all, dereference, prepared_function, loop_op, condition_op, \
+    binary_integer_op, comma_op, shift_op, no_value_type, assignment_op, \
+    literal_op, addition_op, transform_op, list_template_op, inferred_type, \
+    invoke_op, local_function, transform, reset_op, nop, map_op, \
+    object_template_op, function_type
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.universal_type import PythonObject, \
     DEFAULT_READONLY_COMPOSITE_TYPE
@@ -66,11 +65,11 @@ def get_default_global_context():
                 function_lit(
                     list_type([
                         function_type(no_value_type(), {
-                            "yield": list_template_op([ dict_template_op({
+                            "yield": list_template_op([ object_template_op({
                                 "in": no_value_type(),
                                 "out": int_type()
                             })]),
-                            "value": list_template_op([ dict_template_op({
+                            "value": list_template_op([ object_template_op({
                                 "out": no_value_type()
                             })]),
                         }),

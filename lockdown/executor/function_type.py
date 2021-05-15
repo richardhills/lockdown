@@ -9,10 +9,10 @@ from lockdown.type_system.universal_type import PythonDict
 def enrich_break_type(data):
     from lockdown.executor.type_factories import enrich_type
     result = {
-        "out": enrich_type(data["out"])
+        "out": enrich_type(data._get("out"))
     }
-    if "in" in data:
-        result["in"] = enrich_type(data.get("in"))
+    if data._contains("in"):
+        result["in"] = enrich_type(data._get("in"))
     return PythonDict(result)
 
 def are_break_types_a_subset(self, other, reasoner):
