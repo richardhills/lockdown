@@ -651,31 +651,22 @@ class TestEuler(TestCase):
                 return result;
             };
         """, debug=True)
-
-#         code = parse("""
-#             function() {
-#                 return sum(i for i in range(1, 1000) if i % 3 == 0 || i % 5 == 0);
-#                 
-#                 return range(1, 1000).filter(i => i % 3 == 0 || i % 5 == 0).sum();
-#                 
-#                 return sum(filter(range(1, 1000), i => i % 3 == 0 || i % 5 == 0));
-# 
-#                 return sum(for(var i from range(1, 1000)) {
-#                     if(i % 3 == 0 || i % 5 == 0) {
-#                         yield i;
-#                     };
-#                 });
-#                 
-#                 var foobaz = for(var i from range(1, 1000)) {
-#                     if(i % 3 == 0 || i % 5 == 0) {
-#                         yield i;
-#                     };
-#                 };
-#                 return sum(foobaz);
-#             }
-#         """)
         result = bootstrap_function(code, check_safe_exit=True)
         self.assertEquals(result.value, 233168)
+
+#     def test_1a(self):
+#         code = parse("""
+#             function() {
+#                 return sum(for(var i from range(1, 1000)) {
+#                     if(i % 3 == 0 || i % 5 == 0) {
+#                         continue i;
+#                     };
+#                 });
+#             };
+#         """, debug=True)
+# 
+#         result = bootstrap_function(code, check_safe_exit=True)
+#         self.assertEquals(result.value, 233168)
 
     def test_2(self):
         code = parse("""
