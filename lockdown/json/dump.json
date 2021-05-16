@@ -1,0 +1,938 @@
+{
+	"local_initializer": {
+		"opcode": "template",
+		"opcodes": [
+			[
+				{
+					"opcode": "literal",
+					"value": "result"
+				},
+				{
+					"opcode": "literal",
+					"value": 0
+				}
+			]
+		]
+	},
+	"code": {
+		"opcode": "transform",
+		"code": {
+			"opcode": "comma",
+			"opcodes": [
+				{
+					"opcode": "transform",
+					"output": "value",
+					"code": {
+						"opcode": "invoke",
+						"function": {
+							"opcode": "close",
+							"function": {
+								"opcode": "static",
+								"code": {
+									"opcode": "prepare",
+									"code": {
+										"opcode": "literal",
+										"value": {
+											"local_initializer": {
+												"opcode": "template",
+												"opcodes": [
+													[
+														{
+															"opcode": "literal",
+															"value": "callback"
+														},
+														{
+															"opcode": "invoke",
+															"function": {
+																"opcode": "unbound_dereference",
+																"reference": "range"
+															},
+															"argument": {
+																"opcode": "template",
+																"opcodes": [
+																	[
+																		{
+																			"opcode": "literal",
+																			"value": 0
+																		},
+																		{
+																			"opcode": "literal",
+																			"value": 1
+																		}
+																	],
+																	[
+																		{
+																			"opcode": "literal",
+																			"value": 1
+																		},
+																		{
+																			"opcode": "literal",
+																			"value": 5
+																		}
+																	]
+																]
+															}
+														}
+													]
+												]
+											},
+											"code": {
+												"opcode": "loop",
+												"code": {
+													"opcode": "invoke",
+													"function": {
+														"opcode": "close",
+														"function": {
+															"opcode": "static",
+															"code": {
+																"opcode": "prepare",
+																"code": {
+																	"opcode": "literal",
+																	"value": {
+																		"local_initializer": {
+																			"opcode": "transform",
+																			"code": {
+																				"opcode": "transform",
+																				"code": {
+																					"opcode": "reset",
+																					"function": {
+																						"opcode": "dereference",
+																						"reference": {
+																							"opcode": "literal",
+																							"value": "callback"
+																						},
+																						"of": {
+																							"opcode": "dereference",
+																							"reference": {
+																								"opcode": "literal",
+																								"value": "local"
+																							},
+																							"of": {
+																								"opcode": "dereference",
+																								"reference": {
+																									"opcode": "literal",
+																									"value": "outer"
+																								},
+																								"of": {
+																									"opcode": "context"
+																								},
+																								"safe": true
+																							},
+																							"safe": true
+																						},
+																						"safe": true
+																					},
+																					"argument": {
+																						"opcode": "nop"
+																					}
+																				},
+																				"input": "value",
+																				"output": "end"
+																			},
+																			"input": "yield",
+																			"output": "value"
+																		},
+																		"code": {
+																			"opcode": "comma",
+																			"opcodes": [
+																				{
+																					"opcode": "assignment",
+																					"reference": {
+																						"opcode": "literal",
+																						"value": "callback"
+																					},
+																					"of": {
+																						"opcode": "dereference",
+																						"of": {
+																							"opcode": "dereference",
+																							"of": {
+																								"opcode": "context"
+																							},
+																							"safe": true,
+																							"reference": {
+																								"opcode": "literal",
+																								"value": "outer"
+																							}
+																						},
+																						"safe": true,
+																						"reference": {
+																							"opcode": "literal",
+																							"value": "local"
+																						}
+																					},
+																					"rvalue": {
+																						"opcode": "dereference",
+																						"of": {
+																							"opcode": "dereference",
+																							"of": {
+																								"opcode": "context"
+																							},
+																							"safe": true,
+																							"reference": {
+																								"opcode": "literal",
+																								"value": "local"
+																							}
+																						},
+																						"safe": true,
+																						"reference": {
+																							"opcode": "literal",
+																							"value": "continuation"
+																						}
+																					}
+																				},
+																				{
+																					"opcode": "invoke",
+																					"function": {
+																						"opcode": "close",
+																						"function": {
+																							"opcode": "static",
+																							"code": {
+																								"opcode": "prepare",
+																								"code": {
+																									"opcode": "literal",
+																									"value": {
+																										"local_initializer": {
+																											"opcode": "template",
+																											"opcodes": [
+																											]
+																										},
+																										"code": {
+																											"opcode": "transform",
+																											"code": {
+																												"opcode": "unbound_assignment",
+																												"rvalue": {
+																													"opcode": "addition",
+																													"lvalue": {
+																														"opcode": "unbound_dereference",
+																														"reference": "result"
+																													},
+																													"rvalue": {
+																														"opcode": "unbound_dereference",
+																														"reference": "i"
+																													}
+																												},
+																												"reference": "result"
+																											},
+																											"input": "return",
+																											"output": "value"
+																										},
+																										"static": {
+																											"opcode": "template",
+																											"opcodes": [
+																												[
+																													{
+																														"opcode": "literal",
+																														"value": "break_types"
+																													},
+																													{
+																														"opcode": "template",
+																														"opcodes": [
+																															[
+																																{
+																																	"opcode": "literal",
+																																	"value": "wildcard"
+																																},
+																																{
+																																	"opcode": "template",
+																																	"opcodes": [
+																																		[
+																																			{
+																																				"opcode": "literal",
+																																				"value": 0
+																																			},
+																																			{
+																																				"opcode": "template",
+																																				"opcodes": [
+																																					[
+																																						{
+																																							"opcode": "literal",
+																																							"value": "in"
+																																						},
+																																						{
+																																							"opcode": "template",
+																																							"opcodes": [
+																																								[
+																																									{
+																																										"opcode": "literal",
+																																										"value": "type"
+																																									},
+																																									{
+																																										"opcode": "literal",
+																																										"value": "Inferred"
+																																									}
+																																								]
+																																							]
+																																						}
+																																					],
+																																					[
+																																						{
+																																							"opcode": "literal",
+																																							"value": "out"
+																																						},
+																																						{
+																																							"opcode": "template",
+																																							"opcodes": [
+																																								[
+																																									{
+																																										"opcode": "literal",
+																																										"value": "type"
+																																									},
+																																									{
+																																										"opcode": "literal",
+																																										"value": "Inferred"
+																																									}
+																																								]
+																																							]
+																																						}
+																																					]
+																																				]
+																																			}
+																																		]
+																																	]
+																																}
+																															]
+																														]
+																													}
+																												],
+																												[
+																													{
+																														"opcode": "literal",
+																														"value": "local"
+																													},
+																													{
+																														"opcode": "template",
+																														"opcodes": [
+																															[
+																																{
+																																	"opcode": "literal",
+																																	"value": "type"
+																																},
+																																{
+																																	"opcode": "literal",
+																																	"value": "Object"
+																																}
+																															],
+																															[
+																																{
+																																	"opcode": "literal",
+																																	"value": "properties"
+																																},
+																																{
+																																	"opcode": "template",
+																																	"opcodes": [
+																																	]
+																																}
+																															]
+																														]
+																													}
+																												],
+																												[
+																													{
+																														"opcode": "literal",
+																														"value": "outer"
+																													},
+																													{
+																														"opcode": "template",
+																														"opcodes": [
+																															[
+																																{
+																																	"opcode": "literal",
+																																	"value": "type"
+																																},
+																																{
+																																	"opcode": "literal",
+																																	"value": "Inferred"
+																																}
+																															]
+																														]
+																													}
+																												],
+																												[
+																													{
+																														"opcode": "literal",
+																														"value": "argument"
+																													},
+																													{
+																														"opcode": "template",
+																														"opcodes": [
+																															[
+																																{
+																																	"opcode": "literal",
+																																	"value": "type"
+																																},
+																																{
+																																	"opcode": "literal",
+																																	"value": "Object"
+																																}
+																															],
+																															[
+																																{
+																																	"opcode": "literal",
+																																	"value": "properties"
+																																},
+																																{
+																																	"opcode": "template",
+																																	"opcodes": [
+																																		[
+																																			{
+																																				"opcode": "literal",
+																																				"value": "i"
+																																			},
+																																			{
+																																				"opcode": "template",
+																																				"opcodes": [
+																																					[
+																																						{
+																																							"opcode": "literal",
+																																							"value": "type"
+																																						},
+																																						{
+																																							"opcode": "literal",
+																																							"value": "Inferred"
+																																						}
+																																					]
+																																				]
+																																			}
+																																		]
+																																	]
+																																}
+																															]
+																														]
+																													}
+																												]
+																											]
+																										}
+																									}
+																								}
+																							}
+																						},
+																						"outer_context": {
+																							"opcode": "context"
+																						}
+																					},
+																					"argument": {
+																						"opcode": "template",
+																						"opcodes": [
+																							[
+																								{
+																									"opcode": "literal",
+																									"value": "i"
+																								},
+																								{
+																									"opcode": "dereference",
+																									"of": {
+																										"opcode": "dereference",
+																										"of": {
+																											"opcode": "context"
+																										},
+																										"safe": true,
+																										"reference": {
+																											"opcode": "literal",
+																											"value": "local"
+																										}
+																									},
+																									"safe": true,
+																									"reference": {
+																										"opcode": "literal",
+																										"value": "value"
+																									}
+																								}
+																							]
+																						]
+																					}
+																				}
+																			]
+																		},
+																		"static": {
+																			"opcode": "template",
+																			"opcodes": [
+																				[
+																					{
+																						"opcode": "literal",
+																						"value": "break_types"
+																					},
+																					{
+																						"opcode": "template",
+																						"opcodes": [
+																							[
+																								{
+																									"opcode": "literal",
+																									"value": "wildcard"
+																								},
+																								{
+																									"opcode": "template",
+																									"opcodes": [
+																										[
+																											{
+																												"opcode": "literal",
+																												"value": 0
+																											},
+																											{
+																												"opcode": "template",
+																												"opcodes": [
+																													[
+																														{
+																															"opcode": "literal",
+																															"value": "in"
+																														},
+																														{
+																															"opcode": "template",
+																															"opcodes": [
+																																[
+																																	{
+																																		"opcode": "literal",
+																																		"value": "type"
+																																	},
+																																	{
+																																		"opcode": "literal",
+																																		"value": "Inferred"
+																																	}
+																																]
+																															]
+																														}
+																													],
+																													[
+																														{
+																															"opcode": "literal",
+																															"value": "out"
+																														},
+																														{
+																															"opcode": "template",
+																															"opcodes": [
+																																[
+																																	{
+																																		"opcode": "literal",
+																																		"value": "type"
+																																	},
+																																	{
+																																		"opcode": "literal",
+																																		"value": "Inferred"
+																																	}
+																																]
+																															]
+																														}
+																													]
+																												]
+																											}
+																										]
+																									]
+																								}
+																							]
+																						]
+																					}
+																				],
+																				[
+																					{
+																						"opcode": "literal",
+																						"value": "local"
+																					},
+																					{
+																						"opcode": "template",
+																						"opcodes": [
+																							[
+																								{
+																									"opcode": "literal",
+																									"value": "type"
+																								},
+																								{
+																									"opcode": "literal",
+																									"value": "Inferred"
+																								}
+																							]
+																						]
+																					}
+																				],
+																				[
+																					{
+																						"opcode": "literal",
+																						"value": "outer"
+																					},
+																					{
+																						"opcode": "template",
+																						"opcodes": [
+																							[
+																								{
+																									"opcode": "literal",
+																									"value": "type"
+																								},
+																								{
+																									"opcode": "literal",
+																									"value": "Inferred"
+																								}
+																							]
+																						]
+																					}
+																				],
+																				[
+																					{
+																						"opcode": "literal",
+																						"value": "argument"
+																					},
+																					{
+																						"opcode": "template",
+																						"opcodes": [
+																							[
+																								{
+																									"opcode": "literal",
+																									"value": "type"
+																								},
+																								{
+																									"opcode": "literal",
+																									"value": "NoValue"
+																								}
+																							]
+																						]
+																					}
+																				]
+																			]
+																		}
+																	}
+																}
+															}
+														},
+														"outer_context": {
+															"opcode": "context"
+														}
+													},
+													"argument": {
+														"opcode": "nop"
+													}
+												}
+											},
+											"static": {
+												"opcode": "template",
+												"opcodes": [
+													[
+														{
+															"opcode": "literal",
+															"value": "break_types"
+														},
+														{
+															"opcode": "template",
+															"opcodes": [
+																[
+																	{
+																		"opcode": "literal",
+																		"value": "wildcard"
+																	},
+																	{
+																		"opcode": "template",
+																		"opcodes": [
+																			[
+																				{
+																					"opcode": "literal",
+																					"value": 0
+																				},
+																				{
+																					"opcode": "template",
+																					"opcodes": [
+																						[
+																							{
+																								"opcode": "literal",
+																								"value": "in"
+																							},
+																							{
+																								"opcode": "template",
+																								"opcodes": [
+																									[
+																										{
+																											"opcode": "literal",
+																											"value": "type"
+																										},
+																										{
+																											"opcode": "literal",
+																											"value": "Inferred"
+																										}
+																									]
+																								]
+																							}
+																						],
+																						[
+																							{
+																								"opcode": "literal",
+																								"value": "out"
+																							},
+																							{
+																								"opcode": "template",
+																								"opcodes": [
+																									[
+																										{
+																											"opcode": "literal",
+																											"value": "type"
+																										},
+																										{
+																											"opcode": "literal",
+																											"value": "Inferred"
+																										}
+																									]
+																								]
+																							}
+																						]
+																					]
+																				}
+																			]
+																		]
+																	}
+																]
+															]
+														}
+													],
+													[
+														{
+															"opcode": "literal",
+															"value": "local"
+														},
+														{
+															"opcode": "template",
+															"opcodes": [
+																[
+																	{
+																		"opcode": "literal",
+																		"value": "type"
+																	},
+																	{
+																		"opcode": "literal",
+																		"value": "Inferred"
+																	}
+																]
+															]
+														}
+													],
+													[
+														{
+															"opcode": "literal",
+															"value": "outer"
+														},
+														{
+															"opcode": "template",
+															"opcodes": [
+																[
+																	{
+																		"opcode": "literal",
+																		"value": "type"
+																	},
+																	{
+																		"opcode": "literal",
+																		"value": "Inferred"
+																	}
+																]
+															]
+														}
+													],
+													[
+														{
+															"opcode": "literal",
+															"value": "argument"
+														},
+														{
+															"opcode": "template",
+															"opcodes": [
+																[
+																	{
+																		"opcode": "literal",
+																		"value": "type"
+																	},
+																	{
+																		"opcode": "literal",
+																		"value": "NoValue"
+																	}
+																]
+															]
+														}
+													]
+												]
+											}
+										}
+									}
+								}
+							},
+							"outer_context": {
+								"opcode": "context"
+							}
+						},
+						"argument": {
+							"opcode": "nop"
+						}
+					},
+					"input": "break"
+				},
+				{
+					"opcode": "transform",
+					"output": "return",
+					"code": {
+						"opcode": "unbound_dereference",
+						"reference": "result"
+					},
+					"input": "value"
+				}
+			]
+		},
+		"input": "return",
+		"output": "value"
+	},
+	"static": {
+		"opcode": "template",
+		"opcodes": [
+			[
+				{
+					"opcode": "literal",
+					"value": "break_types"
+				},
+				{
+					"opcode": "template",
+					"opcodes": [
+						[
+							{
+								"opcode": "literal",
+								"value": "wildcard"
+							},
+							{
+								"opcode": "template",
+								"opcodes": [
+									[
+										{
+											"opcode": "literal",
+											"value": 0
+										},
+										{
+											"opcode": "template",
+											"opcodes": [
+												[
+													{
+														"opcode": "literal",
+														"value": "in"
+													},
+													{
+														"opcode": "template",
+														"opcodes": [
+															[
+																{
+																	"opcode": "literal",
+																	"value": "type"
+																},
+																{
+																	"opcode": "literal",
+																	"value": "Inferred"
+																}
+															]
+														]
+													}
+												],
+												[
+													{
+														"opcode": "literal",
+														"value": "out"
+													},
+													{
+														"opcode": "template",
+														"opcodes": [
+															[
+																{
+																	"opcode": "literal",
+																	"value": "type"
+																},
+																{
+																	"opcode": "literal",
+																	"value": "Inferred"
+																}
+															]
+														]
+													}
+												]
+											]
+										}
+									]
+								]
+							}
+						]
+					]
+				}
+			],
+			[
+				{
+					"opcode": "literal",
+					"value": "local"
+				},
+				{
+					"opcode": "template",
+					"opcodes": [
+						[
+							{
+								"opcode": "literal",
+								"value": "type"
+							},
+							{
+								"opcode": "literal",
+								"value": "Object"
+							}
+						],
+						[
+							{
+								"opcode": "literal",
+								"value": "properties"
+							},
+							{
+								"opcode": "template",
+								"opcodes": [
+									[
+										{
+											"opcode": "literal",
+											"value": "result"
+										},
+										{
+											"opcode": "unbound_dereference",
+											"reference": "int"
+										}
+									]
+								]
+							}
+						]
+					]
+				}
+			],
+			[
+				{
+					"opcode": "literal",
+					"value": "outer"
+				},
+				{
+					"opcode": "template",
+					"opcodes": [
+						[
+							{
+								"opcode": "literal",
+								"value": "type"
+							},
+							{
+								"opcode": "literal",
+								"value": "Inferred"
+							}
+						]
+					]
+				}
+			],
+			[
+				{
+					"opcode": "literal",
+					"value": "argument"
+				},
+				{
+					"opcode": "template",
+					"opcodes": [
+						[
+							{
+								"opcode": "literal",
+								"value": "type"
+							},
+							{
+								"opcode": "literal",
+								"value": "NoValue"
+							}
+						]
+					]
+				}
+			]
+		]
+	},
+	"raw_code": "\n            function() {\n                int result = 0;\n                for(var i from range(1, 5)) {\n                    result = result + i;\n                };\n                return result;\n            }\n        "
+}

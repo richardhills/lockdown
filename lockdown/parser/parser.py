@@ -621,10 +621,12 @@ class RDHLang5Visitor(langVisitor):
 
         if inferred_splat_type:
             micro_ops.append(object_template_op({
-                "type": literal_op("get-inferred-key")
+                "type": literal_op("get-inferred-key"),
+                "params": list_template_op([])
             }))
             micro_ops.append(object_template_op({
-                "type": literal_op("set-inferred-key")
+                "type": literal_op("set-inferred-key"),
+                "params": list_template_op([])
             }))
 
         return composite_type(micro_ops)
@@ -814,9 +816,7 @@ class CodeBlockBuilder(object):
 def get_debug_info(ctx):
     return {
         "column": ctx.start.column,
-        "line": ctx.start.line,
-        "start_token": getattr(ctx.start, "token", ""),
-        "end_token": getattr(getattr(ctx, "end", None), "token", "")
+        "line": ctx.start.line
     }
 
 

@@ -278,9 +278,8 @@ class TestRevConstType(TestCase):
         }, name="test")
 
         normal_broad_type = CompositeType({
-            ("get", 0): GetterMicroOpType(0, OneOfType([ StringType(), IntegerType() ])),
+            ("get", 0): GetterMicroOpType(0, StringType()),
             ("set", 0): SetterMicroOpType(0, StringType()),
-            ("insert-start",): InsertStartMicroOpType(IntegerType(), False),
         }, name="test")
 
         rev_const_type = prepare_lhs_type(rev_const_type, None)
@@ -303,11 +302,10 @@ class TestRevConstType(TestCase):
         normal_broad_type = CompositeType({
             ("get", 0): GetterMicroOpType(0, StringType()),
             ("set", 0): SetterMicroOpType(0, StringType()),
-            ("get", 1): GetterMicroOpType(1, OneOfType([ StringType(), IntegerType() ])),
+            ("get", 1): GetterMicroOpType(1, IntegerType()),
             ("set", 1): SetterMicroOpType(1, IntegerType()),
             ("get", 2): GetterMicroOpType(2, AnyType()),
             ("set", 2): SetterMicroOpType(2, AnyType()),
-            ("insert-start", ): InsertStartMicroOpType(StringType(), False),
         }, name="test")
 
         self.assertFalse(rev_const_type.is_self_consistent(DUMMY_REASONER))
@@ -1114,20 +1112,22 @@ class TestInferredTypes(TestCase):
             foo = prepare_lhs_type(foo, UniversalObjectType({
                 "bam": StringType()
             }))
-        check_dangling_inferred_types(foo)
+        check_dangling_inferred_types(foo, {})
 
     def test_double_nested(self):
-        foo = UniversalObjectType({
+        Initial_Foo = UniversalObjectType({
             "bar": UniversalObjectType({
                 "bam": InferredType()
             })
         })
-        foo = prepare_lhs_type(foo, UniversalObjectType({
+        RHS_Foo = UniversalObjectType({
             "bar": UniversalObjectType({
                 "bam": IntegerType()
             })
-        }))
-        self.assertIsInstance(foo.micro_op_types[("get", "bar")].value_type.micro_op_types[("get", "bam")].value_type, IntegerType)
+        })
+
+        resolved_Foo = prepare_lhs_type(Initial_Foo, RHS_Foo)
+        self.assertIsInstance(resolved_Foo.micro_op_types[("get", "bar")].value_type.micro_op_types[("get", "bam")].value_type, IntegerType)
 
     def test_composite_types_inferred(self):
         foo = UniversalObjectType({

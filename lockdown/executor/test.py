@@ -867,9 +867,8 @@ class TestTryCatch(TestCase):
         self.assertEquals(result.value, "unknown")
         result = bootstrap_function(func, argument="hello")
         self.assertEquals(result.caught_break_mode, "exception")
-        self.assertIsInstance(result.value, PythonObject)
-        get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
-        self.assertEquals(result.value.type, "TypeError")
+        self.assertIsInstance(result.value, Universal)
+        self.assertEquals(result.value._get("type"), "TypeError")
 
     def test_catch_real_exception(self):
         #  Function safely handles an internal exception

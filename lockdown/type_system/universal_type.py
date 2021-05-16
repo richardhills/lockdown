@@ -37,7 +37,7 @@ class Universal(Composite):
         self._length = initial_length
 
         if bind:
-            manager.add_composite_type(bind, reasoner=None)
+            manager.add_composite_type(bind, reasoner=reasoner)
 
     def _set(self, key, value):
         manager = get_manager(self)
@@ -733,8 +733,6 @@ class GetterWildcardMicroOpType(MicroOpType):
 
     def invoke(self, target_manager, key, *args, **kwargs):
         try:
-            if key == "in":
-                pass
             obj = target_manager.get_obj()
             default_factory = target_manager.default_factory
 

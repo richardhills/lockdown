@@ -2,6 +2,7 @@
 from __future__ import unicode_literals
 
 import cProfile
+from collections import OrderedDict
 from contextlib import contextmanager
 from json.encoder import JSONEncoder
 import sys
@@ -48,6 +49,10 @@ def micro_op_repr(opname, key, key_error, type=None, type_error=None):
     else:
         return "{}.{}{}".format(opname, key, "!" if key_error else "")
 
+def sort_dict_output(key_value):
+    if key_value[0] == "opcode": return -1
+    return 0
+
 def print_code(ast):
     class RDHObjectEncoder(JSONEncoder):
         def default(self, o):
@@ -55,7 +60,10 @@ def print_code(ast):
             if isinstance(o, PythonList):
                 return o._to_list()
             if isinstance(o, Universal):
-                return o._to_dict()
+                items = o._to_dict().items()
+                items = [ i for i in items if i[0] not in ("column", "line") ]
+                items = sorted(items, key=sort_dict_output)
+                return OrderedDict(items)
             return o
     print RDHObjectEncoder().encode(ast)
 

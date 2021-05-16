@@ -40,7 +40,7 @@ def prepare_piece_of_context(declared_type, suggested_type):
 
     final_type = prepare_lhs_type(declared_type, suggested_type)
 
-    if not check_dangling_inferred_types(final_type):
+    if not check_dangling_inferred_types(final_type, {}):
         raise PreparationException("Invalid inferred types")
 
     is_piece_self_consistent_reasoner = Reasoner()
@@ -133,11 +133,8 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
 
     actual_local_type = flatten_out_types(actual_local_type)
 
-
-    if isinstance(actual_local_type, CompositeType):
-        if ("get", "bar") in actual_local_type.micro_op_types:
-            pass
-
+    if isinstance(actual_local_type, CompositeType) and actual_local_type.get_micro_op_type(("get", "callback")):
+        pass
 
     local_type = prepare_piece_of_context(local_type, actual_local_type)
 

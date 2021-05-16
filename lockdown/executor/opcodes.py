@@ -27,7 +27,7 @@ from lockdown.type_system.universal_type import UniversalObjectType, \
     IterMicroOpType, RemoverWildcardMicroOpType, InserterWildcardMicroOpType, \
     UniversalTupleType, Universal
 from lockdown.utils import MISSING, NO_VALUE, is_debug, \
-    runtime_type_information
+    runtime_type_information, InternalMarker
 from log import logger
 
 
@@ -270,15 +270,17 @@ class TemplateOp(Opcode):
 
             wildcard_key_type = OneOfType([ StringType(), IntegerType() ])
 
-            micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(wildcard_key_type, combined_value_types, False)
+            micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(wildcard_key_type, combined_value_types, True)
             micro_ops[("iter",)] = IterMicroOpType(combined_value_types)
 
+            have_default_factory = False
+
             micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(wildcard_key_type, AnyType(), False, False)
-            micro_ops[("remove-wildcard",)] = RemoverWildcardMicroOpType(False, False)
+            micro_ops[("remove-wildcard",)] = RemoverWildcardMicroOpType(not have_default_factory, False)
             micro_ops[("insert-wildcard",)] = InserterWildcardMicroOpType(AnyType(), False, False)
             micro_ops[("insert-start",)] = InsertStartMicroOpType(AnyType(), False)
             micro_ops[("insert-end",)] = InsertEndMicroOpType(AnyType(), False)
-            micro_ops[("delete-wildcard",)] = DeletterWildcardMicroOpType(wildcard_key_type, False)
+            micro_ops[("delete-wildcard",)] = DeletterWildcardMicroOpType(wildcard_key_type, not have_default_factory)
 
             value_type = CompositeType(micro_ops, name="TemplateOp")
 
@@ -290,7 +292,7 @@ class TemplateOp(Opcode):
         with frame_manager.get_next_frame(self) as frame:
             result = {}
 
-            max_index = 0
+            initial_length = 0
 
             for index, (key_opcode, value_opcode) in enumerate(self.opcodes):
                 key = frame.step("key-{}".format(index), lambda: evaluate(key_opcode, context, frame_manager))
@@ -299,13 +301,14 @@ class TemplateOp(Opcode):
                     frame.exception(self.NO_VALUE_ASSIGNMENT())
 
                 if isinstance(key, int):
-                    max_index = max([ key, max_index ])
+                    required_length_for_key = key + 1
+                    initial_length = max([ required_length_for_key, initial_length ])
 
             return frame.value(
                 Universal(
                     False,
                     initial_wrapped=result,
-                    initial_length=max_index + 1,
+                    initial_length=initial_length,
                     debug_reason="object-template"
                 )
             )
@@ -823,6 +826,7 @@ class AssignmentOp(Opcode):
             *args
         )
 
+WILDCARD = InternalMarker("WILDCARD")
 
 class InsertOp(Opcode):
     INVALID_LVALUE = TypeErrorFactory("InsertOp: invalid_lvalue")
@@ -834,8 +838,7 @@ class InsertOp(Opcode):
         self.of = enrich_opcode(data.of, visitor)
         self.reference = enrich_opcode(data.reference, visitor)
         self.rvalue = enrich_opcode(data.rvalue, visitor)
-        self.direct_micro_ops = {}
-        self.wildcard_micro_ops = {}
+        self.micro_ops = {}
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
@@ -855,38 +858,42 @@ class InsertOp(Opcode):
         if rvalue_type is not MISSING:
             rvalue_type = flatten_out_types(rvalue_type)
 
-        self.invalid_assignment_error = False
-        self.invalid_rvalue_error = False
-        self.invalid_lvalue_error = False
+        self.invalid_assignment_error = self.invalid_rvalue_error = self.invalid_lvalue_error = False
 
-        if reference_types is not MISSING and of_types is not MISSING and rvalue_type is not MISSING:
-            for reference_type in unwrap_types(reference_types):
-                try:
-                    for reference in reference_type.get_all_permitted_values():    
-                        for of_type in unwrap_types(of_types):
-                            micro_op = None
-                            if isinstance(of_type, CompositeType) and reference is not None:
-                                micro_op = of_type.get_micro_op_type(("insert", reference))
-                                if micro_op:
-                                    self.direct_micro_ops[reference] = micro_op
+        if reference_types is MISSING or of_types is MISSING or rvalue_type is MISSING:
+            return break_types.build()
 
-                                if not micro_op:
-                                    micro_op = of_type.get_micro_op_type(("insert-wildcard",))
-                                    if micro_op:
-                                        self.wildcard_micro_ops[reference] = micro_op
+        for reference_type in unwrap_types(reference_types):
+            try:
+                possible_references = reference_type.get_all_permitted_values()
+            except PermittedValuesDoesNotExist:
+                self.invalid_lvalue_error = True
+                possible_references = [ WILDCARD ]
 
-                            if micro_op:
-                                if not micro_op.value_type.is_copyable_from(rvalue_type, DUMMY_REASONER):
-                                    self.invalid_rvalue_error = True
+            for of_type in unwrap_types(of_types):
+                for reference in possible_references:
+                    micro_op = None
 
-                                break_types.add("value", NoValueType())
+                    if isinstance(of_type, CompositeType) and reference == 0:
+                        micro_op = of_type.get_micro_op_type(("insert-start",))
+                        if micro_op:
+                            self.micro_ops[reference] = True, micro_op
 
-                                if micro_op.type_error or micro_op.key_error:
-                                    self.invalid_assignment_error = True
-                            else:
-                                self.invalid_lvalue_error = True
-                except PermittedValuesDoesNotExist:
-                    self.invalid_lvalue_error = True
+                    if not micro_op:
+                        micro_op = of_type.get_micro_op_type(("insert-wildcard",))
+                        if micro_op:
+                            self.micro_ops[reference] = False, micro_op
+
+                    if micro_op:
+                        if not micro_op.value_type.is_copyable_from(rvalue_type, DUMMY_REASONER):
+                            self.invalid_rvalue_error = True
+
+                        break_types.add("value", NoValueType())
+
+                        if micro_op.type_error or micro_op.key_error:
+                            self.invalid_assignment_error = True
+                    else:
+                        self.invalid_lvalue_error = True
 
         if self.invalid_assignment_error:
             break_types.add("exception", self.INVALID_ASSIGNMENT.get_type())
@@ -906,35 +913,17 @@ class InsertOp(Opcode):
             manager = get_manager(of)
 
             try:
-                direct_micro_op_type = self.direct_micro_ops.get(reference, None)
-                if direct_micro_op_type:
-                    if self.invalid_rvalue_error and not direct_micro_op_type.value_type.is_copyable_from(get_type_of_value(rvalue), DUMMY_REASONER):
-                        return frame.exception(self.INVALID_RVALUE())
+                direct, micro_op = self.micro_ops.get(reference, self.micro_ops.get(WILDCARD, (None, None)))
+                if self.invalid_lvalue_error and not micro_op:
+                    return frame.exception(self.INVALID_LVALUE())
 
-                    return frame.value(direct_micro_op_type.invoke(manager, rvalue, shortcut_checks=True))
+                if self.invalid_rvalue_error and not is_type_bindable_to_value(rvalue, micro_op.value_type):
+                    return frame.exception(self.INVALID_RVALUE())
 
-                wildcard_micro_op_type = self.wildcard_micro_ops.get(reference, None)
-                if wildcard_micro_op_type:
-                    if self.invalid_rvalue_error and not wildcard_micro_op_type.value_type.is_copyable_from(get_type_of_value(rvalue), DUMMY_REASONER):
-                        return frame.exception(self.INVALID_RVALUE())
-
-                    return frame.value(wildcard_micro_op_type.invoke(manager, reference, rvalue, shortcut_checks=True))
-
-#                 direct_micro_op_type = manager.get_micro_op_type(("insert", reference))
-#                 if direct_micro_op_type:
-#                     if self.invalid_rvalue_error and not direct_micro_op_type.value_type.is_copyable_from(get_type_of_value(rvalue)):
-#                         return frame.exception(self.INVALID_RVALUE())
-# 
-#                     micro_op = direct_micro_op_type.create(manager)
-#                     return frame.value(micro_op.invoke(rvalue, trust_caller=True))
-# 
-#                 wildcard_micro_op_type = manager.get_micro_op_type(("insert-wildcard",))
-#                 if wildcard_micro_op_type:
-#                     if self.invalid_rvalue_error and not wildcard_micro_op_type.value_type.is_copyable_from(get_type_of_value(rvalue)):
-#                         return frame.exception(self.INVALID_RVALUE())
-# 
-#                     micro_op = wildcard_micro_op_type.create(manager)
-#                     return frame.value(micro_op.invoke(reference, rvalue, trust_caller=True))
+                if direct:
+                    return frame.value(micro_op.invoke(manager, rvalue, shortcut_checks=True))
+                else:
+                    return frame.value(micro_op.invoke(manager, reference, rvalue, shortcut_checks=True))
 
                 return frame.exception(self.INVALID_LVALUE())
             except InvalidAssignmentType:

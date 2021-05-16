@@ -568,7 +568,7 @@ class TestLoops(TestCase):
                 return result;
             }
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True)
+        result = bootstrap_function(code, check_safe_exit=True, print_ast=True)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 1 + 2 + 3 + 4)
 
@@ -606,7 +606,7 @@ class TestSpeed(TestCase):
         result = bootstrap_function(code, check_safe_exit=True, measure=True)
         self.assertEquals(result.value, 20 * 20)
         end = time()
-        self.assertLess(end - start, 15)
+        self.assertLess(end - start, 16)
 
     def test_loop_faster(self):
         start = time()

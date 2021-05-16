@@ -105,13 +105,15 @@ MICRO_OP_FACTORIES = {
     "delete-wildcard": lambda kt, ke: DeletterWildcardMicroOpType(enrich_type(kt), ke),
     "remove-wildcard": lambda ke, te: RemoverWildcardMicroOpType(ke, te),
     "insert-wildcard": lambda vt, ke, te: InserterWildcardMicroOpType(enrich_type(vt), ke, te),
-    "iter": lambda vt: IterMicroOpType(enrich_type(vt))
+    "iter": lambda vt: IterMicroOpType(enrich_type(vt)),
+    "get-inferred-key": lambda *args: None,
+    "set-inferred-key": lambda *args: None,
 }
 
 def build_universal_type(data):    
     micro_ops = OrderedDict({})
 
-    for micro_op in data._get("micro_ops"):
+    for micro_op in data._get("micro_ops")._to_list():
         if micro_op._contains("index"):
             tag = ( micro_op._get("type"), micro_op._get("index") )
         else:
@@ -119,10 +121,7 @@ def build_universal_type(data):
 
         Factory = MICRO_OP_FACTORIES[micro_op._get("type")]
 
-        try:
-            micro_ops[tag] = Factory(*micro_op.params)
-        except TypeError:
-            raise
+        micro_ops[tag] = Factory(*micro_op._get("params")._to_list())
 
     return CompositeType(micro_ops, name="App")
 

@@ -50,6 +50,12 @@ class CompositeType(Type):
         self.name = name
         self._is_self_consistent = None
 
+    def clone(self, name):
+        result = CompositeType(dict(self.micro_op_types), name)
+        if hasattr(self, "from_opcode"):
+            result.from_opcode = self.from_opcode
+        return result
+
     def get_micro_op_type(self, tag):
         return self.micro_op_types.get(tag, None)
 
@@ -105,6 +111,8 @@ class CompositeType(Type):
             cache[result_key] = True
 
             for micro_op_type in self.micro_op_types.values():
+                if micro_op_type is None:
+                    pass
                 if not micro_op_type.is_derivable_from(other, reasoner):
                     cache[result_key] = False
                     break
@@ -211,11 +219,11 @@ class CompositeObjectManager(object):
 
     def add_composite_type(self, new_type, reasoner=None):
         # TODO: remove
-        add_composite_type(self, new_type, reasoner=None)
+        add_composite_type(self, new_type, reasoner=reasoner)
 
     def remove_composite_type(self, remove_type, reasoner=None):
         # TODO: remove
-        remove_composite_type(self, remove_type, reasoner=None)
+        remove_composite_type(self, remove_type, reasoner=reasoner)
 
 class InferredType(Type):
     """
@@ -228,250 +236,367 @@ class InferredType(Type):
     def __repr__(self):
         return "Inferred"
 
-def check_dangling_inferred_types(type, results_cache=None):
+def prepare_lhs_type(lhs_type, rhs_type):
+    """
+    A "heuristicy" function that takes a declared LHS type (which can include gaps for inferrence,
+    inconsistencies etc) and a realized RHS type (which can also include inconsistencies) and
+    generates a "sensible" LHS type that hopefully corresponds to what the developer was aiming for.
+
+    For example:
+
+    Tuple<...int> foo = [ 1, 2, 3 ]; -> LHS: Tuple<int, int, int>
+    """
+
+    post_inferred_lhs_type = replace_inferred_types(lhs_type, rhs_type, {})
+
+    post_conflict_resolution_lhs_type = resolve_micro_op_conflicts(post_inferred_lhs_type, {})
+
+    if not check_dangling_inferred_types(post_conflict_resolution_lhs_type, {}):
+        replace_inferred_types(lhs_type, rhs_type, {})
+        raise DanglingInferredType()
+
+    return post_conflict_resolution_lhs_type
+
+def check_dangling_inferred_types(type, results):
     """
     Recursively checks a CompositeType and all related types for any InferredTypes
     that haven't been replaced.
 
     Returns False if any InferredTypes are found
     """
-    if results_cache is None:
-        results_cache = {}
-
-    cache_key = id(type)
-
-    if cache_key in results_cache:
-        return results_cache[cache_key]
-
-    results_cache[cache_key] = True
+    if id(type) in results:
+        return results[id(type)]
 
     if isinstance(type, InferredType):
         return False
 
-    if isinstance(type, CompositeType):
-        for key, micro_op_type in type.micro_op_types.items():
-            value_type = getattr(micro_op_type, "value_type", None)
-            if value_type:
-                if not check_dangling_inferred_types(value_type):
-                    return False
+    if not isinstance(type, CompositeType):
+        return True
+
+    results[id(type)] = True
+
+    for tag, micro_op_type in type.micro_op_types.items():
+        if tag[0] in ("get-inferred-key", "set-inferred-key"):
+            return False
+        if hasattr(micro_op_type, "value_type"):
+            if not check_dangling_inferred_types(micro_op_type.value_type, results):
+                return False
 
     return True
 
-def prepare_lhs_type(lhs_type, rhs_type, results_cache=None):
-    """
-    A Heuristic. Takes the LHS (left-hand-side) Type and returns a new (always more specific) Type based
-    on some rules to make the type more useful to the developer.
+def replace_inferred_types(lhs_type, rhs_type, results):
+    result_key = (id(lhs_type), id(rhs_type))
 
-    The rules within this function are both:
-    1. A core part of the nature of Lockdown for a normal developer
-    2. Largely arbitrary, and can be changed without impacting the real core ideas behind Lockdown
+    if result_key in results:
+        return results[result_key]
 
-    For example, a developer might write:
-
-    var foo = [ 3, 6 ];
-
-    What type should foo be? RHS is an Inconsistent Type with these micro ops:
-
-    (get, 0) => Get.0.unit<3>
-    (set, 0) => Set.0.any
-    (get, 1) => Get.1.unit<6>
-    (set, 1) => Set.1.any
-    ... any some other inconsistent micro ops!
-
-    There are several types for foo that would be Consistent with this Inconsistent Type. All of the
-    following could be substituted for var, and the code will compile:
-
-    Any
-    List<any>
-    List<int>
-    Tuple<any, any>
-    Tuple<int, int> # and combinations with the previous version!
-    Tuple<unit<3>, unit<6>> # and combinations again!
-
-    So when we use "var", which do we select? Lockdown uses Tuple<int, int> - this is likely to be most useful.
-    """
     if isinstance(lhs_type, InferredType):
-        if rhs_type is None:
-            raise DanglingInferredType()
-        lhs_type = rhs_type
+        if rhs_type is None or isinstance(rhs_type, InferredType):
+            return lhs_type
+        return rhs_type
 
-    if isinstance(lhs_type, CompositeType):
-        lhs_type = prepare_composite_lhs_type(lhs_type, rhs_type, results_cache)
+    if not isinstance(lhs_type, CompositeType):
+        return lhs_type
 
-    return lhs_type
+    finished_type = lhs_type.clone("{}<post-inference>".format(lhs_type.name))
 
-def prepare_composite_lhs_type(composite_lhs_type, rhs_type, results_cache=None):
-    """
-    See the comment on prepare_lhs_type
-    """
-    if hasattr(composite_lhs_type, "_prepared_lhs_type"):
-        return composite_lhs_type
+    results[result_key] = finished_type
 
-    if results_cache is None:
-        results_cache = {}
+    infer_gets = lhs_type.get_micro_op_type(("get-inferred-key", )) is not None
+    infer_sets = lhs_type.get_micro_op_type(("set-inferred-key", )) is not None
 
-    cache_key = (id(composite_lhs_type), id(rhs_type))
+    if infer_gets or infer_sets:
+        for rhs_tag, rhs_micro_op in rhs_type.micro_op_types.items():
+            if infer_gets and rhs_tag[0] == "get":
+                new_tag = ( "get", rhs_tag[1] )
+                if new_tag not in finished_type.micro_op_types:
+                    finished_type.micro_op_types[( "get", rhs_tag[1] )] = rhs_micro_op
+            if infer_sets and rhs_tag[0] == "set":
+                new_tag = ( "set", rhs_tag[1] )
+                if new_tag not in finished_type.micro_op_types:
+                    finished_type.micro_op_types[( "set", rhs_tag[1] )] = rhs_micro_op
 
-    if cache_key in results_cache:
-        return results_cache[cache_key]
+    finished_type.micro_op_types.pop(( "get-inferred-key", ), None)
+    finished_type.micro_op_types.pop(( "set-inferred-key", ), None)
 
-    result = CompositeType(
-        dict(composite_lhs_type.micro_op_types),
-        name="{}<LHSPrepared>".format(composite_lhs_type.name)
-    )
+    for tag, lhs_micro_op in lhs_type.micro_op_types.items():
+        if tag[0] == "get" and tag[1] == "_temp":
+            pass
+        if hasattr(lhs_micro_op, "value_type"):
+            rhs_value_type = None
 
-    rhs_composite_type = None
-    if isinstance(rhs_type, CompositeType):
-        rhs_composite_type = CompositeType(
-            dict(rhs_type.micro_op_types),
-            name="{}<RHSComposite>".format(rhs_type.name)
-        )
+            if rhs_type and isinstance(rhs_type, CompositeType):
+                rhs_micro_op = rhs_type.get_micro_op_type(tag)
+                if hasattr(rhs_micro_op, "value_type"):
+                    rhs_value_type = rhs_micro_op.value_type
 
-    # TODO: do this better
-    if hasattr(composite_lhs_type, "from_opcode"):
-        result.from_opcode = composite_lhs_type.from_opcode
+            finished_type.micro_op_types[tag] = lhs_micro_op.clone(
+                value_type=replace_inferred_types(
+                    lhs_micro_op.value_type,
+                    rhs_value_type,
+                    results
+                )
+            )
 
-    result._prepared_lhs_type = True
+    return finished_type
 
-    results_cache[cache_key] = result
-    something_changed = False
+def resolve_micro_op_conflicts(type, results):
+    if id(type) in results:
+        return results[id(type)]
 
-    # Call recursively on both LHS and RHS types to start 
-    for tag, micro_op in result.micro_op_types.items():
+    if not isinstance(type, CompositeType):
+        return type
+
+    finished_type = type.clone("{}<post-conflict-resolution>".format(type.name))
+
+    results[id(type)] = finished_type
+
+    for tag, micro_op in finished_type.micro_op_types.items():
         if hasattr(micro_op, "value_type"):
-            guide_micro_op_type = None
+            finished_type.micro_op_types[tag] = micro_op.clone(
+                value_type=resolve_micro_op_conflicts(micro_op.value_type, results)
+            )
 
-            if isinstance(rhs_type, CompositeType):
-                guide_op = rhs_type.get_micro_op_type(tag)
-                guide_micro_op_type = guide_op.value_type
-
-            new_value_type = prepare_lhs_type(micro_op.value_type, guide_micro_op_type, results_cache)
-
-            if micro_op.value_type is not new_value_type:
-                result.micro_op_types[tag] = micro_op.clone(
-                    value_type=prepare_lhs_type(micro_op.value_type, guide_micro_op_type, results_cache)
+    for tag, micro_op in finished_type.micro_op_types.items():
+        if len(tag) == 2 and tag[0] == "get":
+            setter = finished_type.get_micro_op_type(( "set", tag[1] ))
+            if setter:
+                finished_type.micro_op_types[( "set", tag[1] )] = setter.clone(
+                    value_type=micro_op.value_type
                 )
-                something_changed = True
-
-    # Replace all inferred types in the LHS by taking types from the RHS
-    for lhs_tag, micro_op in result.micro_op_types.items():
-        if len(lhs_tag) != 1:
-            continue
-        if lhs_tag[0] in ("get-inferred-key", "set-inferred-key"):
-            lhs_method = lhs_tag[0][:3] # get or set
-            if not isinstance(rhs_type, CompositeType):
-                raise DanglingInferredType()
-
-            del result.micro_op_types[lhs_tag]
-            for rhs_tag, rhs_micro_op in rhs_type.micro_op_types.items():
-                if not len(rhs_tag) == 2:
-                    continue
-                rhs_method, rhs_key = rhs_tag
-                if rhs_method == lhs_method:
-                    new_tag = (lhs_method, rhs_key)
-                    if new_tag not in result.micro_op_types:
-                        result.micro_op_types[new_tag] = rhs_micro_op
-
-
-
-
-
-    # Take any overlapping getter/setter types (typically get X, set Any) and transform so that they
-    # are compatible (typically get X, set X)
-    for tag, micro_op in result.micro_op_types.items():
-        getter = None
-        if hasattr(micro_op, "value_type") and isinstance(micro_op.value_type, (AnyType, InferredType)):
-            if tag[0] == "set":
-                getter = result.get_micro_op_type(("get", tag[1]))
-            if tag[0] == "set-wildcard":
-                getter = result.get_micro_op_type(("get-wildcard", ))
-        if getter:
-            if micro_op.value_type is not getter.value_type:
-                result.micro_op_types[tag] = micro_op.clone(value_type=getter.value_type)
-                something_changed = True
-
-#     # Add error codes to get-wildcard and set-wildcard if there are any getters or setters
-#     setter_or_getter_found = any([ t[0] in ("get", "set") for t in result.micro_op_types.keys() ])
-#     if setter_or_getter_found:
-#         wildcard_getter = result.get_micro_op_type(("get-wildcard", ))
-#         if wildcard_getter:
-#             result.micro_op_types[("get-wildcard", )] = wildcard_getter.clone(key_error=True)
-#         wildcard_setter = result.get_micro_op_type(("set-wildcard", ))
-#         if wildcard_setter:
-#             result.micro_op_types[("set-wildcard", )] = wildcard_setter.clone(key_error=True, type_error=True)
-
-    # Replace set.x.Any + get.x.T with set.x.T + get.x.T
-    for tag, micro_op in result.micro_op_types.items():
-        if hasattr(micro_op, "value_type"):
-            guide_micro_op_type = None
-
-            if isinstance(rhs_type, CompositeType):
-                guide_op = rhs_type.get_micro_op_type(tag)
-
-                if hasattr(guide_op, "value_type") and isinstance(guide_op.value_type, AnyType):
-                    if tag[0] == "set":
-                        guide_op = rhs_type.get_micro_op_type(( "get", tag[1] ))
-                    if tag[0] == "set-wildcard":
-                        guide_op = rhs_type.get_micro_op_type(( "get-wildcard" ))
-
-                if hasattr(guide_op, "value_type"):
-                    guide_micro_op_type = guide_op.value_type
-
-            new_value_type = prepare_lhs_type(micro_op.value_type, guide_micro_op_type, results_cache)
-
-            if micro_op.value_type is not new_value_type:
-                result.micro_op_types[tag] = micro_op.clone(
-                    value_type=prepare_lhs_type(micro_op.value_type, guide_micro_op_type, results_cache)
+            wildcard_setter = finished_type.get_micro_op_type(( "set-wildcard", ))
+            if wildcard_setter and not wildcard_setter.type_error:
+                finished_type.micro_op_types[( "set-wildcard", )] = wildcard_setter.clone(
+                    type_error=True
                 )
-                something_changed = True
-
-    right_shifts = []
-    left_shifts = []
-
-    for tag, micro_op in result.micro_op_types.items():
-        if tag[0] == "insert-start":
-            right_shifts.append((0, micro_op.value_type))
-        if tag[0] == "insert-wildcard":
-            right_shifts.append((0, micro_op.value_type))
-
-        if tag[0] == "delete-wildcard":
-            left_shifts.append(0)
-
-    positional_getter_micro_ops = sorted(
-        [m for t, m in result.micro_op_types.items() if t[0] == "get" and len(t) == 2 and isinstance(t[1], int)],
-        key=lambda m: m.key
-    )
-
-    for starting_index, starting_type in right_shifts:
-        cumulative_types = [ starting_type ]
-        for getter_micro_op in positional_getter_micro_ops:
-            if getter_micro_op.key >= starting_index:
-                cumulative_types = cumulative_types + [ getter_micro_op.value_type ]
-                result.micro_op_types[("get", getter_micro_op.key)] = getter_micro_op.clone(
-                    value_type=merge_types(cumulative_types, "super")
+        if len(tag) == 1 and tag[0] == "get-wildcard":
+            setter = finished_type.get_micro_op_type(( "set-wildcard", ))
+            if setter:
+                finished_type.micro_op_types[( "set-wildcard", )] = setter.clone(
+                    value_type=micro_op.value_type
                 )
-                something_changed = True
+        if tag[0] in ("get", "get-wildcard") and not micro_op.key_error:
+            finished_type.micro_op_types.pop(( "insert-start", ), None)
+            finished_type.micro_op_types.pop(( "insert-wildcard", ), None)
+            finished_type.micro_op_types.pop(( "remove-wildcard", ), None)
 
-    positional_getter_micro_ops = sorted(
-        [m for t, m in result.micro_op_types.items() if t[0] == "get" and len(t) == 2 and isinstance(t[1], int)],
-        key=lambda m: m.key
-    )
+    return finished_type
 
-    for starting_index in left_shifts:
-        cumulative_types = []
-        for getter_micro_op in reversed(positional_getter_micro_ops):
-            if getter_micro_op.key >= starting_index:
-                cumulative_types.append(getter_micro_op.value_type)
-                result.micro_op_types[("get", getter_micro_op.key)] = getter_micro_op.clone(
-                    value_type=merge_types(cumulative_types, "super"),
-                    key_error=True
-                )
-                something_changed = True
-
-    if not something_changed:
-        result.micro_op_types = composite_lhs_type.micro_op_types
-
-    return result
+# def prepare_lhs_type(lhs_type, rhs_type, results_cache=None):
+#     """
+#     A Heuristic. Takes the LHS (left-hand-side) Type and returns a new (always more specific) Type based
+#     on some rules to make the type more useful to the developer.
+# 
+#     The rules within this function are both:
+#     1. A core part of the nature of Lockdown for a normal developer
+#     2. Largely arbitrary, and can be changed without impacting the real core ideas behind Lockdown
+# 
+#     For example, a developer might write:
+# 
+#     var foo = [ 3, 6 ];
+# 
+#     What type should foo be? RHS is an Inconsistent Type with these micro ops:
+# 
+#     (get, 0) => Get.0.unit<3>
+#     (set, 0) => Set.0.any
+#     (get, 1) => Get.1.unit<6>
+#     (set, 1) => Set.1.any
+#     ... any some other inconsistent micro ops!
+# 
+#     There are several types for foo that would be Consistent with this Inconsistent Type. All of the
+#     following could be substituted for var, and the code will compile:
+# 
+#     Any
+#     List<any>
+#     List<int>
+#     Tuple<any, any>
+#     Tuple<int, int> # and combinations with the previous version!
+#     Tuple<unit<3>, unit<6>> # and combinations again!
+# 
+#     So when we use "var", which do we select? Lockdown uses Tuple<int, int> - this is likely to be most useful.
+#     """
+#     if isinstance(lhs_type, InferredType):
+#         if rhs_type is None:
+#             raise DanglingInferredType()
+#         lhs_type = rhs_type
+# 
+#     if isinstance(lhs_type, CompositeType):
+#         lhs_type = prepare_composite_lhs_type(lhs_type, rhs_type, results_cache)
+# 
+#     return lhs_type
+# 
+# def prepare_composite_lhs_type(composite_lhs_type, rhs_type, results_cache=None):
+#     """
+#     See the comment on prepare_lhs_type
+#     """
+#     if hasattr(composite_lhs_type, "_prepared_lhs_type"):
+#         return composite_lhs_type
+# 
+#     if results_cache is None:
+#         results_cache = {}
+# 
+#     cache_key = (id(composite_lhs_type), id(rhs_type))
+# 
+#     if cache_key in results_cache:
+#         return results_cache[cache_key]
+# 
+#     result = CompositeType(
+#         dict(composite_lhs_type.micro_op_types),
+#         name="{}<LHSPrepared>".format(composite_lhs_type.name)
+#     )
+# 
+#     rhs_composite_type = None
+#     if isinstance(rhs_type, CompositeType):
+#         rhs_composite_type = CompositeType(
+#             dict(rhs_type.micro_op_types),
+#             name="{}<RHSComposite>".format(rhs_type.name)
+#         )
+# 
+#     # TODO: do this better
+#     if hasattr(composite_lhs_type, "from_opcode"):
+#         result.from_opcode = composite_lhs_type.from_opcode
+# 
+#     result._prepared_lhs_type = True
+# 
+#     results_cache[cache_key] = result
+#     something_changed = False
+# 
+#     # Call recursively on both LHS and RHS types to start 
+#     for tag, micro_op in result.micro_op_types.items():
+#         if hasattr(micro_op, "value_type"):
+#             guide_micro_op_type = None
+# 
+#             if isinstance(rhs_type, CompositeType):
+#                 guide_op = rhs_type.get_micro_op_type(tag)
+#                 guide_micro_op_type = guide_op.value_type
+# 
+#             new_value_type = prepare_lhs_type(micro_op.value_type, guide_micro_op_type, results_cache)
+# 
+#             if micro_op.value_type is not new_value_type:
+#                 result.micro_op_types[tag] = micro_op.clone(
+#                     value_type=prepare_lhs_type(micro_op.value_type, guide_micro_op_type, results_cache)
+#                 )
+#                 something_changed = True
+# 
+#     # Replace all inferred types in the LHS by taking types from the RHS
+#     for lhs_tag, micro_op in result.micro_op_types.items():
+#         if len(lhs_tag) != 1:
+#             continue
+#         if lhs_tag[0] in ("get-inferred-key", "set-inferred-key"):
+#             lhs_method = lhs_tag[0][:3] # get or set
+#             if not isinstance(rhs_type, CompositeType):
+#                 raise DanglingInferredType()
+# 
+#             del result.micro_op_types[lhs_tag]
+#             for rhs_tag, rhs_micro_op in rhs_type.micro_op_types.items():
+#                 if not len(rhs_tag) == 2:
+#                     continue
+#                 rhs_method, rhs_key = rhs_tag
+#                 if rhs_method == lhs_method:
+#                     new_tag = (lhs_method, rhs_key)
+#                     if new_tag not in result.micro_op_types:
+#                         result.micro_op_types[new_tag] = rhs_micro_op
+# 
+# 
+# 
+# 
+# 
+#     # Take any overlapping getter/setter types (typically get X, set Any) and transform so that they
+#     # are compatible (typically get X, set X)
+#     for tag, micro_op in result.micro_op_types.items():
+#         getter = None
+#         if hasattr(micro_op, "value_type") and isinstance(micro_op.value_type, (AnyType, InferredType)):
+#             if tag[0] == "set":
+#                 getter = result.get_micro_op_type(("get", tag[1]))
+#             if tag[0] == "set-wildcard":
+#                 getter = result.get_micro_op_type(("get-wildcard", ))
+#         if getter:
+#             if micro_op.value_type is not getter.value_type:
+#                 result.micro_op_types[tag] = micro_op.clone(value_type=getter.value_type)
+#                 something_changed = True
+# 
+# #     # Add error codes to get-wildcard and set-wildcard if there are any getters or setters
+# #     setter_or_getter_found = any([ t[0] in ("get", "set") for t in result.micro_op_types.keys() ])
+# #     if setter_or_getter_found:
+# #         wildcard_getter = result.get_micro_op_type(("get-wildcard", ))
+# #         if wildcard_getter:
+# #             result.micro_op_types[("get-wildcard", )] = wildcard_getter.clone(key_error=True)
+# #         wildcard_setter = result.get_micro_op_type(("set-wildcard", ))
+# #         if wildcard_setter:
+# #             result.micro_op_types[("set-wildcard", )] = wildcard_setter.clone(key_error=True, type_error=True)
+# 
+#     # Replace set.x.Any + get.x.T with set.x.T + get.x.T
+#     for tag, micro_op in result.micro_op_types.items():
+#         if hasattr(micro_op, "value_type"):
+#             guide_micro_op_type = None
+# 
+#             if isinstance(rhs_type, CompositeType):
+#                 guide_op = rhs_type.get_micro_op_type(tag)
+# 
+#                 if hasattr(guide_op, "value_type") and isinstance(guide_op.value_type, AnyType):
+#                     if tag[0] == "set":
+#                         guide_op = rhs_type.get_micro_op_type(( "get", tag[1] ))
+#                     if tag[0] == "set-wildcard":
+#                         guide_op = rhs_type.get_micro_op_type(( "get-wildcard" ))
+# 
+#                 if hasattr(guide_op, "value_type"):
+#                     guide_micro_op_type = guide_op.value_type
+# 
+#             new_value_type = prepare_lhs_type(micro_op.value_type, guide_micro_op_type, results_cache)
+# 
+#             if micro_op.value_type is not new_value_type:
+#                 result.micro_op_types[tag] = micro_op.clone(
+#                     value_type=prepare_lhs_type(micro_op.value_type, guide_micro_op_type, results_cache)
+#                 )
+#                 something_changed = True
+# 
+#     right_shifts = []
+#     left_shifts = []
+# 
+#     for tag, micro_op in result.micro_op_types.items():
+#         if tag[0] == "insert-start":
+#             right_shifts.append((0, micro_op.value_type))
+#         if tag[0] == "insert-wildcard":
+#             right_shifts.append((0, micro_op.value_type))
+# 
+#         if tag[0] == "delete-wildcard":
+#             left_shifts.append(0)
+# 
+#     positional_getter_micro_ops = sorted(
+#         [m for t, m in result.micro_op_types.items() if t[0] == "get" and len(t) == 2 and isinstance(t[1], int)],
+#         key=lambda m: m.key
+#     )
+# 
+#     for starting_index, starting_type in right_shifts:
+#         cumulative_types = [ starting_type ]
+#         for getter_micro_op in positional_getter_micro_ops:
+#             if getter_micro_op.key >= starting_index:
+#                 cumulative_types = cumulative_types + [ getter_micro_op.value_type ]
+#                 result.micro_op_types[("get", getter_micro_op.key)] = getter_micro_op.clone(
+#                     value_type=merge_types(cumulative_types, "super")
+#                 )
+#                 something_changed = True
+# 
+#     positional_getter_micro_ops = sorted(
+#         [m for t, m in result.micro_op_types.items() if t[0] == "get" and len(t) == 2 and isinstance(t[1], int)],
+#         key=lambda m: m.key
+#     )
+# 
+#     for starting_index in left_shifts:
+#         cumulative_types = []
+#         for getter_micro_op in reversed(positional_getter_micro_ops):
+#             if getter_micro_op.key >= starting_index:
+#                 cumulative_types.append(getter_micro_op.value_type)
+#                 result.micro_op_types[("get", getter_micro_op.key)] = getter_micro_op.clone(
+#                     value_type=merge_types(cumulative_types, "super"),
+#                     key_error=True
+#                 )
+#                 something_changed = True
+# 
+#     if not something_changed:
+#         result.micro_op_types = composite_lhs_type.micro_op_types
+# 
+#     return result
 
 def add_composite_type(target_manager, new_type, reasoner=None, key_filter=None, multiplier=1):
     """
@@ -580,6 +705,7 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
 
             for key, micro_op in sub_type.micro_op_types.items():
                 if not micro_op.is_bindable_to(sub_type, target):
+                    child_reasoner.push_micro_op_not_bindable_to(micro_op, sub_type, target)
                     micro_ops_checks_worked = False
                     break
 
@@ -612,7 +738,7 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
         types_to_bind.update(extra_types_to_bind)
     if not atleast_one_sub_type_worked:
         cache[result_key] = False
-        reasoner.attach_child_reasoners(child_reasoners)
+        reasoner.attach_child_reasoners(child_reasoners, source_micro_op, new_type, target)
 
     return atleast_one_sub_type_worked
 
