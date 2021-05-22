@@ -627,7 +627,7 @@ class InsertStartMicroOpType(MicroOpType):
 
         # Check that future left shifts are safe
         for getter in our_type.micro_op_types.values():
-            if isinstance(getter, GetterMicroOpType):
+            if isinstance(getter, GetterMicroOpType) and isinstance(getter.key, int):
                 for i in range(getter.key, target._length):
                     if not getter.would_be_bindable_to(manager, i):
                         return False
@@ -1023,7 +1023,7 @@ class RemoverWildcardMicroOpType(MicroOpType):
 
         # Check that future right shifts are safe
         for getter in our_type.micro_op_types.values():
-            if isinstance(getter, GetterMicroOpType):
+            if isinstance(getter, GetterMicroOpType) and isinstance(getter.key, int):
                 for i in range(getter.key, target._length):
                     if not getter.would_be_bindable_to(manager, i):
                         return False
@@ -1104,7 +1104,7 @@ class InserterWildcardMicroOpType(MicroOpType):
 
         # Check that future right shifts are safe
         for getter in our_type.micro_op_types.values():
-            if isinstance(getter, GetterMicroOpType):
+            if isinstance(getter, GetterMicroOpType) and isinstance(getter.key, int):
                 for i in range(0, getter.key):
                     if not getter.would_be_bindable_to(manager, i):
                         return False

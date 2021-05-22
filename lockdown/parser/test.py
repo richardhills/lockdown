@@ -794,12 +794,12 @@ class TestEuler(TestCase):
                     return calcedResult;
                 };
 
-                Tuple<int...> results = for(var test in <list(range(1, 200))>) { continue testNumber(test); };
+                Tuple<int...> results = for(var test in <list(range(1, 10))>) { continue testNumber(test); };
                 return max(|results|);
             }
         """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True, print_ast=True)
-        self.assertEquals(result.value, 125)
+        self.assertEquals(result.value, 19)
 
 
 class TestTranspilation(TestCase):

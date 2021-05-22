@@ -9,6 +9,7 @@ from lockdown.type_system.composites import is_type_bindable_to_value, \
 from lockdown.type_system.core_types import Type
 from lockdown.type_system.exceptions import FatalError
 from lockdown.utils import MISSING, InternalMarker, is_debug
+from lockdown.type_system.reasoner import DUMMY_REASONER
 
 
 class BreakException(Exception):
@@ -309,7 +310,7 @@ class Frame(object):
 
                 out_is_compatible = does_value_fit_through_type(exc_value.value, allowed_out)
                 in_is_compatible = allowed_in is None or (
-                    exc_value.restart_type is not None and exc_value.restart_type.is_copyable_from(allowed_in)
+                    exc_value.restart_type is not None and exc_value.restart_type.is_copyable_from(allowed_in, DUMMY_REASONER)
                 )
 
                 if not out_is_compatible:
