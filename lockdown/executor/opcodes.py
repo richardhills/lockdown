@@ -25,7 +25,7 @@ from lockdown.type_system.universal_type import UniversalObjectType, \
     SetterWildcardMicroOpType, PythonDict, UniversalDictType, \
     InsertStartMicroOpType, InsertEndMicroOpType, DeletterWildcardMicroOpType, \
     IterMicroOpType, RemoverWildcardMicroOpType, InserterWildcardMicroOpType, \
-    UniversalTupleType, Universal
+    UniversalTupleType, Universal, SPARSE_ELEMENT
 from lockdown.utils import MISSING, NO_VALUE, is_debug, \
     runtime_type_information, InternalMarker
 from log import logger
@@ -306,7 +306,7 @@ class TemplateOp(Opcode):
 
             return frame.value(
                 Universal(
-                    False,
+                    True,
                     initial_wrapped=result,
                     initial_length=initial_length,
                     debug_reason="object-template"
@@ -547,6 +547,8 @@ class DereferenceOp(Opcode):
                             self.wildcard_micro_op = of_type.get_micro_op_type(("get-wildcard",))
                             if not self.wildcard_micro_op or self.wildcard_micro_op.key_error or self.wildcard_micro_op.type_error:
                                 invalid_unknown_dereference = True
+                            if self.wildcard_micro_op:
+                                break_types.add("value", self.wildcard_micro_op.value_type)
                     else:
                         for reference in possible_references:
                             if not isinstance(of_type, CompositeType):
@@ -572,7 +574,7 @@ class DereferenceOp(Opcode):
         exception_break_mode = "exception" if self.safe else "value"
         for invalid_dereference in invalid_dereferences:
             break_types.add(exception_break_mode, self.INVALID_DEREFERENCE.get_type(
-                message="DereferenceOp: invalid_dereference {}".format(invalid_dereference)
+                message="DereferenceOp: invalid_dereference".format(invalid_dereference)
             ), opcode=self)
         if invalid_unknown_dereference:
             break_types.add(exception_break_mode, self.INVALID_DEREFERENCE.get_type(), opcode=self)
@@ -608,17 +610,24 @@ class DereferenceOp(Opcode):
                 if not micro_op_type:                    
                     return frame.unwind(exception_break_mode, self.INVALID_DEREFERENCE(reference=reference), None, None)
 
+                result = None
+
                 if direct:
-                    return frame.value(micro_op_type.invoke(manager, shortcut_checks=True))
+                    result = micro_op_type.invoke(manager, shortcut_checks=True)
                 else:
-                    return frame.value(micro_op_type.invoke(manager, reference, shortcut_checks=True))
+                    result = micro_op_type.invoke(manager, reference, shortcut_checks=True)
+
+                if result is SPARSE_ELEMENT:
+                    return frame.unwind(exception_break_mode, self.INVALID_DEREFERENCE(reference=reference), None, None)
+
+                return frame.value(result)
             except InvalidDereferenceType:
                 return frame.unwind(exception_break_mode, self.INVALID_DEREFERENCE(
-                    message="DereferenceOp: invalid_dereference {}".format(reference)
+                    message="DereferenceOp: invalid_dereference"
                 ), None, None)
             except InvalidDereferenceKey:
                 return frame.unwind(exception_break_mode, self.INVALID_DEREFERENCE(
-                    message="DereferenceOp: invalid_dereference {}".format(reference)
+                    message="DereferenceOp: invalid_dereference"
                 ), None, None)
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
@@ -933,13 +942,15 @@ class InsertOp(Opcode):
 
 
 class MapOp(Opcode):
-    MISSING_COMPOSITE_TYPE = TypeErrorFactory("{}: missing_integers")
+    MISSING_COMPOSITE_TYPE = TypeErrorFactory("{}: missing_composite_type")
+    MISSING_ITER = TypeErrorFactory("{}: missing_iter")
     MISSING_MAPPER_FUNCTION = TypeErrorFactory("{}: missing_mapper_function")
 
     def __init__(self, data, visitor):
         super(MapOp, self).__init__(data, visitor)
         self.composite = enrich_opcode(data.composite, visitor)
         self.mapper = enrich_opcode(data.mapper, visitor)
+        self.iter_micro_op = None
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
@@ -950,64 +961,64 @@ class MapOp(Opcode):
         break_types.merge(composite_other_break_types)
 
         if composite_type and isinstance(composite_type, CompositeType):
+            self.iter_micro_op = composite_type.get_micro_op_type(("iter", ))
+
+        if self.iter_micro_op:
             immediate_context = immediate_context or {}
-
-            getter_value_types = [micro_op.value_type for key, micro_op in composite_type.micro_op_types.items() if key[0] == "get"]
-            wildcard_getter = composite_type.get_micro_op_type(("get-wildcard",))
-            if wildcard_getter:
-                getter_value_types.append(wildcard_getter.value_type)
-
-            immediate_context["suggested_argument_type"] = merge_types(getter_value_types, "sub")
+            immediate_context["suggested_argument_type"] = self.iter_micro_op.value_type
 
         mapper_type, mapper_other_break_types = get_expression_break_types(self.mapper, context, frame_manager, immediate_context)
-        break_types.merge(mapper_other_break_types)
         if mapper_type is not MISSING:
             mapper_type = flatten_out_types(mapper_type)
+        break_types.merge(mapper_other_break_types)
 
         if not isinstance(composite_type, CompositeType):
             break_types.add("exception", self.MISSING_COMPOSITE_TYPE.get_type(), opcode=self)
+        if not self.iter_micro_op:
+            break_types.add("exception", self.MISSING_ITER.get_type(), opcode=self)
         if not isinstance(mapper_type, ClosedFunctionType):
-            break_types.add("exception", self.MISSING_mapper.get_type(), opcode=self)
+            break_types.add("exception", self.MISSING_MAPPER_FUNCTION.get_type(), opcode=self)
 
-        if composite_type is not MISSING and mapper_type is not MISSING:
-            if isinstance(composite_type, CompositeType) and isinstance(mapper_type, ClosedFunctionType):
-                mapper_break_types = dict(mapper_type.break_types)
+        # Be more liberal: mapper_type might be a OneOfType that includes ClosedFunctionType
+        if self.iter_micro_op is not None and isinstance(mapper_type, ClosedFunctionType):
+            mapper_break_types = dict(mapper_type.break_types)
 
-                break_value_type = mapper_break_types.pop("break", MISSING)
-                if break_value_type is not MISSING:
-                    break_types.add("value", break_value_type)
+            break_value_type = mapper_break_types.pop("break", MISSING)
+            if break_value_type is not MISSING:
+                break_types.add("value", break_value_type)
 
-                mapper_continue_type = mapper_break_types.pop("continue", MISSING)
+            mapper_continue_type = mapper_break_types.pop("continue", MISSING)
+            if mapper_continue_type is not MISSING:
+                mapper_continue_type = flatten_out_types(mapper_continue_type)
 
-                ends = mapper_break_types.pop("end", MISSING) is not MISSING
-                skips = mapper_break_types.pop("value", MISSING) is not MISSING
+            ends = mapper_break_types.pop("end", MISSING) is not MISSING
+            skips = mapper_break_types.pop("value", MISSING) is not MISSING
 
-                if mapper_continue_type is not MISSING:
-                    mapper_continue_type = flatten_out_types(mapper_continue_type)
-                    micro_ops = {}
+            every_input_key_is_in_output = not ends and not skips
 
-                    keys = [getattr(micro_op, "key", None) for micro_op in composite_type.micro_op_types.values()]
-                    integer_keys = [k for k in keys if isinstance(k, int)]
+            micro_ops = {}
 
-                    if not ends and not skips:
-                        for index in integer_keys:
-                            micro_ops[("get", index)] = GetterMicroOpType(index, mapper_continue_type)
-                            micro_ops[("set", index)] = GetterMicroOpType(index, AnyType())
+            keys = [ getattr(micro_op, "key", None) for micro_op in composite_type.micro_op_types.values() ]
+            integer_keys = [ k for k in keys if isinstance(k, int) ]
 
-                    micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(IntegerType(), mapper_continue_type, True)
-                    micro_ops[("iter",)] = IterMicroOpType(mapper_continue_type)
+            if every_input_key_is_in_output:
+                for index in integer_keys:
+                    micro_ops[("get", index)] = GetterMicroOpType(index, mapper_continue_type)
+                    micro_ops[("set", index)] = GetterMicroOpType(index, AnyType())
 
-                    micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(IntegerType(), AnyType(), True, False)
-                    micro_ops[("remove-wildcard",)] = RemoverWildcardMicroOpType(True, False)
-                    micro_ops[("insert-wildcard",)] = InserterWildcardMicroOpType(AnyType(), True, False)
-                    micro_ops[("insert-start",)] = InsertStartMicroOpType(AnyType(), False)
-                    micro_ops[("insert-end",)] = InsertEndMicroOpType(AnyType(), False)
-                    micro_ops[("delete-wildcard",)] = DeletterWildcardMicroOpType(IntegerType(), True)
+            if mapper_continue_type is not MISSING:
+                micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(IntegerType(), mapper_continue_type, True)
+                micro_ops[("iter",)] = IterMicroOpType(mapper_continue_type)
 
-                    result = CompositeType(micro_ops, name="MapOp")
-                    break_types.add("value", result)
+            micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(IntegerType(), AnyType(), True, False)
+            micro_ops[("remove-wildcard",)] = RemoverWildcardMicroOpType(True, False)
+            micro_ops[("insert-wildcard",)] = InserterWildcardMicroOpType(AnyType(), True, False)
+            micro_ops[("insert-start",)] = InsertStartMicroOpType(AnyType(), False)
+            micro_ops[("insert-end",)] = InsertEndMicroOpType(AnyType(), False)
+            micro_ops[("delete-wildcard",)] = DeletterWildcardMicroOpType(IntegerType(), True)
 
-                break_types.merge(mapper_break_types)
+            result = CompositeType(micro_ops, name="MapOp")
+            break_types.add("value", result)
 
         return break_types.build()
 
@@ -1016,13 +1027,13 @@ class MapOp(Opcode):
             composite = frame.step("composite", lambda: evaluate(self.composite, context, frame_manager))
             mapper = frame.step("mapper", lambda: evaluate(self.mapper, context, frame_manager))
 
-            if not isinstance(composite, PythonList):
-                raise FatalError()  # Be more liberal
-
             with frame_manager.get_next_frame(self) as frame:
                 with frame_manager.capture("break") as breaker:
                     results = []
-                    for v in composite:
+
+                    composite_manager = get_manager(composite)
+
+                    for v in self.iter_micro_op.invoke(composite_manager):
                         with frame_manager.capture("end") as ender:
                             with frame_manager.capture("continue") as capturer:
                                 mapper.invoke(v, frame_manager)
@@ -1468,6 +1479,8 @@ while(True):
 
 
 class ConditionalOp(Opcode):
+    INVALID_CONDITIONAL = TypeErrorFactory("ConditionalOp: invalid_conditional")
+
     def __init__(self, data, visitor):
         super(ConditionalOp, self).__init__(data, visitor)
         self.condition = enrich_opcode(data.condition, visitor)
@@ -1481,10 +1494,6 @@ class ConditionalOp(Opcode):
         when_true_type, when_true_break_types = get_expression_break_types(self.when_true, context, frame_manager)
         when_false_type, when_false_break_types = get_expression_break_types(self.when_false, context, frame_manager)
 
-        if BooleanType().is_copyable_from(condition_type, DUMMY_REASONER):
-            # TODO be more liberal
-            raise FatalError()
-
         # TODO throw away one branch if condition_type can't be true or false
         break_types.merge(condition_break_types)
         break_types.merge(when_true_break_types)
@@ -1492,12 +1501,17 @@ class ConditionalOp(Opcode):
 
         if condition_type is not MISSING:
             condition_type = flatten_out_types(condition_type)
-            if when_true_type is not MISSING:
-                when_true_type = flatten_out_types(when_true_type)
-                break_types.add("value", when_true_type)
-            if when_false_type is not MISSING:
-                when_false_type = flatten_out_types(when_false_type)
-                break_types.add("value", when_false_type)
+            if condition_type.is_copyable_from(UnitType(True), DUMMY_REASONER):
+                if when_true_type is not MISSING:
+                    when_true_type = flatten_out_types(when_true_type)
+                    break_types.add("value", when_true_type)
+            if condition_type.is_copyable_from(UnitType(False), DUMMY_REASONER):
+                if when_false_type is not MISSING:
+                    when_false_type = flatten_out_types(when_false_type)
+                    break_types.add("value", when_false_type)
+
+            if not condition_type.is_copyable_from(UnitType(True), DUMMY_REASONER) and not condition_type.is_copyable_from(UnitType(False), DUMMY_REASONER):
+                break_types.add("exception", self.INVALID_CONDITIONAL.get_type())
 
         return break_types.build()
 
@@ -1510,8 +1524,7 @@ class ConditionalOp(Opcode):
             elif condition is False:
                 result = frame.step("false_result", lambda: evaluate(self.when_false, context, frame_manager))
             else:
-                # be more liberal
-                raise FatalError()
+                frame.exception(self.INVALID_CONDITIONAL())
 
             return frame.value(result)
 
@@ -1648,14 +1661,15 @@ def create_readonly_static_type(value):
     if isinstance(value, Composite):
         # Only do ListTypes atm since that is what is needed for unit tests, but can be expanded...
         result = CompositeType({}, name="reasonable list type")
-        if isinstance(value, PythonList):
+        if isinstance(value, Universal):
             types_of_values = [ create_readonly_static_type(v) for v in value._values() ]
             merged_types = merge_types(types_of_values, "exact")
 
             for key, type_of_value in zip(value._keys(), types_of_values):
                 result.micro_op_types[("get", key)] = GetterMicroOpType(key, type_of_value)
 
-            result.micro_op_types[("get-wildcard",)] = GetterWildcardMicroOpType(StringType(), merged_types, True)
+            result.micro_op_types[("get-wildcard",)] = GetterWildcardMicroOpType(IntegerType(), merged_types, True)
+            result.micro_op_types[("iter",)] = IterMicroOpType(merged_types)
         return result
     else:
         return get_type_of_value(value)

@@ -2,7 +2,6 @@
 from __future__ import unicode_literals
 
 from UserDict import DictMixin
-
 from _abcoll import MutableSequence
 
 from lockdown.type_system.composites import Composite, CompositeType, \
@@ -15,11 +14,11 @@ from lockdown.type_system.exceptions import FatalError, MissingMicroOp, \
     raise_if_safe
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.micro_ops import MicroOpType
-from lockdown.utils import MISSING, default, micro_op_repr
 from lockdown.type_system.reasoner import DUMMY_REASONER
+from lockdown.utils import MISSING, default, micro_op_repr, InternalMarker
 
 
-SPARSE_ELEMENT = object()
+SPARSE_ELEMENT = InternalMarker("SPARSE_ELEMENT")
 
 
 class Universal(Composite):
@@ -474,10 +473,17 @@ class GetterMicroOpType(MicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         if key_filter is None or key_filter == self.key:
             if substitute_value is not MISSING:
-                return ([ substitute_value ], self.value_type)
-            if target._contains(self.key):
-                return ([ target._get(self.key) ], self.value_type)
-        return ([], None)
+                values = [ substitute_value ]
+            elif target._contains(self.key):
+                values = [ target._get(self.key) ]
+            else:
+                values = []
+        else:
+            values = []
+
+        values = ( v for v in values if v is not SPARSE_ELEMENT )
+
+        return ( values, self.value_type )
 
     def merge(self, other_micro_op_type):
         return GetterMicroOpType(
@@ -802,11 +808,17 @@ class GetterWildcardMicroOpType(MicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         if key_filter is not None:
             if substitute_value is not MISSING:
-                return ([ substitute_value ], self.value_type)
-            if target._contains(key_filter):
-                return ([ target._get(key_filter) ], self.value_type)
-            return ([], None)
-        return (target._values(), self.value_type)
+                values = [ substitute_value ]
+            elif target._contains(key_filter):
+                values = [ target._get(key_filter) ]
+            else:
+                values = []
+        else:
+            values = target._values()
+
+        values = ( v for v in values if v is not SPARSE_ELEMENT )
+
+        return ( values, self.value_type )
 
     def merge(self, other_micro_op_type):
         return GetterWildcardMicroOpType(
@@ -1141,7 +1153,7 @@ class IterMicroOpType(MicroOpType):
     def __init__(self, value_type):
         self.value_type = value_type
 
-    def invoke(self, target_manager, key, new_value, *args, **kwargs):
+    def invoke(self, target_manager, *args, **kwargs):
         try:
             obj = target_manager.get_obj()
             for v in obj._values():
@@ -1195,11 +1207,17 @@ class IterMicroOpType(MicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         if key_filter is not None:
             if substitute_value is not MISSING:
-                return ([ substitute_value ], self.value_type)
-            if target._contains(key_filter):
-                return ([ target._get(key_filter) ], self.value_type)
-            return ([], None)
-        return (target._values(), self.value_type)
+                values = [ substitute_value ]
+            elif target._contains(key_filter):
+                values = [ target._get(key_filter) ]
+            else:
+                values = []
+        else:
+            values = target._values()
+
+        values = ( v for v in values if v is not SPARSE_ELEMENT )
+
+        return ( values, self.value_type )
 
     def merge(self, other_micro_op_type):
         return IterMicroOpType(

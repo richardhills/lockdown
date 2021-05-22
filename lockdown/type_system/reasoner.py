@@ -19,7 +19,12 @@ class Reasoner(object):
     def push_inconsistent_type(self, type):
         self.stack.insert(0, ("inconsistent", type))
 
+    def push_target_should_be_composite(self, source_type, target):
+        self.stack.insert(0, ("target-should-be-composite", source_type, target))
+
     def attach_child_reasoners(self, reasoners, source_micro_op, type, target):
+        if len(reasoners) == 0:
+            raise FatalError()
         self.stack.insert(0, ("child-reasoners", reasoners, source_micro_op, type, target))
 
     def __repr__(self):

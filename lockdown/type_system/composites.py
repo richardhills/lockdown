@@ -276,7 +276,7 @@ def check_dangling_inferred_types(type, results):
     results[id(type)] = True
 
     for tag, micro_op_type in type.micro_op_types.items():
-        if tag[0] in ("get-inferred-key", "set-inferred-key"):
+        if tag[0] == "infer-remainder":
             return False
         if hasattr(micro_op_type, "value_type"):
             if not check_dangling_inferred_types(micro_op_type.value_type, results):
@@ -302,26 +302,17 @@ def replace_inferred_types(lhs_type, rhs_type, results):
 
     results[result_key] = finished_type
 
-    infer_gets = lhs_type.get_micro_op_type(("get-inferred-key", )) is not None
-    infer_sets = lhs_type.get_micro_op_type(("set-inferred-key", )) is not None
+    infer_remainder = ("infer-remainder", ) in lhs_type.micro_op_types
 
-    if infer_gets or infer_sets:
-        for rhs_tag, rhs_micro_op in rhs_type.micro_op_types.items():
-            if infer_gets and rhs_tag[0] == "get":
-                new_tag = ( "get", rhs_tag[1] )
-                if new_tag not in finished_type.micro_op_types:
-                    finished_type.micro_op_types[( "get", rhs_tag[1] )] = rhs_micro_op
-            if infer_sets and rhs_tag[0] == "set":
-                new_tag = ( "set", rhs_tag[1] )
-                if new_tag not in finished_type.micro_op_types:
-                    finished_type.micro_op_types[( "set", rhs_tag[1] )] = rhs_micro_op
+    if infer_remainder:
+        if isinstance(rhs_type, CompositeType):
+            for rhs_tag, rhs_micro_op in rhs_type.micro_op_types.items():
+                if rhs_tag not in finished_type.micro_op_types:
+                    finished_type.micro_op_types[rhs_tag] = rhs_micro_op
 
-    finished_type.micro_op_types.pop(( "get-inferred-key", ), None)
-    finished_type.micro_op_types.pop(( "set-inferred-key", ), None)
+            finished_type.micro_op_types.pop(( "infer-remainder", ), None)
 
     for tag, lhs_micro_op in lhs_type.micro_op_types.items():
-        if tag[0] == "get" and tag[1] == "_temp":
-            pass
         if hasattr(lhs_micro_op, "value_type"):
             rhs_value_type = None
 
@@ -726,6 +717,9 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
                 if key_filter is None and build_binding_map:
                     extra_types_to_bind[result_key] = (source_micro_op, sub_type, target)
                 atleast_one_sub_type_worked = True
+
+        if isinstance(sub_type, CompositeType) and not target_is_composite:
+            child_reasoner.push_target_should_be_composite(sub_type, target)
 
         if isinstance(sub_type, AnyType):
             atleast_one_sub_type_worked = True

@@ -109,24 +109,27 @@ def get_default_global_context():
                     infer_all(),
                     inferred_type(),
                     dereference("argument.0"),
-                    map_op(
-                        dereference("argument"),
-                        prepared_function(
-                            int_type(),
-                            condition_op(
-                                binary_integer_op(
-                                    "gt",
-                                    dereference("argument"),
-                                    dereference("outer.local")
-                                ),
-                                assignment_op(
-                                    dereference("outer"),
-                                    literal_op("local"),
-                                    dereference("argument")
-                                ),
-                                nop()
+                    comma_op(
+                        map_op(
+                            dereference("argument"),
+                            prepared_function(
+                                int_type(),
+                                condition_op(
+                                    binary_integer_op(
+                                        "gt",
+                                        dereference("argument"),
+                                        dereference("outer.local")
+                                    ),
+                                    assignment_op(
+                                        dereference("outer"),
+                                        literal_op("local"),
+                                        dereference("argument")
+                                    ),
+                                    nop()
+                                )
                             )
-                        )
+                        ),
+                        dereference("local")
                     )
                 ),
                 None, FrameManager()

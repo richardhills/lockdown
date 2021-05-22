@@ -15,9 +15,10 @@ parser.add_argument('-p', help='cProfile mode')
 args, unknown_args = parser.parse_known_args()
 sys.argv[1:] = unknown_args
 
-
 set_debug(args.d)
 set_runtime_type_information(args.t)
+
+sys.setrecursionlimit(10000)
 
 if __name__ == "__main__":
     from lockdown.executor import test as executor_tests

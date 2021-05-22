@@ -129,12 +129,9 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
     get_manager(context).remove_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
 
     if actual_local_type is MISSING:
-        raise PreparationException("Actual local type missing")
+        raise PreparationException("Actual local type missing. local_other_break_types: {}".format(local_other_break_types))
 
     actual_local_type = flatten_out_types(actual_local_type)
-
-    if isinstance(actual_local_type, CompositeType) and actual_local_type.get_micro_op_type(("get", "callback")):
-        pass
 
     local_type = prepare_piece_of_context(local_type, actual_local_type)
 
@@ -306,8 +303,6 @@ class UnboundDereferenceBinder(object):
 
         if getattr(expression, "opcode", None) == "unbound_dereference":
             reference = expression.reference
-            if reference == "cachedResults":
-                pass
             bound_countext_op, is_static = self.search_for_reference(reference, debug_info)
 
             if bound_countext_op:
@@ -336,8 +331,6 @@ class UnboundDereferenceBinder(object):
 
 
 def type_conditional_converter(expression):
-    if not hasattr(expression, "opcode"):
-        pass
     is_conditional = expression.opcode == "conditional"
     if not is_conditional:
         return expression

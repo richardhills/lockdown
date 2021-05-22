@@ -788,17 +788,18 @@ class TestEuler(TestCase):
                     if(cachedResult is int) {
                         return argument;
                     };
-                    int calcedResult = testNumber(number % 2 ? number / 2 : number * 3 + 1) + 1;
+
+                    int calcedResult = testNumber(number % 2 == 0 ? number / 2 : number * 3 + 1) + 1;
                     cachedResults[number] = calcedResult;
                     return calcedResult;
                 };
 
-                Tuple<int...> results = for(var test in <list(range(1, 10))>) { continue testNumber(test); };
+                Tuple<int...> results = for(var test in <list(range(1, 200))>) { continue testNumber(test); };
                 return max(|results|);
             }
         """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True, print_ast=True)
-        self.assertEquals(result.value, 837799)
+        self.assertEquals(result.value, 125)
 
 
 class TestTranspilation(TestCase):

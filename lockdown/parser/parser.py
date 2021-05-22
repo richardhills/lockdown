@@ -621,11 +621,7 @@ class RDHLang5Visitor(langVisitor):
 
         if inferred_splat_type:
             micro_ops.append(object_template_op({
-                "type": literal_op("get-inferred-key"),
-                "params": list_template_op([])
-            }))
-            micro_ops.append(object_template_op({
-                "type": literal_op("set-inferred-key"),
+                "type": literal_op("infer-remainder"),
                 "params": list_template_op([])
             }))
 

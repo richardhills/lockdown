@@ -106,8 +106,7 @@ MICRO_OP_FACTORIES = {
     "remove-wildcard": lambda ke, te: RemoverWildcardMicroOpType(ke, te),
     "insert-wildcard": lambda vt, ke, te: InserterWildcardMicroOpType(enrich_type(vt), ke, te),
     "iter": lambda vt: IterMicroOpType(enrich_type(vt)),
-    "get-inferred-key": lambda *args: None,
-    "set-inferred-key": lambda *args: None,
+    "infer-remainder": lambda *args: None
 }
 
 def build_universal_type(data):    
