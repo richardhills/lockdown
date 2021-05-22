@@ -15,7 +15,8 @@ from lockdown.executor.function_type import enrich_break_type, OpenFunctionType,
 from lockdown.executor.opcodes import enrich_opcode, get_context_type, evaluate, \
     get_expression_break_types, flatten_out_types, TransformOp
 from lockdown.executor.raw_code_factories import dynamic_dereference_op, \
-    static_op, match_op, prepared_function, inferred_type
+    static_op, match_op, prepared_function, inferred_type, invoke_op,\
+    object_template_op, object_type, dereference
 from lockdown.executor.type_factories import enrich_type
 from lockdown.type_system.composites import prepare_lhs_type, \
     check_dangling_inferred_types, CompositeType, InferredType, \
@@ -337,12 +338,27 @@ def type_conditional_converter(expression):
     condition_is_type_check = expression.condition.opcode == "is"
     if not condition_is_type_check:
         return expression
+    lvalue_of_condition_is_dereference = expression.condition.expression.opcode == "unbound_dereference"
+    if not lvalue_of_condition_is_dereference:
+        return expression
+
+    shadow_name = expression.condition.expression.reference
 
     new_match = match_op(
         expression.condition.expression, [
             prepared_function(
                 expression.condition.type,
-                expression.when_true
+                invoke_op(
+                    prepared_function(
+                        object_type({
+                            shadow_name: expression.condition.type
+                        }),
+                        expression.when_true
+                    ),
+                    argument_expression=object_template_op({
+                        shadow_name: dereference("argument")
+                    })
+                )
             ),
             prepared_function(
                 inferred_type(),

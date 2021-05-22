@@ -1808,7 +1808,7 @@ class MatchOp(Opcode):
         self.matchers = [ enrich_opcode(m, visitor) for m in data.matchers ]
 
         if not runtime_type_information():
-            raise FatalError()
+            raise FatalError("RTTI is required for MatchOp")
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)

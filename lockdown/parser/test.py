@@ -572,6 +572,63 @@ class TestLoops(TestCase):
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 1 + 2 + 3 + 4)
 
+class TestMatch(TestCase):
+    def test_basic_is(self):
+        code = parse("""
+            function() => any {
+                var i = 5;
+                if(i is int) {
+                    return i;
+                };
+                return 10;
+            }
+        """)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEquals(result.value, 5)
+
+    def test_basic_is2(self):
+        code = parse("""
+            function() => any {
+                var i = 5;
+                if(i is string) {
+                    return i;
+                };
+                return 10;
+            }
+        """)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEquals(result.value, 10)
+
+    def test_basic_is3(self):
+        code = parse("""
+            function() => int {
+                any i = 5;
+                if(i is int) {
+                    return i;
+                };
+                return 10;
+            }
+        """)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEquals(result.value, 5)
+
+    def test_basic_is4(self):
+        code = parse("""
+            function() => int {
+                any i = 5;
+                if(i is int) {
+                    return i + 4;
+                };
+                return 10;
+            }
+        """)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEquals(result.value, 9)
+
 class TestParserMisc(TestCase):
     def test_invalid_list_assignment(self):
         code = parse("""
@@ -786,7 +843,7 @@ class TestEuler(TestCase):
                     var cachedResult = cachedResults[number]?;
 
                     if(cachedResult is int) {
-                        return argument;
+                        return cachedResult;
                     };
 
                     int calcedResult = testNumber(number % 2 == 0 ? number / 2 : number * 3 + 1) + 1;

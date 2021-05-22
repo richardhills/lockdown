@@ -36,6 +36,9 @@ def get_default_global_context():
             "int": PythonObject({
                 "type": "Integer"
             }, debug_reason="default-global-context"),
+            "string": PythonObject({
+                "type": "String"
+            }, debug_reason="default-global-context"),
             "void": PythonObject({
                 "type": "NoValue"
             }, debug_reason="default-global-context"),
