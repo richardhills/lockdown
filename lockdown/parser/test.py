@@ -799,7 +799,7 @@ class TestEuler(TestCase):
             }
         """, debug=True)
         result = bootstrap_function(code, check_safe_exit=True, print_ast=True)
-        self.assertEquals(result.value, 19)
+        self.assertEquals(result.value, 20)
 
 
 class TestTranspilation(TestCase):

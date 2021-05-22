@@ -1027,23 +1027,24 @@ class MapOp(Opcode):
             composite = frame.step("composite", lambda: evaluate(self.composite, context, frame_manager))
             mapper = frame.step("mapper", lambda: evaluate(self.mapper, context, frame_manager))
 
-            with frame_manager.get_next_frame(self) as frame:
-                with frame_manager.capture("break") as breaker:
-                    results = []
+            with frame_manager.capture("break") as breaker:
+                results = frame.step("results", lambda: [])
 
-                    composite_manager = get_manager(composite)
+                composite_manager = get_manager(composite)
 
-                    for v in self.iter_micro_op.invoke(composite_manager):
-                        with frame_manager.capture("end") as ender:
-                            with frame_manager.capture("continue") as capturer:
+                # TODO: Make restartable - can not yet be used in a continuation
+                for v in self.iter_micro_op.invoke(composite_manager):
+                    with frame_manager.capture("end") as ender:
+                        with frame_manager.capture("continue") as capturer:
+                            with frame_manager.capture("value"):
                                 mapper.invoke(v, frame_manager)
-                            if capturer.value is not MISSING:
-                                results.append(capturer.value)
-                        if ender.value is not MISSING:
-                            break
-                    return frame.value(PythonList(results))
-                if breaker.value is not MISSING:
-                    return frame.value(breaker.value)
+                        if capturer.value is not MISSING:
+                            results.append(capturer.value)
+                    if ender.value is not MISSING:
+                        break
+                return frame.value(PythonList(results))
+            if breaker.value is not MISSING:
+                return frame.value(breaker.value)
 
             raise FatalError()
 
