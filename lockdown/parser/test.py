@@ -872,6 +872,33 @@ class TestEuler(TestCase):
         result = bootstrap_function(code, check_safe_exit=True)
         self.assertEquals(result.value, 25164150)
 
+    def test_7(self):
+        code = parse("""
+            function() => int {
+                var isPrime = function(int number) => bool {
+                    for(var i from range(2, number / 2)) {
+                        if(number % i == 0) {
+                            return false;
+                        };
+                    };
+                    return true;
+                };
+
+                int count = 0, test = 3;
+                loop {
+                    if(isPrime(test)) {
+                        count = count + 1;
+                        if(count >= 20) {
+                            return test;
+                        };
+                    };
+                    test = test + 2;
+                };
+            }
+        """, debug=True)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertEquals(result.value, 73)
+
     def test_9(self):
         code = parse("""
              function() {
@@ -900,7 +927,7 @@ class TestEuler(TestCase):
 
     def test_14(self):
         code = parse("""
-            function() {
+            function() => int {
                 Dictionary<int : int> cachedResults = { 1: 1 };
 
                 Function<int => int> testNumber = function(int number) => int {

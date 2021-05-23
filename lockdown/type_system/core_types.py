@@ -105,9 +105,9 @@ class UnitType(Type):
 
     def __repr__(self):
         if isinstance(self.value, basestring):
-            return "<\"{}\">".format(self.value)
+            return "U<\"{}\">".format(self.value)
         else:
-            return "<{}>".format(self.value)
+            return "U<{}>".format(self.value)
 
 class StringType(Type):
     """

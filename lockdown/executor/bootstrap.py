@@ -36,6 +36,9 @@ def get_default_global_context():
             "int": PythonObject({
                 "type": "Integer"
             }, debug_reason="default-global-context"),
+            "bool": PythonObject({
+                "type": "Boolean"
+            }, debug_reason="default-global-context"),
             "string": PythonObject({
                 "type": "String"
             }, debug_reason="default-global-context"),
@@ -62,8 +65,8 @@ def get_default_global_context():
                         )
                     )
                 ),
-                None, FrameManager()
-            ).close(None),
+                NO_VALUE, FrameManager()
+            ).close(NO_VALUE),
             "list": prepare(
                 function_lit(
                     list_type([
@@ -104,8 +107,8 @@ def get_default_global_context():
                         )
                     )
                 ),
-                None, FrameManager()
-            ).close(None),
+                NO_VALUE, FrameManager()
+            ).close(NO_VALUE),
             "max": prepare(
                 function_lit(
                     list_type([ int_type() ], int_type()),
@@ -135,8 +138,8 @@ def get_default_global_context():
                         dereference("local")
                     )
                 ),
-                None, FrameManager()
-            ).close(None),
+                NO_VALUE, FrameManager()
+            ).close(NO_VALUE),
         }, debug_reason="default-global-context")
     }, bind=DEFAULT_READONLY_COMPOSITE_TYPE, debug_reason="default-global-context")
 

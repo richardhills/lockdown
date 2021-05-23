@@ -723,6 +723,8 @@ class AssignmentOp(Opcode):
         self.invalid_assignment_error = self.invalid_rvalue_error = self.invalid_lvalue_error = False
 
         if reference_types is not MISSING and of_types is not MISSING and rvalue_type is not MISSING:
+            break_types.add("value", NoValueType())
+
             for reference_type in unwrap_types(reference_types):
                 try:
                     possible_references = reference_type.get_all_permitted_values()
@@ -752,8 +754,6 @@ class AssignmentOp(Opcode):
 
                                 if micro_op.type_error or micro_op.key_error:
                                     self.invalid_assignment_error = True
-
-                                break_types.add("value", NoValueType())
                             else:
                                 self.invalid_lvalue_error = True
         else:
@@ -786,9 +786,11 @@ class AssignmentOp(Opcode):
                     return frame.exception(self.INVALID_RVALUE())
 
                 if direct:
-                    return frame.value(micro_op_type.invoke(manager, rvalue, shortcut_checks=True))
+                    micro_op_type.invoke(manager, rvalue, shortcut_checks=True)
                 else:
-                    return frame.value(micro_op_type.invoke(manager, reference, rvalue, shortcut_checks=True))
+                    micro_op_type.invoke(manager, reference, rvalue, shortcut_checks=True)
+
+                return frame.value(NO_VALUE)
             except InvalidAssignmentType:
                 return frame.exception(self.INVALID_ASSIGNMENT())
             except InvalidAssignmentKey:
@@ -1392,6 +1394,8 @@ class CommaOp(Opcode):
         with frame_manager.get_next_frame(self) as frame:
             for index, opcode in enumerate(self.opcodes):
                 value = frame.step(index, lambda: evaluate(opcode, context, frame_manager))
+                if value is None:
+                    pass
 
             return frame.value(value)
 
@@ -1433,14 +1437,18 @@ class LoopOp(Opcode):
         end_break = other_break_types.pop("end", MISSING)
         mode_break_type = other_break_types.pop("break", MISSING)
 
-        if end_break is not MISSING and continue_value_type is not MISSING:
+        if end_break is not MISSING:
+            # The loop might end gracefully
             if continue_value_type is not MISSING:
+                # The loop will generate continue values before ending
                 continue_value_type = flatten_out_types(continue_value_type)
                 break_types.add("value", UniversalListType(continue_value_type))
             else:
+                # The loop will not generate continue values before ending
                 break_types.add("value", UniversalTupleType([]))
 
         if mode_break_type is not MISSING:
+            # The loop might break out suddenly with a value
             mode_break_type = flatten_out_types(mode_break_type)
             break_types.add("value", mode_break_type)
 
@@ -1849,48 +1857,20 @@ class MatchOp(Opcode):
 
         raise FatalError()
 
-# class CasteOp(Opcode):
-#     CASTE_ERROR = TypeErrorFactory("Match: no_match")
-# 
-#     def __init__(self, data, visitor):
-#         self.value = enrich_opcode(data.value, visitor)
-#         self.type = enrich_opcode(data.type, visitor)
-# 
-#     def get_break_types(self, context, flow_manager):
-#         break_types = BreakTypesFactory(self)
-# 
-#         value_type, value_break_types = get_expression_break_types(self.value, context, flow_manager)
-#         type_data = evaluate(self.type, context, flow_manager)
-# 
-#         break_types.merge(value_break_types)
-# 
-#         if value_type is not MISSING:
-#             value_type = flatten_out_types(value_type)
-#             try:
-#                 caste_type = enrich_type(type_data)
-#             except PreparationException():
-#                 caste_type = None
-# 
-#             if not caste_type.is_copyable_from(value_type):
-#                 break_types.add("exception", self.CASTE_ERROR.get_type())
-# 
-#             if caste_type:
-#                 break_types.add("value", caste_type)
-# 
-#         return break_types.build()
-# 
-#     def jump(self, context, flow_manager):
-#         with flow_manager.get_next_frame() as frame:
-#             value = frame.step("value", lambda: evaluate(self.value, context, flow_manager))
-#             type = frame.step("type", lambda: evaluate(self.type, context, flow_manager))
-# 
-#         if not type.is_copyable_from(get_type_of_value(value)):
-#             flow_manager.exception(self.CASTE_ERROR())
-# 
-#         get_manager(value).add_composite_type(type)
-# 
-#         flow_manager.value(value)
+class PrintOp(Opcode):
+    def __init__(self, data, visitor):
+        super(PrintOp, self).__init__(data, visitor)
+        self.expression = enrich_opcode(data.expression, visitor)
 
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
+        break_types.add("value", NoValueType())
+        return break_types.build()
+
+    def jump(self, context, frame_manager, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
+            print evaluate(self.expression, context, frame_manager)
+            return frame.value(NO_VALUE)
 
 OPCODES = {
     "nop": Nop,
@@ -1955,7 +1935,8 @@ OPCODES = {
     "close": CloseOp,
     "static": StaticOp,
     "invoke": InvokeOp,
-    "match": MatchOp
+    "match": MatchOp,
+    "print": PrintOp
 }
 
 

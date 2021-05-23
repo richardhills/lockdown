@@ -153,6 +153,11 @@ def literal_op(value):
         "value": value
     }, debug_reason="code")
 
+def print_op(expression):
+    return PythonObject({
+        "opcode": "print",
+        "expression": expression
+    }, debug_reason="code")
 
 def object_template_op(values, debug_reason="code", **kwargs):
     values_list = []

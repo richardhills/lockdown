@@ -130,8 +130,18 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#falseExpression.
+    def visitFalseExpression(self, ctx):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#returnStatement.
     def visitReturnStatement(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#toLoop.
+    def visitToLoop(self, ctx):
         return self.visitChildren(ctx)
 
 
@@ -162,6 +172,11 @@ class langVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by langParser#stringExpression.
     def visitStringExpression(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#trueExpression.
+    def visitTrueExpression(self, ctx):
         return self.visitChildren(ctx)
 
 
@@ -242,6 +257,11 @@ class langVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by langParser#toObjectTemplate.
     def visitToObjectTemplate(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#toPrintStatement.
+    def visitToPrintStatement(self, ctx):
         return self.visitChildren(ctx)
 
 
@@ -367,6 +387,11 @@ class langVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by langParser#ifStatement.
     def visitIfStatement(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#loop.
+    def visitLoop(self, ctx):
         return self.visitChildren(ctx)
 
 

@@ -17,7 +17,7 @@ from lockdown.executor.raw_code_factories import function_lit, nop, comma_op, \
     local_function, reset_op, inferred_type, prepare_function_lit, transform, \
     continue_op, check_is_opcode, is_op, function_type, \
     composite_type, static_op, map_op, insert_op, prepared_function, int_type, \
-    any_type
+    any_type, print_op
 from lockdown.parser.grammar.langLexer import langLexer
 from lockdown.parser.grammar.langParser import langParser
 from lockdown.parser.grammar.langVisitor import langVisitor
@@ -86,7 +86,7 @@ class RDHLang5Visitor(langVisitor):
         if function_name_symbol:
             function_name = function_name_symbol.getText()
 
-        return function_name, function_builder.create("function", get_debug_info(ctx))
+        return function_name, function_builder.create("first-class-function", get_debug_info(ctx))
 
     def visitArgumentDestructurings(self, ctx):
         initializers = [self.visit(l) for l in ctx.argumentDestructuring()]
@@ -249,6 +249,11 @@ class RDHLang5Visitor(langVisitor):
             extra_statics={ literal_op(name): prepared_function }
         ).chain(remaining_code, get_debug_info(ctx))
 
+    def visitToPrintStatement(self, ctx):
+        expr = self.visit(ctx.expression())
+
+        return print_op(expr)
+
     def visitToExpression(self, ctx):
         code_expressions = [self.visit(e) for e in ctx.expression()]
 
@@ -268,6 +273,12 @@ class RDHLang5Visitor(langVisitor):
 
     def visitNumberExpression(self, ctx):
         return literal_op(json.loads(ctx.NUMBER().getText()))
+
+    def visitTrueExpression(self, ctx):
+        return literal_op(True)
+
+    def visitFalseExpression(self, ctx):
+        return literal_op(False)
 
     def visitInvocation(self, ctx):
         function = self.visit(ctx.expression()[0])
@@ -469,6 +480,10 @@ class RDHLang5Visitor(langVisitor):
 
         return condition_op(condition, when_true, when_false)
 
+    def visitLoop(self, ctx):
+        loop_code = self.visit(ctx.codeBlock())
+        return loop_op(loop_code.create("expression", get_debug_info(ctx)))
+
     def visitWhileLoop(self, ctx):
         continue_expression = self.visit(ctx.expression())
         loop_code = self.visit(ctx.codeBlock())
@@ -492,7 +507,7 @@ class RDHLang5Visitor(langVisitor):
             })
         ).chain(loop_code, get_debug_info(ctx))
 
-        loop_code = loop_code.create("function", get_debug_info(ctx))
+        loop_code = loop_code.create("second-class-function", get_debug_info(ctx))
 #        get_manager(loop_code).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
 
         return transform_op(
@@ -545,7 +560,7 @@ class RDHLang5Visitor(langVisitor):
             })
         ).chain(loop_code, get_debug_info(ctx))
 
-        loop_code = loop_code.create("function", get_debug_info(ctx))
+        loop_code = loop_code.create("second-class-function", get_debug_info(ctx))
 
         return map_op(
             composite_expression,
@@ -759,7 +774,7 @@ class CodeBlockBuilder(object):
         )
 
     def create(self, output_mode, debug_info):
-        if output_mode not in ("function", "expression"):
+        if output_mode not in ("first-class-function", "second-class-function", "expression"):
             raise FatalError()
 
         code_expressions = default(self.code_expressions, MISSING, [])
@@ -796,10 +811,17 @@ class CodeBlockBuilder(object):
         else:
             extra_statics = {}
 
-        if output_mode == "function":
+        if output_mode == "first-class-function":
+            # A function created by the user, which mangles returns as expected
             code = transform_op(
                 "return", "value", combine_opcodes(code_expressions), **debug_info
             )
+            return function_lit(
+                extra_statics, argument_type, break_types, local_type, local_initializer, code, **debug_info
+            )
+        if output_mode == "second-class-function":
+            # A function created by the environment, which leaves returns unmangled
+            code = combine_opcodes(code_expressions)
             return function_lit(
                 extra_statics, argument_type, break_types, local_type, local_initializer, code, **debug_info
             )

@@ -229,12 +229,30 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#falseExpression.
+    def enterFalseExpression(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#falseExpression.
+    def exitFalseExpression(self, ctx):
+        pass
+
+
     # Enter a parse tree produced by langParser#returnStatement.
     def enterReturnStatement(self, ctx):
         pass
 
     # Exit a parse tree produced by langParser#returnStatement.
     def exitReturnStatement(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#toLoop.
+    def enterToLoop(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#toLoop.
+    def exitToLoop(self, ctx):
         pass
 
 
@@ -289,6 +307,15 @@ class langListener(ParseTreeListener):
 
     # Exit a parse tree produced by langParser#stringExpression.
     def exitStringExpression(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#trueExpression.
+    def enterTrueExpression(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#trueExpression.
+    def exitTrueExpression(self, ctx):
         pass
 
 
@@ -433,6 +460,15 @@ class langListener(ParseTreeListener):
 
     # Exit a parse tree produced by langParser#toObjectTemplate.
     def exitToObjectTemplate(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#toPrintStatement.
+    def enterToPrintStatement(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#toPrintStatement.
+    def exitToPrintStatement(self, ctx):
         pass
 
 
@@ -658,6 +694,15 @@ class langListener(ParseTreeListener):
 
     # Exit a parse tree produced by langParser#ifStatement.
     def exitIfStatement(self, ctx):
+        pass
+
+
+    # Enter a parse tree produced by langParser#loop.
+    def enterLoop(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#loop.
+    def exitLoop(self, ctx):
         pass
 
 

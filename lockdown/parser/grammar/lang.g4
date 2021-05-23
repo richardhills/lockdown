@@ -115,6 +115,8 @@ destructuring
 expression
    : STRING					# stringExpression
    | NUMBER					# numberExpression
+   | 'true'					# trueExpression
+   | 'false'				# falseExpression
    | objectTemplate			# toObjectTemplate
    | listTemplate			# toListTemplate
    | expression '(' expression (',' expression)* ')' # invocation
@@ -148,6 +150,7 @@ expression
    | 'continue' expression  # continueStatement
    | 'break'			    # breakStatement
    | ifStatement			# toIfStatement
+   | loop				    # toLoop
    | whileLoop				# toWhileLoop
    | forGeneratorLoop		# toForGeneratorLoop
    | forListLoop			# toForListLoop
@@ -157,6 +160,7 @@ expression
    | tupleType				# toTupleType
    | functionType			# toFunctionType
    | function				# toFunctionExpression
+   | 'print' expression     # toPrintStatement  
    ;
 
 objectTemplate
@@ -203,6 +207,10 @@ functionType
 
 ifStatement
    : 'if' '(' expression ')' '{' codeBlock '}' ( 'else' '{' codeBlock '}' )?
+   ;
+
+loop
+   : 'loop' '{' codeBlock '}'
    ;
 
 whileLoop

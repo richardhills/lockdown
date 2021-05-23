@@ -294,13 +294,13 @@ class Frame(object):
         if isinstance(exc_value, FatalError):
             return
 
-        if is_debug() and isinstance(exc_value, BreakException) and self.target.break_types:
+        if is_debug() and isinstance(exc_value, BreakException) and self.target.break_types is not None:
             # Verifies that execution is leaving the target opcode at run-time in a way that was forecast
             # at verification time. 
             break_types = self.target.break_types.get(exc_value.mode, MISSING)
 
             if break_types is MISSING:
-                raise FatalError("Can not unwind {} with type {}, target {} allowed {}".format(exc_value.mode, exc_value.value, self.target, break_types))
+                raise FatalError("Can not unwind {}: {}, target {} allowed {}".format(exc_value.mode, exc_value.value, self.target, break_types))
 
             failures = []
 
@@ -321,7 +321,7 @@ class Frame(object):
                 if out_is_compatible and in_is_compatible:
                     break
             else:
-                raise FatalError("Can not unwind {} {}, target {}, allowed {}: {}".format(exc_value.value, exc_value.mode, self.target, break_types, reasoner.to_message()))
+                raise FatalError("Can not unwind {} {}, target {}, allowed {}: {}".format(exc_value.mode, exc_value.value, self.target, break_types, reasoner.to_message()))
 
         exc_type_allows_restart = exc_value and isinstance(exc_value, BreakException) and exc_value.restart_type is not None
 
