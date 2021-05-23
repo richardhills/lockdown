@@ -8,8 +8,8 @@ from lockdown.type_system.composites import is_type_bindable_to_value, \
     CompositeType, does_value_fit_through_type
 from lockdown.type_system.core_types import Type
 from lockdown.type_system.exceptions import FatalError
+from lockdown.type_system.reasoner import DUMMY_REASONER, Reasoner
 from lockdown.utils import MISSING, InternalMarker, is_debug
-from lockdown.type_system.reasoner import DUMMY_REASONER
 
 
 class BreakException(Exception):
@@ -304,13 +304,15 @@ class Frame(object):
 
             failures = []
 
+            reasoner = Reasoner()
+
             for allowed_break_type in break_types:
                 allowed_out = allowed_break_type["out"]
                 allowed_in = allowed_break_type.get("in", None)
 
-                out_is_compatible = does_value_fit_through_type(exc_value.value, allowed_out)
+                out_is_compatible = does_value_fit_through_type(exc_value.value, allowed_out, reasoner=reasoner)
                 in_is_compatible = allowed_in is None or (
-                    exc_value.restart_type is not None and exc_value.restart_type.is_copyable_from(allowed_in, DUMMY_REASONER)
+                    exc_value.restart_type is not None and exc_value.restart_type.is_copyable_from(allowed_in, reasoner)
                 )
 
                 if not out_is_compatible:
@@ -319,7 +321,7 @@ class Frame(object):
                 if out_is_compatible and in_is_compatible:
                     break
             else:
-                raise FatalError("Can not unwind {} {}, target {}, allowed {}".format(exc_value.value, exc_value.mode, self.target, break_types))
+                raise FatalError("Can not unwind {} {}, target {}, allowed {}: {}".format(exc_value.value, exc_value.mode, self.target, break_types, reasoner.to_message()))
 
         exc_type_allows_restart = exc_value and isinstance(exc_value, BreakException) and exc_value.restart_type is not None
 

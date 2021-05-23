@@ -40,6 +40,13 @@ class AnyType(Type):
     def __repr__(self):
         return "AnyType"
 
+class BottomType(Type):
+    def is_copyable_from(self, other, reasoner):
+        return isinstance(other, BottomType)
+
+    def __repr__(self):
+        return "BottomType"
+    
 
 class NoValueType(Type):
     """
@@ -61,6 +68,8 @@ class NoValueType(Type):
     the expression should simply exclude that break mode from the list of break modes that it supports.
     """
     def is_copyable_from(self, other, reasoner):
+        if isinstance(other, BottomType):
+            return True
         if isinstance(other, OneOfType):
             return other.is_copyable_to(self)
         if not isinstance(other, NoValueType):
@@ -79,6 +88,8 @@ class UnitType(Type):
         self.value = value
 
     def is_copyable_from(self, other, reasoner):
+        if isinstance(other, BottomType):
+            return True
         if isinstance(other, OneOfType):
             return other.is_copyable_to(self, reasoner)
         if not isinstance(other, UnitType):
@@ -103,6 +114,8 @@ class StringType(Type):
     A Lockdown type that supports unicode strings, backed by Python's unicode/str objects
     """
     def is_copyable_from(self, other, reasoner):
+        if isinstance(other, BottomType):
+            return True
         if isinstance(other, OneOfType):
             return other.is_copyable_to(self, reasoner)
         if not (isinstance(other, StringType) or (isinstance(other, UnitType) and isinstance(other.value, basestring))):
@@ -119,6 +132,8 @@ class IntegerType(Type):
     An Lockdown type that supports ints, backed by Python's int type
     """
     def is_copyable_from(self, other, reasoner):
+        if isinstance(other, BottomType):
+            return True
         if isinstance(other, OneOfType):
             return other.is_copyable_to(self, reasoner)
         if not (isinstance(other, IntegerType) or (isinstance(other, UnitType) and isinstance(other.value, int) and not isinstance(other.value, bool))):
@@ -134,6 +149,8 @@ class BooleanType(Type):
     An Lockdown type that supports ints, backed by Python's bool
     """
     def is_copyable_from(self, other, reasoner):
+        if isinstance(other, BottomType):
+            return True
         if isinstance(other, OneOfType):
             return other.is_copyable_to(self, reasoner)
         if not (isinstance(other, BooleanType) or (isinstance(other, UnitType) and isinstance(other.value, bool))):
@@ -196,8 +213,13 @@ class OneOfType(Type):
         if len(types) <= 1:
             raise FatalError()
         self.types = types
+        for t in types:
+            if isinstance(t, OneOfType):
+                raise FatalError()
 
     def is_copyable_from(self, other, reasoner):
+        if isinstance(other, BottomType):
+            return True
         for other_sub_type in unwrap_types(other):
             for t in self.types:
                 if t.is_copyable_from(other_sub_type, reasoner):

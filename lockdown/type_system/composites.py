@@ -7,7 +7,7 @@ import threading
 import weakref
 
 from lockdown.type_system.core_types import Type, unwrap_types, OneOfType, \
-    AnyType, merge_types
+    AnyType, merge_types, BottomType
 from lockdown.type_system.exceptions import FatalError, IsNotCompositeType, \
     CompositeTypeIncompatibleWithTarget, CompositeTypeIsInconsistent, \
     DanglingInferredType
@@ -83,6 +83,8 @@ class CompositeType(Type):
         return self._is_self_consistent
 
     def is_copyable_from(self, other, reasoner):
+        if isinstance(other, BottomType):
+            return True
         if self is other:
             return True        
         if isinstance(other, OneOfType):
@@ -114,13 +116,7 @@ class CompositeType(Type):
                 if micro_op_type is None:
                     pass
                 if not micro_op_type.is_derivable_from(other, reasoner):
-                    cache[result_key] = False
-                    break
-
-            for micro_op_type in self.micro_op_types.values():
-                if micro_op_type is None:
-                    pass
-                if not micro_op_type.is_derivable_from(other, reasoner):
+                    reasoner.push_micro_op_not_derivable_from(micro_op_type, other)
                     cache[result_key] = False
                     break
         finally:
@@ -295,8 +291,19 @@ def replace_inferred_types(lhs_type, rhs_type, results):
             return lhs_type
         return rhs_type
 
-    if not isinstance(lhs_type, CompositeType):
-        return lhs_type
+    if isinstance(lhs_type, CompositeType):
+        return replace_inferred_types_in_composite(lhs_type, rhs_type, results)
+
+    if isinstance(lhs_type, OneOfType):
+        return merge_types(
+            replace_inferred_types(unwrap_types(lhs_type), rhs_type, results),
+            "exact"
+        )
+
+    return lhs_type
+
+def replace_inferred_types_in_composite(lhs_type, rhs_type, results):
+    result_key = (id(lhs_type), id(rhs_type))
 
     finished_type = lhs_type.clone("{}<post-inference>".format(lhs_type.name))
 
@@ -334,6 +341,12 @@ def replace_inferred_types(lhs_type, rhs_type, results):
 def resolve_micro_op_conflicts(type, results):
     if id(type) in results:
         return results[id(type)]
+
+    if isinstance(type, OneOfType):
+        return merge_types(
+            [ resolve_micro_op_conflicts(t, results) for t in unwrap_types(type)],
+            "exact"
+        )
 
     if not isinstance(type, CompositeType):
         return type
@@ -395,7 +408,7 @@ def add_composite_type(target_manager, new_type, reasoner=None, key_filter=None,
         get_manager(target).attach_type(type, multiplier=multiplier)
 
 
-def remove_composite_type(target_manager, remove_type, reasoner=None, key_filter=None, multiplier=1):
+def remove_composite_type(target_manager, remove_type, reasoner=DUMMY_REASONER, key_filter=None, multiplier=1):
     if not reasoner:
         reasoner = Reasoner()
 
@@ -413,8 +426,8 @@ def can_add_composite_type_with_filter(target, new_type, key_filter, substitute_
 def is_type_bindable_to_value(value, type):
     return build_binding_map_for_type(None, type, value, get_manager(value), None, MISSING, {}, {}, DUMMY_REASONER)
 
-def does_value_fit_through_type(value, type):
-    return build_binding_map_for_type(None, type, value, get_manager(value), None, MISSING, {}, None, DUMMY_REASONER, build_binding_map=False)
+def does_value_fit_through_type(value, type, reasoner=DUMMY_REASONER):
+    return build_binding_map_for_type(None, type, value, get_manager(value), None, MISSING, {}, None, reasoner, build_binding_map=False)
 
 def bind_key(manager, key_filter):
     for attached_type in manager.attached_types.values():
@@ -509,6 +522,9 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
 
         if isinstance(sub_type, CompositeType) and not target_is_composite:
             child_reasoner.push_target_should_be_composite(sub_type, target)
+
+        if not isinstance(sub_type, CompositeType) and target_is_composite:
+            child_reasoner.push_target_should_not_be_composite(sub_type, target)
 
         if isinstance(sub_type, AnyType):
             atleast_one_sub_type_worked = True

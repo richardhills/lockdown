@@ -13,6 +13,9 @@ class Reasoner(object):
     def push_micro_op_not_bindable_to(self, micro_op, source_type, target):
         self.stack.insert(0, ("micro-op-not-bindable-to", micro_op, source_type, target))
 
+    def push_micro_op_not_derivable_from(self, micro_op, source):
+        self.stack.insert(0, ("micro-op-not-derivable-from", micro_op, source))
+
     def push_not_copyable_type(self, target, source):
         self.stack.insert(0, ("not-copyable", target, source))
 
@@ -22,8 +25,11 @@ class Reasoner(object):
     def push_target_should_be_composite(self, source_type, target):
         self.stack.insert(0, ("target-should-be-composite", source_type, target))
 
+    def push_target_should_not_be_composite(self, source_type, target):
+        self.stack.insert(0, ("target-should-not-be-composite", source_type, target))
+
     def attach_child_reasoners(self, reasoners, source_micro_op, type, target):
-        if len(reasoners) == 0:
+        if len(reasoners) == 0: # or len(reasoners[0].stack) == 0:
             raise FatalError()
         self.stack.insert(0, ("child-reasoners", reasoners, source_micro_op, type, target))
 
@@ -42,10 +48,22 @@ class DummyReasoner(object):
     def push_micro_op_conflicts_with_micro_op(self, original, conflict):
         pass
 
+    def push_micro_op_not_bindable_to(self, micro_op, source_type, target):
+        pass
+
+    def push_micro_op_not_derivable_from(self, micro_op, source):
+        pass
+
     def push_not_copyable_type(self, target, source):
         pass
 
     def push_inconsistent_type(self, type):
+        pass
+
+    def push_target_should_be_composite(self, source_type, target):
+        pass
+
+    def push_target_should_not_be_composite(self, source_type, target):
         pass
 
     def attach_child_reasoners(self, reasoners, source_micro_op, type, target):

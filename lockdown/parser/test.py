@@ -629,6 +629,74 @@ class TestMatch(TestCase):
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 9)
 
+class TestDictionary(TestCase):
+    def test_basic_dictionary(self):
+        code = parse("""
+            function() {
+                Dictionary<int: int> foo = { 3 : 55 };
+                return foo[3];
+            }
+        """)
+        result = bootstrap_function(code)
+        self.assertIn("exception", result.opcode.break_types)
+        self.assertTrue(result.opcode.break_types["exception"][0]["out"].micro_op_types[("get", "type")].value_type.value == "TypeError")
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEquals(result.value, 55)
+
+
+    def test_basic_dictionary2(self):
+        code = parse("""
+            function() {
+                Dictionary<int: int> foo = { 3 : 55 };
+                return foo[3]?;
+            }
+        """)
+        result = bootstrap_function(code, check_safe_exit=True)
+        self.assertNotIn("exception", result.opcode.break_types)
+        self.assertTrue(result.opcode.break_types["value"][1]["out"].micro_op_types[("get", "type")].value_type.value == "TypeError")
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEquals(result.value, 55)
+
+
+    def test_basic_dictionary3(self):
+        code = parse("""
+            function() {
+                Dictionary<int: int> foo = { 3 : 55 };
+                return foo[6];
+            }
+        """)
+        result = bootstrap_function(code)
+        self.assertEquals(result.caught_break_mode, "exception")
+        self.assertEquals(result.value._to_dict()["message"], "DereferenceOp: invalid_dereference")
+
+
+    def test_basic_dictionary4(self):
+        code = parse("""
+            function() => int {
+                var foo = { 3 : 55 };
+                return foo[3];
+            }
+        """)
+        result = bootstrap_function(code)
+        self.assertNotIn("exception", result.opcode.break_types)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEquals(result.value, 55)
+
+    def test_basic_dictionary5(self):
+        code = parse("""
+            function() {
+                Dictionary<int : int> foo = {};
+                foo[3] = 55;
+                foo[6] = 99;
+                return foo[3]?;
+            }
+        """)
+        result = bootstrap_function(code)
+        self.assertNotIn("exception", result.opcode.break_types)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEquals(result.value, 55)
+
+
 class TestParserMisc(TestCase):
     def test_invalid_list_assignment(self):
         code = parse("""

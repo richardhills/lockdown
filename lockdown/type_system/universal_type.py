@@ -544,6 +544,7 @@ class SetterMicroOpType(MicroOpType):
     def conflicts_with(self, our_type, other_type, reasoner):
         wildcard_getter = other_type.get_micro_op_type(("get-wildcard",))
         if wildcard_getter and not wildcard_getter.value_type.is_copyable_from(self.value_type, reasoner):
+            wildcard_getter.value_type.is_copyable_from(self.value_type, reasoner)
             reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_getter)
             return True
 

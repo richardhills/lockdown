@@ -14,7 +14,7 @@ from lockdown.type_system.composites import CompositeType, scoped_bind, \
     does_value_fit_through_type, is_type_bindable_to_value, Composite
 from lockdown.type_system.core_types import AnyType, Type, merge_types, Const, \
     UnitType, NoValueType, PermittedValuesDoesNotExist, unwrap_types, IntegerType, \
-    BooleanType, remove_type, OneOfType, StringType
+    BooleanType, remove_type, OneOfType, StringType, BottomType
 from lockdown.type_system.exceptions import FatalError, InvalidDereferenceType, \
     InvalidDereferenceKey, InvalidAssignmentType, InvalidAssignmentKey
 from lockdown.type_system.managers import get_type_of_value, get_manager
@@ -259,14 +259,12 @@ class TemplateOp(Opcode):
             if isinstance(value_type, NoValueType):
                 break_types.add("exception", self.NO_VALUE_ASSIGNMENT.get_type())
             else:
-                all_value_types.append(value_type)
+                all_value_types.extend(unwrap_types(value_type))
                 micro_ops[("get", key)] = GetterMicroOpType(key, value_type)
                 micro_ops[("set", key)] = SetterMicroOpType(key, AnyType())
 
         if can_break_with_value_type:
-            if len(all_value_types) == 0:
-                all_value_types.append(AnyType())
-            combined_value_types = merge_types(all_value_types, "exact")
+            combined_value_types = merge_types([ BottomType() ] + all_value_types, "exact")
 
             wildcard_key_type = OneOfType([ StringType(), IntegerType() ])
 
