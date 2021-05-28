@@ -163,6 +163,59 @@ class TypeErrorFactory(object):
         }
         return UniversalObjectType(properties, wildcard_type=AnyType(), name="TypeError")
 
+def get_operand(expression, context, frame_manager, break_types):
+    value_type, other_break_types = get_expression_break_types(expression, context, frame_manager)
+    break_types.merge(other_break_types)
+    if value_type is not MISSING:
+        value_type = flatten_out_types(value_type)
+
+    return value_type
+
+def each_reference(reference_types, of_types):
+    if reference_types is MISSING or of_types is MISSING:
+        return
+
+    for reference_type in unwrap_types(reference_types):
+        try:
+            possible_references = reference_type.get_all_permitted_values()
+        except PermittedValuesDoesNotExist:
+            possible_references = None
+
+        for of_type in unwrap_types(of_types):
+            if possible_references is None:
+                yield [ MISSING, of_type ]
+                continue
+            for possible_reference in possible_references:
+                yield [ possible_reference, of_type ]
+
+def get_best_micro_op(tags, type):
+    for tag in tags:
+        micro_op = type.get_micro_op_type(tag)
+        if micro_op:
+            return ( tag, micro_op )
+
+    return ( None, None )
+
+class MicroOpBinder(object):
+    def __init__(self):
+        self.bound = {}
+
+    def bind(self, key, tags, type):
+        if not isinstance(type, CompositeType):
+            return
+
+        tag, micro_op = get_best_micro_op(tags, type)
+        if micro_op:
+            self.bound[key] = ( tag, micro_op )
+
+        return micro_op
+
+    def get(self, keys):
+        for key in keys:
+            if key in self.bound:
+                return self.bound[key]
+
+        return ( None, None ) 
 
 class Nop(Opcode):
     def get_break_types(self, context, frame_manager, immediate_context=None):
@@ -376,62 +429,42 @@ class DereferenceOp(Opcode):
         self.of = enrich_opcode(data.of, visitor)
         self.reference = enrich_opcode(data.reference, visitor)
         self.safe = data.safe
-        self.micro_ops = {}
-        self.wildcard_micro_op = None
+        self.binder = MicroOpBinder()
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
 
-        reference_types, reference_break_types = get_expression_break_types(self.reference, context, frame_manager)
-        break_types.merge(reference_break_types)
-        if reference_types is not MISSING:
-            reference_types = flatten_out_types(reference_types)
+        reference_types = get_operand(self.reference, context, frame_manager, break_types)
+        of_types = get_operand(self.of, context, frame_manager, break_types)
 
-        of_types, of_break_types = get_expression_break_types(self.of, context, frame_manager)
-        break_types.merge(of_break_types)
-        if of_types is not MISSING:
-            of_types = flatten_out_types(of_types)
+        if reference_types is MISSING or of_types is MISSING:
+            return break_types.build()
 
         invalid_dereferences = set()
         invalid_unknown_dereference = False
 
-        if reference_types is not MISSING and of_types is not MISSING:
-            for reference_type in unwrap_types(reference_types):
-                try:
-                    possible_references = reference_type.get_all_permitted_values()
-                except PermittedValuesDoesNotExist:
-                    possible_references = None
-                for of_type in unwrap_types(of_types):
-                    if possible_references is None:
-                        if not isinstance(of_type, CompositeType):
-                            invalid_unknown_dereference = True
-                        else:
-                            self.wildcard_micro_op = of_type.get_micro_op_type(("get-wildcard",))
-                            if not self.wildcard_micro_op or self.wildcard_micro_op.key_error or self.wildcard_micro_op.type_error:
-                                invalid_unknown_dereference = True
-                            if self.wildcard_micro_op:
-                                break_types.add("value", self.wildcard_micro_op.value_type)
-                    else:
-                        for reference in possible_references:
-                            if not isinstance(of_type, CompositeType):
-                                invalid_dereferences.add(reference)
-                            else:
-                                micro_op = of_type.get_micro_op_type(("get", reference))
-                                if micro_op:
-                                    self.micro_ops[reference] = True, micro_op
-                                if micro_op is None:
-                                    micro_op = of_type.get_micro_op_type(("get-wildcard",))
-                                    if micro_op:
-                                        self.micro_ops[reference] = False, micro_op
+        for reference, of_type in each_reference(reference_types, of_types):
+            if reference is MISSING:
+                # We don't know what the reference is at verification time - it might be
+                # dynamic like an index into an array. Use wildcard microop and check for errors
+                micro_op = self.binder.bind(None, [
+                    ("get-wildcard", )
+                ], of_type)                    
+            else:
+                # We know what the reference might be at verification time - attempt static
+                # binding and fallback on wildcard microop, again checking for errors
+                micro_op = self.binder.bind(reference, [
+                    ("get", reference), ("get-wildcard", )
+                ], of_type)
 
-                                if micro_op:
-                                    break_types.add("value", micro_op.value_type)
-                                    if micro_op.type_error or micro_op.key_error:
-                                        invalid_dereferences.add(reference)
-                                else:
-                                    invalid_dereferences.add(reference)
+            if micro_op:
+                break_types.add("value", micro_op.value_type)
 
-        self.invalid_dereference_error = len(list(invalid_dereferences)) > 0 or invalid_unknown_dereference
+            if not micro_op or micro_op.type_error or micro_op.key_error:
+                if reference is MISSING:
+                    invalid_unknown_dereference = True
+                else:
+                    invalid_dereferences.add(reference)
 
         exception_break_mode = "exception" if self.safe else "value"
         for invalid_dereference in invalid_dereferences:
@@ -448,8 +481,6 @@ class DereferenceOp(Opcode):
             of = frame.step("of", lambda: evaluate(self.of, context, frame_manager))
             reference = frame.step("reference", lambda: evaluate(self.reference, context, frame_manager))
 
-#            print "{}".format(reference)
-
             manager = get_manager(of)
 
             exception_break_mode = "exception" if self.safe else "value"
@@ -458,26 +489,30 @@ class DereferenceOp(Opcode):
                 return frame.unwind(exception_break_mode, self.INVALID_DEREFERENCE(reference=reference), None, None)
 
             try:
-                direct, micro_op_type = self.micro_ops.get(reference, (False, None))
+                tag, micro_op = self.binder.get(
+                    [ reference, None ]
+                )
 
-                if not micro_op_type:
-                    direct, micro_op_type = False, self.wildcard_micro_op
+                if micro_op is None:
+                    # Runtime dynamic behaviour! We weren't even able to bind to the
+                    # wildcard microop at verification time (maybe we dind't know whether
+                    # the target would be a CompositeType). No harm though - we get the
+                    # microop at runtime instead.
+                    tag, micro_op = get_best_micro_op([
+                        ( "get", reference ), ( "get-wildcard", )
+                    ], manager.get_effective_composite_type())
 
-                if not micro_op_type:
-                    direct, micro_op_type = True, manager.get_micro_op_type(("get", reference))
+                direct = tag and tag[0] != "get-wildcard"
 
-                if not micro_op_type:
-                    direct, micro_op_type = False, manager.get_micro_op_type(("get-wildcard",))
-
-                if not micro_op_type:                    
+                if not micro_op:                    
                     return frame.unwind(exception_break_mode, self.INVALID_DEREFERENCE(reference=reference), None, None)
 
                 result = None
 
                 if direct:
-                    result = micro_op_type.invoke(manager, shortcut_checks=True)
+                    result = micro_op.invoke(manager, shortcut_checks=True)
                 else:
-                    result = micro_op_type.invoke(manager, reference, shortcut_checks=True)
+                    result = micro_op.invoke(manager, reference, shortcut_checks=True)
 
                 if result is SPARSE_ELEMENT:
                     return frame.unwind(exception_break_mode, self.INVALID_DEREFERENCE(reference=reference), None, None)
@@ -563,71 +598,47 @@ class AssignmentOp(Opcode):
         self.of = enrich_opcode(data.of, visitor)
         self.reference = enrich_opcode(data.reference, visitor)
         self.rvalue = enrich_opcode(data.rvalue, visitor)
-        self.micro_ops = {}
-        self.wildcard_micro_op = None
+        self.binder = MicroOpBinder()
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
 
-        reference_types, reference_break_types = get_expression_break_types(self.reference, context, frame_manager)
-        break_types.merge(reference_break_types)
-        if reference_types is not MISSING:
-            reference_types = flatten_out_types(reference_types)
+        reference_types = get_operand(self.reference, context, frame_manager, break_types)
+        of_types = get_operand(self.of, context, frame_manager, break_types)
+        rvalue_type = get_operand(self.rvalue, context, frame_manager, break_types)
 
-        of_types, of_break_types = get_expression_break_types(self.of, context, frame_manager)
-        break_types.merge(of_break_types)
-        if of_types is not MISSING:
-            of_types = flatten_out_types(of_types)
+        if reference_types is MISSING or of_types is MISSING or rvalue_type is MISSING:
+            # If any are missing, then this opcode can not execute
+            return break_types.build()
 
-        rvalue_type, rvalue_break_types = get_expression_break_types(self.rvalue, context, frame_manager)
-        break_types.merge(rvalue_break_types)
-        if rvalue_type is not MISSING:
-            rvalue_type = flatten_out_types(rvalue_type)
+        invalid_assignment_error = invalid_rvalue_error = invalid_lvalue_error = False
 
-        self.invalid_assignment_error = self.invalid_rvalue_error = self.invalid_lvalue_error = False
+        break_types.add("value", NoValueType())
 
-        if reference_types is not MISSING and of_types is not MISSING and rvalue_type is not MISSING:
-            break_types.add("value", NoValueType())
+        for reference, of_type in each_reference(reference_types, of_types):
+            if reference is MISSING:
+                micro_op = self.binder.bind(None, [
+                    ("set-wildcard", )
+                ], of_type)                    
+            else:
+                micro_op = self.binder.bind(reference, [
+                    ("set", reference), ("set-wildcard", )
+                ], of_type)
 
-            for reference_type in unwrap_types(reference_types):
-                try:
-                    possible_references = reference_type.get_all_permitted_values()
-                except PermittedValuesDoesNotExist:
-                    possible_references = None
-                for of_type in unwrap_types(of_types):
-                    if possible_references is None:
-                        self.wildcard_micro_op = of_type.get_micro_op_type(("set-wildcard",))
-                        if not self.wildcard_micro_op or self.wildcard_micro_op.key_error or self.wildcard_micro_op.type_error:
-                            self.invalid_lvalue_error = True
-                    else:
-                        for reference in possible_references:    
-                            micro_op = None
-                            if isinstance(of_type, CompositeType) and reference is not None:
-                                micro_op = of_type.get_micro_op_type(("set", reference))
-                                if micro_op:
-                                    self.micro_ops[reference] = True, micro_op
+            if micro_op:
+                if not micro_op.value_type.is_copyable_from(rvalue_type, DUMMY_REASONER):
+                    invalid_rvalue_error = True
 
-                                if not micro_op:
-                                    micro_op = of_type.get_micro_op_type(("set-wildcard",))
-                                    if micro_op:
-                                        self.micro_ops[reference] = False, micro_op
+                if micro_op.type_error or micro_op.key_error:
+                    invalid_assignment_error = True
+            else:
+                invalid_lvalue_error = True
 
-                            if micro_op:
-                                if not micro_op.value_type.is_copyable_from(rvalue_type, DUMMY_REASONER):
-                                    self.invalid_rvalue_error = True
-
-                                if micro_op.type_error or micro_op.key_error:
-                                    self.invalid_assignment_error = True
-                            else:
-                                self.invalid_lvalue_error = True
-        else:
-            self.invalid_assignment_error = self.invalid_rvalue_error = self.invalid_lvalue_error = True
-
-        if self.invalid_assignment_error:
+        if invalid_assignment_error:
             break_types.add("exception", self.INVALID_ASSIGNMENT.get_type(), opcode=self)
-        if self.invalid_rvalue_error:
+        if invalid_rvalue_error:
             break_types.add("exception", self.INVALID_RVALUE.get_type(), opcode=self)
-        if self.invalid_lvalue_error:
+        if invalid_lvalue_error:
             break_types.add("exception", self.INVALID_LVALUE.get_type(), opcode=self)
 
         return break_types.build()
@@ -641,18 +652,19 @@ class AssignmentOp(Opcode):
             manager = get_manager(of)
 
             try:
-                direct, micro_op_type = self.micro_ops.get(reference, (False, self.wildcard_micro_op))
+                tag, micro_op = self.binder.get([ reference, None ])
+                direct = tag[0] != "set-wildcard"
 
-                if not micro_op_type:
+                if not micro_op:
                     return frame.exception(self.INVALID_LVALUE())
 
-                if (is_debug() or self.invalid_rvalue_error) and not is_type_bindable_to_value(rvalue, micro_op_type.value_type):
+                if not is_type_bindable_to_value(rvalue, micro_op.value_type):
                     return frame.exception(self.INVALID_RVALUE())
 
                 if direct:
-                    micro_op_type.invoke(manager, rvalue, shortcut_checks=True)
+                    micro_op.invoke(manager, rvalue, shortcut_checks=True)
                 else:
-                    micro_op_type.invoke(manager, reference, rvalue, shortcut_checks=True)
+                    micro_op.invoke(manager, reference, rvalue, shortcut_checks=True)
 
                 return frame.value(NO_VALUE)
             except InvalidAssignmentType:
