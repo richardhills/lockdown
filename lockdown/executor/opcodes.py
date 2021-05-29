@@ -26,8 +26,7 @@ from lockdown.type_system.universal_type import UniversalObjectType, \
     InsertStartMicroOpType, InsertEndMicroOpType, DeletterWildcardMicroOpType, \
     IterMicroOpType, RemoverWildcardMicroOpType, InserterWildcardMicroOpType, \
     UniversalTupleType, Universal, SPARSE_ELEMENT
-from lockdown.utils import MISSING, NO_VALUE, is_debug, \
-    runtime_type_information, InternalMarker
+from lockdown.utils import MISSING, NO_VALUE, InternalMarker, get_environment
 from log import logger
 
 
@@ -88,7 +87,7 @@ class Opcode(object):
 
 
 def evaluate(expression, context, frame_manager, immediate_context=None):
-    if not is_debug():
+    if get_environment().return_value_optimization:
         # Optimized version that avoids creating a Capturer object, but only works for values
         try:
             mode, value, opcode, restart_type = expression.jump(context, frame_manager, immediate_context=immediate_context)
@@ -108,7 +107,7 @@ def evaluate(expression, context, frame_manager, immediate_context=None):
 def get_expression_break_types(expression, context, frame_manager, immediate_context=None, target_break_mode="value"):
     other_break_types = dict(expression.get_break_types(context, frame_manager, immediate_context))
 
-    if is_debug():
+    if get_environment().validate_flow_control:
         if not isinstance(other_break_types, dict):
             raise FatalError()
         for mode, break_types in other_break_types.items():
@@ -131,7 +130,7 @@ def get_expression_break_types(expression, context, frame_manager, immediate_con
 
 
 def flatten_out_types(break_types):
-    if is_debug():
+    if get_environment().opcode_bindings:
         if not isinstance(break_types, list):
             raise FatalError()
         for b in break_types:
@@ -1117,7 +1116,7 @@ class ShiftOp(Opcode):
             if frame.has_restart_value():
                 restart_value = frame.pop_restart_value()
 
-                if is_debug():
+                if get_environment().validate_flow_control:
                     if not self.restart_type.is_copyable_from(get_type_of_value(restart_value), DUMMY_REASONER):
                         raise FatalError()
 
@@ -1522,7 +1521,7 @@ class CloseOp(Opcode):
             if not isinstance(open_function, OpenFunction):
                 return frame.exception(self.INVALID_FUNCTION())
 
-            if (is_debug() or self.outer_context_type_error) and not does_value_fit_through_type(outer_context, open_function.outer_type):
+            if (get_environment().opcode_bindings or self.outer_context_type_error) and not does_value_fit_through_type(outer_context, open_function.outer_type):
                 return frame.exception(self.INVALID_OUTER_CONTEXT())
 
             return frame.value(open_function.close(outer_context))
@@ -1689,7 +1688,7 @@ class MatchOp(Opcode):
         self.value = enrich_opcode(data.value, visitor)
         self.matchers = [ enrich_opcode(m, visitor) for m in data.matchers ]
 
-        if not runtime_type_information():
+        if not get_environment().rtti:
             raise FatalError("RTTI is required for MatchOp")
 
     def get_break_types(self, context, frame_manager, immediate_context=None):

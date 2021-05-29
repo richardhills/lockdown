@@ -7,7 +7,7 @@ import inspect
 import types
 
 from lockdown.type_system.exceptions import FatalError
-from lockdown.utils import runtime_type_information, is_debug
+from lockdown.utils import get_environment
 
 
 def proxy0(data):
@@ -63,7 +63,7 @@ def replace_all_refs(old_obj, new_obj):
         Inspired by https://benkurtovic.com/2015/01/28/python-object-replacement.html
     """
 
-    if is_debug() and not runtime_type_information():
+    if not get_environment().rtti:
         raise FatalError()
 
     gc.collect()

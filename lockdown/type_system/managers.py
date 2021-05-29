@@ -6,8 +6,7 @@ import weakref
 from lockdown.type_system.core_types import Type, UnitType, NoValueType
 from lockdown.type_system.exceptions import FatalError, InvalidData
 from lockdown.type_system.runtime import replace_all_refs
-from lockdown.utils import InternalMarker, NO_VALUE, is_debug,\
-    runtime_type_information
+from lockdown.utils import InternalMarker, NO_VALUE, get_environment
 
 managers_by_object_id = {}
 
@@ -53,28 +52,28 @@ def get_manager(obj, trigger=None):
     if isinstance(obj, Composite):
         manager = CompositeObjectManager(obj, obj_cleared_callback, False)
     elif isinstance(obj, list):
-        if is_debug() and not runtime_type_information():
+        if not get_environment().consume_python_objects:
             raise FatalError()
         from lockdown.type_system.universal_type import PythonList
         obj = PythonList(obj)
         replace_all_refs(old_obj, obj)            
         manager = CompositeObjectManager(obj, obj_cleared_callback, False)
     elif isinstance(obj, tuple):
-        if is_debug() and not runtime_type_information():
+        if not get_environment().consume_python_objects:
             raise FatalError()
         from lockdown.type_system.universal_type import PythonList
         obj = PythonList(obj)
         replace_all_refs(old_obj, obj)            
         manager = CompositeObjectManager(obj, obj_cleared_callback, False)
     elif isinstance(obj, dict):
-        if is_debug() and not runtime_type_information():
+        if not get_environment().consume_python_objects:
             raise FatalError()
         from lockdown.type_system.universal_type import PythonDict
         obj = PythonDict(obj, debug_reason="monkey-patch")
         replace_all_refs(old_obj, obj)
         manager = CompositeObjectManager(obj, obj_cleared_callback, True)
     elif isinstance(obj, object) and hasattr(obj, "__dict__"):
-        if is_debug() and not runtime_type_information():
+        if not get_environment().consume_python_objects:
             raise FatalError()
         from lockdown.type_system.universal_type import PythonObject
         original_type = obj.__class__

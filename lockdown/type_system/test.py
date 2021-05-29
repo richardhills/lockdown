@@ -20,7 +20,6 @@ from lockdown.type_system.universal_type import PythonObject, \
     SetterWildcardMicroOpType, UniversalDefaultDictType, UniversalListType, \
     SPARSE_ELEMENT, UniversalLupleType, InsertStartMicroOpType, RICH_TYPE, \
     DEFAULT_COMPOSITE_TYPE, NO_SETTER_ERROR_COMPOSITE_TYPE
-from lockdown.utils import set_debug
 
 
 class TestMicroOpMerging(TestCase):

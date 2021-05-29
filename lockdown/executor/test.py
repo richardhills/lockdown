@@ -21,7 +21,7 @@ from lockdown.type_system.reasoner import DUMMY_REASONER
 from lockdown.type_system.universal_type import PythonObject, \
     DEFAULT_READONLY_COMPOSITE_TYPE, PythonList, UniversalTupleType, \
     UniversalObjectType, RICH_READONLY_TYPE, Universal
-from lockdown.utils import NO_VALUE, set_debug
+from lockdown.utils import NO_VALUE
 
 
 class TestPreparedFunction(TestCase):
@@ -30,7 +30,7 @@ class TestPreparedFunction(TestCase):
             no_value_type(), build_break_types(value_type=int_type()), literal_op(42)
         )
 
-        result = bootstrap_function(func)
+        _, result = bootstrap_function(func)
 
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
@@ -38,7 +38,7 @@ class TestPreparedFunction(TestCase):
     def test_basic_function_return(self):
         func = function_lit(no_value_type(), build_break_types(int_type()), return_op(literal_op(42)))
 
-        result = bootstrap_function(func, check_safe_exit=True)
+        _, result = bootstrap_function(func)
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
@@ -46,7 +46,7 @@ class TestPreparedFunction(TestCase):
     def test_addition(self):
         func = function_lit(no_value_type(), build_break_types(int_type()), return_op(addition_op(literal_op(40), literal_op(2))))
 
-        result = bootstrap_function(func, check_safe_exit=True)
+        _, result = bootstrap_function(func)
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
@@ -79,7 +79,7 @@ class TestDereference(TestCase):
             "types": DEFAULT_READONLY_COMPOSITE_TYPE
         }, wildcard_type=RICH_READONLY_TYPE))
 
-        result = bootstrap_function(func, context=context, check_safe_exit=True)
+        _, result = bootstrap_function(func, context=context)
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
@@ -129,7 +129,7 @@ class TestDereference(TestCase):
             "types": DEFAULT_READONLY_COMPOSITE_TYPE
         }))
 
-        result = bootstrap_function(func, context=context, check_safe_exit=True)
+        _, result = bootstrap_function(func, context=context)
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
@@ -137,7 +137,7 @@ class TestDereference(TestCase):
 
 class TestComma(TestCase):
     def test_comma(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 no_value_type(), build_break_types(int_type()),
                 return_op(comma_op(literal_op(5), literal_op(8), literal_op(42)))
@@ -193,7 +193,7 @@ class TestComma(TestCase):
 
 class TestTemplates(TestCase):
     def test_return(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 no_value_type(), build_break_types(object_type({ "foo": int_type() })),
                 comma_op(
@@ -209,7 +209,7 @@ class TestTemplates(TestCase):
         self.assertEquals(result.value._get("foo"), 42)
 
     def test_nested_return(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 no_value_type(), build_break_types(object_type({ "foo": object_type({ "bar": int_type() }) })),
                 comma_op(
@@ -225,7 +225,7 @@ class TestTemplates(TestCase):
         self.assertEquals(result.value._get("foo")._get("bar"), 42)
 
     def test_return_with_dereference1(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 int_type(), build_break_types(object_type({ "foo": unit_type(42), "bar": any_type() })),
                 comma_op(
@@ -243,7 +243,7 @@ class TestTemplates(TestCase):
         self.assertEquals(result.value._get("bar"), 42)
 
     def test_return_with_dereference2(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 int_type(), build_break_types(object_type({ "foo": unit_type(42), "bar": int_type() })),
                 comma_op(
@@ -261,7 +261,7 @@ class TestTemplates(TestCase):
         self.assertEquals(result.value._get("bar"), 42)
 
     def test_return_with_dereference3(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 int_type(), build_break_types(object_type({ "foo": int_type(), "bar": any_type() })),
                 comma_op(
@@ -279,7 +279,7 @@ class TestTemplates(TestCase):
         self.assertEquals(result.value._get("bar"), 42)
 
     def test_return_with_dereference4(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 int_type(), build_break_types(object_type({ "foo": any_type(), "bar": any_type() })),
                 comma_op(
@@ -308,7 +308,7 @@ class TestTemplates(TestCase):
             )
 
     def test_return_rev_const_and_inferred(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 no_value_type(),
                 comma_op(
@@ -326,7 +326,7 @@ class TestTemplates(TestCase):
 
 class TestLocals(TestCase):
     def test_initialization(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 no_value_type(), build_break_types(int_type()), int_type(), literal_op(42),
                 comma_op(
@@ -340,7 +340,7 @@ class TestLocals(TestCase):
         self.assertEquals(result.value, 42)
 
     def test_initialization_from_argument(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 int_type(), build_break_types(int_type()), int_type(), dereference_op(context_op(), literal_op("argument"), True),
                 comma_op(
@@ -421,7 +421,7 @@ class TestLocals(TestCase):
 
 class TestAssignment(TestCase):
     def test_assignment(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 no_value_type(), build_break_types(int_type()), int_type(), literal_op(0),
                 comma_op(
@@ -436,7 +436,7 @@ class TestAssignment(TestCase):
         self.assertEquals(result.value, 42)
 
     def test_assignment_from_argument(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 int_type(), build_break_types(int_type()), int_type(), literal_op(0),
                 comma_op(
@@ -459,7 +459,7 @@ class TestArguments(TestCase):
             return_op(dereference_op(context_op(), literal_op("argument"), True))
         )
 
-        result = bootstrap_function(func, argument=42, check_safe_exit=True)
+        _, result = bootstrap_function(func, argument=42)
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
@@ -470,7 +470,7 @@ class TestArguments(TestCase):
             return_op(addition_op(dereference_op(context_op(), literal_op("argument"), True), dereference_op(context_op(), literal_op("argument"), True)))
         )
 
-        result = bootstrap_function(func, argument=21, check_safe_exit=True)
+        _, result = bootstrap_function(func, argument=21)
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
@@ -478,21 +478,21 @@ class TestArguments(TestCase):
 
 class TestConditional(TestCase):
     def test_basic_truth(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 no_value_type(), build_break_types(int_type()),
                 return_op(condition_op(literal_op(True), literal_op(34), literal_op(53)))
-            ), check_safe_exit=True
+            )
         )
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 34)
 
     def test_basic_false(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 no_value_type(), build_break_types(int_type()),
                 return_op(condition_op(literal_op(False), literal_op(34), literal_op(53)))
-            ), check_safe_exit=True
+            )
         )
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 53)
@@ -500,18 +500,18 @@ class TestConditional(TestCase):
 
 class TestLoops(TestCase):
     def test_immediate_return(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 no_value_type(), build_break_types(int_type()),
                 loop_op(return_op(literal_op(42)))
-            ), check_safe_exit=True
+            )
         )
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_count_then_return(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 no_value_type(), build_break_types(int_type()), int_type(), literal_op(0),
                 loop_op(
@@ -525,7 +525,7 @@ class TestLoops(TestCase):
                         ), return_op(dereference_op(context_op(), literal_op("local"))), nop())
                     )
                 )
-            ), check_safe_exit=True
+            )
         )
 
         self.assertEquals(result.caught_break_mode, "return")
@@ -534,31 +534,31 @@ class TestLoops(TestCase):
 
 class TestInferredBreakTypes(TestCase):
     def test_basic_inferrence(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 no_value_type(), build_break_types(inferred_type()),
                 return_op(literal_op(42))
-            ), check_safe_exit=True
+            )
         )
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_infer_all(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 no_value_type(), infer_all(), return_op(literal_op(42))
-            ), check_safe_exit=True
+            )
         )
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_infer_exception(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 no_value_type(), infer_all(), addition_op(literal_op("hello"), literal_op(5))
-            )
+            ), check_safe_exit=False
         )
 
         self.assertEquals(result.caught_break_mode, "exception")
@@ -575,7 +575,7 @@ class TestInferredBreakTypes(TestCase):
 
 class TestFunctionPreparation(TestCase):
     def test_basic(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 no_value_type(), build_break_types(int_type()),
                 return_op(invoke_op(close_op(static_op(prepare_op(literal_op(function_lit(
@@ -590,7 +590,7 @@ class TestFunctionPreparation(TestCase):
 
 class TestFunctionInvocation(TestCase):
     def test_basic(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 no_value_type(), build_break_types(int_type()),
                 function_type(no_value_type(), build_break_types(int_type())),
@@ -598,14 +598,14 @@ class TestFunctionInvocation(TestCase):
                     no_value_type(), build_break_types(int_type()), return_op(literal_op(42))
                 )))), context_op()),
                 return_op(invoke_op(dereference_op(context_op(), literal_op("local"), True)))
-            ), check_safe_exit=True
+            )
         )
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_basic_with_inferred_types(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 no_value_type(), infer_all(),
                 function_type(no_value_type(), build_break_types(int_type())),
@@ -613,14 +613,14 @@ class TestFunctionInvocation(TestCase):
                     no_value_type(), infer_all(), return_op(literal_op(42))
                 )))), context_op()),
                 return_op(invoke_op(dereference_op(context_op(), literal_op("local"), True)))
-            ), check_safe_exit=True
+            )
         )
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_basic_with_inferred_local_type(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 no_value_type(), infer_all(),
                 inferred_type(),
@@ -628,7 +628,7 @@ class TestFunctionInvocation(TestCase):
                     no_value_type(), infer_all(), return_op(literal_op(42))
                 )))), context_op()),
                 return_op(invoke_op(dereference_op(context_op(), literal_op("local"), True)))
-            ), check_safe_exit=True
+            )
         )
 
         self.assertEquals(result.caught_break_mode, "return")
@@ -637,20 +637,20 @@ class TestFunctionInvocation(TestCase):
 
 class TestUnboundReference(TestCase):
     def test_unbound_reference_to_arguments(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 object_type({ "foo": int_type(), "bar": int_type() }), infer_all(),
                 return_op(addition_op(
                     unbound_dereference("foo"), unbound_dereference("bar")
                 ))
-            ), check_safe_exit=True, argument=PythonObject({ "foo": 39, "bar": 3 })
+            ), argument=PythonObject({ "foo": 39, "bar": 3 })
         )
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_unbound_reference_to_locals(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 no_value_type(), infer_all(),
                 object_type({ "foo": int_type(), "bar": int_type() }),
@@ -658,14 +658,14 @@ class TestUnboundReference(TestCase):
                 return_op(addition_op(
                     unbound_dereference("foo"), unbound_dereference("bar")
                 ))
-            ), check_safe_exit=True
+            )
         )
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_unbound_reference_to_locals_and_arguments(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 object_type({ "foo": int_type() }), infer_all(),
                 object_type({ "bar": int_type() }),
@@ -673,7 +673,7 @@ class TestUnboundReference(TestCase):
                 return_op(addition_op(
                     unbound_dereference("foo"), unbound_dereference("bar")
                 ))
-            ), check_safe_exit=True, argument=PythonObject({ "foo": 39 })
+            ), argument=PythonObject({ "foo": 39 })
         )
 
         self.assertEquals(result.caught_break_mode, "return")
@@ -700,15 +700,15 @@ class TestMatch(TestCase):
             )
         )
 
-        result = bootstrap_function(
-            func, check_safe_exit=True, argument=PythonObject({ "foo": 39 }, bind=UniversalObjectType({ "foo": IntegerType() }))
+        _, result = bootstrap_function(
+            func, argument=PythonObject({ "foo": 39 }, bind=UniversalObjectType({ "foo": IntegerType() }))
         )
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
-        result = bootstrap_function(
-            func, check_safe_exit=True, argument=PythonObject({ "foo": "hello" })
+        _, result = bootstrap_function(
+            func, argument=PythonObject({ "foo": "hello" })
         )
 
         self.assertEquals(result.caught_break_mode, "return")
@@ -745,19 +745,19 @@ class TestMatch(TestCase):
             )
         )
 
-        result = bootstrap_function(func, check_safe_exit=True, argument=1)
+        _, result = bootstrap_function(func, argument=1)
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "one")
-        result = bootstrap_function(func, check_safe_exit=True, argument=2)
+        _, result = bootstrap_function(func, argument=2)
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "two")
-        result = bootstrap_function(func, check_safe_exit=True, argument=3)
+        _, result = bootstrap_function(func, argument=3)
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "three")
-        result = bootstrap_function(func, check_safe_exit=True, argument=4)
+        _, result = bootstrap_function(func, argument=4)
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "four")
-        result = bootstrap_function(func, check_safe_exit=True, argument=5)
+        _, result = bootstrap_function(func, argument=5)
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "invalid")
 
@@ -784,13 +784,13 @@ class TestMatch(TestCase):
             )
         )
 
-        result = bootstrap_function(func, check_safe_exit=True, argument=2)
+        _, result = bootstrap_function(func, argument=2)
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "int is not a string")
-        result = bootstrap_function(func, check_safe_exit=True, argument=True)
+        _, result = bootstrap_function(func, argument=True)
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "bool is not a string")
-        result = bootstrap_function(func, check_safe_exit=True, argument="hello world")
+        _, result = bootstrap_function(func, argument="hello world")
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "hello world")
 
@@ -812,10 +812,10 @@ class TestTryCatch(TestCase):
                 nop()
             )
         )
-        result = bootstrap_function(func, argument="hello world")
+        _, result = bootstrap_function(func, argument="hello world", check_safe_exit=False)
         self.assertEquals(result.caught_break_mode, "exception")
         self.assertEquals(result.value, "hello world")
-        result = bootstrap_function(func, argument=41)
+        _, result = bootstrap_function(func, argument=41, check_safe_exit=False)
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
@@ -856,16 +856,16 @@ class TestTryCatch(TestCase):
             )
         )
 
-        result = bootstrap_function(func, argument=1)
+        _, result = bootstrap_function(func, argument=1, check_safe_exit=False)
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "one")
-        result = bootstrap_function(func, argument=2)
+        _, result = bootstrap_function(func, argument=2, check_safe_exit=False)
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "two")
-        result = bootstrap_function(func, argument=3)
+        _, result = bootstrap_function(func, argument=3, check_safe_exit=False)
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "unknown")
-        result = bootstrap_function(func, argument="hello")
+        _, result = bootstrap_function(func, argument="hello", check_safe_exit=False)
         self.assertEquals(result.caught_break_mode, "exception")
         self.assertIsInstance(result.value, Universal)
         self.assertEquals(result.value._get("type"), "TypeError")
@@ -885,14 +885,14 @@ class TestTryCatch(TestCase):
                 nop()
             )
         )
-        result = bootstrap_function(func, check_safe_exit=True)
+        _, result = bootstrap_function(func)
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, "DereferenceOp: invalid_dereference")
 
 
 class TestUtilityMethods(TestCase):
     def test_misc1(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 no_value_type(), infer_all(),
                 object_type({ "foo": int_type(), "bar": int_type() }),
@@ -900,14 +900,14 @@ class TestUtilityMethods(TestCase):
                 return_op(addition_op(
                     dereference("local.foo"), dereference("local.bar")
                 ))
-            ), check_safe_exit=True
+            )
         )
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
 
     def test_misc2(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 no_value_type(), infer_all(),
                 inferred_type(),
@@ -921,7 +921,7 @@ class TestUtilityMethods(TestCase):
                     dereference("local"),
                     object_template_op({ "foo": literal_op(39), "bar": literal_op(3) }),
                 ))
-            ), check_safe_exit=True
+            )
         )
 
         self.assertEquals(result.caught_break_mode, "return")
@@ -933,10 +933,10 @@ class TestUtilityMethods(TestCase):
 
 class TestStatics(TestCase):
     def test_static_value_dereference(self):
-        result = bootstrap_function(
+        _, result = bootstrap_function(
             function_lit(
                 return_op(static_op(addition_op(literal_op(5), literal_op(37))))
-            ), check_safe_exit=True
+            )
         )
 
         self.assertEquals(result.caught_break_mode, "return")

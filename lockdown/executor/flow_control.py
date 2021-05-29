@@ -9,7 +9,7 @@ from lockdown.type_system.composites import is_type_bindable_to_value, \
 from lockdown.type_system.core_types import Type
 from lockdown.type_system.exceptions import FatalError
 from lockdown.type_system.reasoner import DUMMY_REASONER, Reasoner
-from lockdown.utils import MISSING, InternalMarker, is_debug
+from lockdown.utils import MISSING, InternalMarker, get_environment
 
 
 class BreakException(Exception):
@@ -147,7 +147,7 @@ class FrameManager(object):
 
     def get_next_frame(self, thing):
         if self.fully_wound():
-            if not is_debug() and not is_restartable(thing):
+            if get_environment().frame_shortcut and not is_restartable(thing):
                 return PASS_THROUGH_FRAME
 
             if self.mode != "wind":
@@ -199,16 +199,12 @@ class PassThroughFrame(object):
         return func()
 
     def unwind(self, mode, value, opcode, restart_type):
-        if is_debug():
-            raise FatalError()
-
-        if restart_type is None:
+        if get_environment().return_value_optimization and restart_type is None:
             return mode, value, opcode, None
         raise BreakException(mode, value, opcode, restart_type)
 
-    def value(self, value):
-        #return self.unwind("value", value, None)
-        return "value", value, None, None
+    def value(self, value, opcode=None):
+        return self.unwind("value", value, opcode, None)
 
     def exception(self, value, opcode=None):
         return self.unwind("exception", value, opcode, None)
@@ -244,8 +240,9 @@ class Frame(object):
         if restart_type:
             self.manager.mode = "shift"
 
-        if not is_debug() and restart_type is None:
+        if get_environment().return_value_optimization and restart_type is None:
             return mode, value, self.target, None
+
         raise BreakException(mode, value, self.target, restart_type)
 
     def value(self, value):
@@ -294,7 +291,7 @@ class Frame(object):
         if isinstance(exc_value, FatalError):
             return
 
-        if is_debug() and isinstance(exc_value, BreakException) and self.target.break_types is not None:
+        if get_environment().validate_flow_control and isinstance(exc_value, BreakException) and self.target.break_types is not None:
             # Verifies that execution is leaving the target opcode at run-time in a way that was forecast
             # at verification time. 
             break_types = self.target.break_types.get(exc_value.mode, MISSING)
@@ -325,13 +322,13 @@ class Frame(object):
 
         exc_type_allows_restart = exc_value and isinstance(exc_value, BreakException) and exc_value.restart_type is not None
 
-        if is_debug() and self.manager.mode == "reset":
+        if get_environment().validate_flow_control and self.manager.mode == "reset":
             raise FatalError()
 
         if not exc_type_allows_restart and self.manager.fully_wound():
             self.manager.pop_frame()
         else:
-            if is_debug() and exc_type_allows_restart:
+            if get_environment().validate_flow_control and exc_type_allows_restart:
                 if self.manager.mode not in ("shift",):
                     raise FatalError()
 

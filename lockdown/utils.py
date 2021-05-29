@@ -20,6 +20,10 @@ class InternalMarker(object):
     def __str__(self):
         return self.name
 
+NO_VALUE = InternalMarker("NO_VALUE")
+MISSING = InternalMarker("MISSING")
+NOTHING = InternalMarker("NOTHING")
+
 def spread_dict(*args, **kwargs):
     result = {}
     for arg in args:
@@ -77,35 +81,89 @@ def profile(output_file):
         pr.disable()
         pr.dump_stats(output_file)
 
-DEBUG_MODE = None
+class Environment(object):
+    def __init__(
+            self,
+            rtti=True,
+            frame_shortcut=True,
+            validate_flow_control=True,
+            opcode_bindings=True,
+            consume_python_objects=True,
+            return_value_optimization=True,
+            transpile=False
+        ):
+        self.rtti = rtti
+        self.frame_shortcut = frame_shortcut
+        self.validate_flow_control = validate_flow_control
+        self.opcode_bindings = opcode_bindings
+        self.consume_python_objects = consume_python_objects
+        self.return_value_optimization = return_value_optimization
+        self.transpile = transpile
 
-def is_debug():
-    global DEBUG_MODE
-    if DEBUG_MODE is None:
-        raise FatalError()
-    return DEBUG_MODE
+    def clone(
+        self,
+        rtti=MISSING,
+        frame_shortcut=MISSING,
+        validate_flow_control=MISSING,
+        opcode_bindings=MISSING,
+        consume_python_objects=MISSING,
+        return_value_optimization=MISSING,
+        transpile=MISSING
+    ):
+        return Environment(
+            rtti=default(rtti, self.rtti),
+            frame_shortcut=default(frame_shortcut, self.frame_shortcut),
+            validate_flow_control=default(validate_flow_control, self.validate_flow_control),
+            opcode_bindings=default(opcode_bindings, self.opcode_bindings),
+            consume_python_objects=default(consume_python_objects, self.consume_python_objects),
+            return_value_optimization=default(return_value_optimization, self.return_value_optimization),
+            transpile=default(transpile, self.transpile)
+        )
 
-def set_debug(debug):
-    global DEBUG_MODE
-    if DEBUG_MODE is not None:
-        raise FatalError()
-    DEBUG_MODE = debug
+environment_stack = None
 
+def get_environment():
+    return environment_stack[-1]
 
-runtime_type_information_active = None
+@contextmanager
+def environment(
+    rtti=MISSING,
+    frame_shortcut=MISSING,
+    validate_flow_control=MISSING,
+    opcode_bindings=MISSING,
+    consume_python_objects=MISSING,
+    return_value_optimization=MISSING,
+    transpile=MISSING,
+    base=False
+):
+    if base:
+        global environment_stack
+        if environment_stack is not None:
+            raise FatalError()
+        environment_stack = []
+        new_environment = Environment(
+            rtti=rtti,
+            frame_shortcut=frame_shortcut,
+            validate_flow_control=validate_flow_control,
+            opcode_bindings=opcode_bindings,
+            consume_python_objects=consume_python_objects,
+            return_value_optimization=return_value_optimization,
+            transpile=transpile
+        )
+    else:
+        new_environment = get_environment().clone(
+            rtti=rtti,
+            frame_shortcut=frame_shortcut,
+            validate_flow_control=validate_flow_control,
+            opcode_bindings=opcode_bindings,
+            consume_python_objects=consume_python_objects,
+            return_value_optimization=return_value_optimization,
+            transpile=transpile
+        )
 
-def runtime_type_information():
-    global runtime_type_information_active
-    if runtime_type_information_active is None:
-        raise FatalError()
-    return runtime_type_information_active
+    environment_stack.append(new_environment)
 
-def set_runtime_type_information(bind):
-    global runtime_type_information_active
-    if runtime_type_information_active is not None:
-        raise FatalError()
-    runtime_type_information_active = bind
-
-NO_VALUE = InternalMarker("NO_VALUE")
-MISSING = InternalMarker("MISSING")
-NOTHING = InternalMarker("NOTHING")
+    try:
+        yield new_environment
+    finally:
+        environment_stack.pop()

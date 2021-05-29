@@ -11,6 +11,7 @@ from lockdown.testing import miss_test
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.universal_type import DEFAULT_READONLY_COMPOSITE_TYPE, \
     PythonList, PythonObject
+from lockdown.utils import environment
 
 
 class TestJSONParsing(TestCase):
@@ -73,7 +74,7 @@ class TestBasicFunction(TestCase):
         code = parse("""
             function() { return 42; }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -81,7 +82,7 @@ class TestBasicFunction(TestCase):
         code = parse("""
             function() { return "hello"; }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, "hello")
 
@@ -89,7 +90,7 @@ class TestBasicFunction(TestCase):
         code = parse("""
             function() { return 12 + 30; }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -97,7 +98,7 @@ class TestBasicFunction(TestCase):
         code = parse("""
             function() { return (1 + 1) * 23 - 2 * 1 + 2; }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -105,7 +106,7 @@ class TestBasicFunction(TestCase):
         code = parse("""
             function(|int|) { return argument; }
         """)
-        result = bootstrap_function(code, argument=42, check_safe_exit=True)
+        _, result = bootstrap_function(code, argument=42)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -113,7 +114,7 @@ class TestBasicFunction(TestCase):
         code = parse("""
             function(|Object { foo: int }|) { return foo; }
         """)
-        result = bootstrap_function(code, argument=PythonObject({ "foo": 42 }), check_safe_exit=True)
+        _, result = bootstrap_function(code, argument=PythonObject({ "foo": 42 }))
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -121,7 +122,7 @@ class TestBasicFunction(TestCase):
         code = parse("""
             function() { int foo = 40; return foo + 2; }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -132,7 +133,7 @@ class TestBasicFunction(TestCase):
                 return bar.foo + 2;
             }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -144,7 +145,7 @@ class TestBasicFunction(TestCase):
                 return bar + 4;
             }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -157,7 +158,7 @@ class TestBasicFunction(TestCase):
                 return baz + 4;
             }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -171,7 +172,7 @@ class TestBasicFunction(TestCase):
                 return foo;
             }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -185,7 +186,7 @@ class TestBasicFunction(TestCase):
                 return foo + bar * 2;
             }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -199,7 +200,7 @@ class TestBasicFunction(TestCase):
                 return foo.baz + bar * 2;
             }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -210,7 +211,7 @@ class TestBasicFunction(TestCase):
                 return foo[0] * foo[1] * foo[2];
             }
         """)
-        result = bootstrap_function(code)
+        _, result = bootstrap_function(code, check_safe_exit=False)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 6)
 
@@ -221,7 +222,7 @@ class TestBasicFunction(TestCase):
                 return foo[0].bar * foo[1].bar;
             }
         """)
-        result = bootstrap_function(code)
+        _, result = bootstrap_function(code, check_safe_exit=False)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 6)
 
@@ -232,7 +233,7 @@ class TestBasicFunction(TestCase):
                 return bar.foo[0] * bar.foo[1] * bar.foo[2];
             }
         """)
-        result = bootstrap_function(code)
+        _, result = bootstrap_function(code, check_safe_exit=False)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 6)
 
@@ -244,7 +245,7 @@ class TestBasicFunction(TestCase):
                 return foo[0].bar * foo[1].bar;
             }
         """)
-        result = bootstrap_function(code)
+        _, result = bootstrap_function(code, check_safe_exit=False)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 12)
 
@@ -256,7 +257,7 @@ class TestBasicFunction(TestCase):
                 return foo[0].bar * foo[1].bar;
             }
         """)
-        result = bootstrap_function(code)
+        _, result = bootstrap_function(code, check_safe_exit=False)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 12)
 
@@ -268,7 +269,7 @@ class TestBasicFunction(TestCase):
                 return foo[0].bar * foo[1].bar;
             }
         """)
-        result = bootstrap_function(code)
+        _, result = bootstrap_function(code, check_safe_exit=False)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 9)
 
@@ -280,7 +281,7 @@ class TestBasicFunction(TestCase):
                 return foo[0];
             }
         """)
-        result = bootstrap_function(code)
+        _, result = bootstrap_function(code, check_safe_exit=False)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 4)
 
@@ -292,7 +293,7 @@ class TestBasicFunction(TestCase):
                 return foo[0].bar;
             }
         """)
-        result = bootstrap_function(code)
+        _, result = bootstrap_function(code, check_safe_exit=False)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 6)
 
@@ -304,7 +305,7 @@ class TestBuiltIns(TestCase):
                 return list(range(1, 5));
             }
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertIsInstance(result.value, PythonList)
         get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
@@ -322,7 +323,7 @@ class TestInferredTypes(TestCase):
                 return z;
             }
         """)
-        result = bootstrap_function(code)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -337,7 +338,7 @@ class TestFunctionDeclaration(TestCase):
                 return x();
             }
         """)
-        result = bootstrap_function(code)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -351,7 +352,7 @@ class TestFunctionDeclaration(TestCase):
                 return y();
             }
         """)
-        result = bootstrap_function(code)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 12)
 
@@ -371,7 +372,7 @@ class TestFunctionDeclaration(TestCase):
                 return getter();
             }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 32)
 
@@ -394,7 +395,7 @@ class TestFunctionDeclaration(TestCase):
                 return x;
             }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 2 ** (3 * 3))
 
@@ -407,7 +408,7 @@ class TestObjectDestructuring(TestCase):
                 return foo;
             }
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -418,7 +419,7 @@ class TestObjectDestructuring(TestCase):
                 return foo + bar;
             }
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -430,7 +431,7 @@ class TestObjectDestructuring(TestCase):
                 return foo;
             }
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 12)
 
@@ -442,7 +443,7 @@ class TestObjectDestructuring(TestCase):
                 return foo + bar;
             }
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -454,7 +455,7 @@ class TestObjectDestructuring(TestCase):
                 return foo + bar;
             }
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -466,7 +467,7 @@ class TestObjectDestructuring(TestCase):
                 return foo + bar;
             }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -479,7 +480,7 @@ class TestListDestructuring(TestCase):
                 return foo;
             }
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -490,7 +491,7 @@ class TestListDestructuring(TestCase):
                 return foo + bar;
             }
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -502,7 +503,7 @@ class TestListDestructuring(TestCase):
                 return foo;
             }
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 12)
 
@@ -514,7 +515,7 @@ class TestListDestructuring(TestCase):
                 return foo + bar;
             }
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -526,7 +527,7 @@ class TestListDestructuring(TestCase):
                 return foo + bar;
             }
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -538,7 +539,7 @@ class TestListDestructuring(TestCase):
                 return foo + bar;
             }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 42)
 
@@ -554,7 +555,7 @@ class TestLoops(TestCase):
                 return foo;
             }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 10)
 
@@ -568,7 +569,7 @@ class TestLoops(TestCase):
                 return result;
             }
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True, print_ast=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 1 + 2 + 3 + 4)
 
@@ -583,7 +584,7 @@ class TestMatch(TestCase):
                 return 10;
             }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 5)
 
@@ -597,7 +598,7 @@ class TestMatch(TestCase):
                 return 10;
             }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 10)
 
@@ -611,7 +612,7 @@ class TestMatch(TestCase):
                 return 10;
             }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 5)
 
@@ -625,7 +626,7 @@ class TestMatch(TestCase):
                 return 10;
             }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 9)
 
@@ -637,9 +638,9 @@ class TestDictionary(TestCase):
                 return foo[3];
             }
         """)
-        result = bootstrap_function(code)
-        self.assertIn("exception", result.opcode.break_types)
-        self.assertTrue(result.opcode.break_types["exception"][0]["out"].micro_op_types[("get", "type")].value_type.value == "TypeError")
+        func, result = bootstrap_function(code, check_safe_exit=False)
+        self.assertIn("exception", func.break_types)
+        self.assertTrue(func.break_types["exception"][0]["out"].micro_op_types[("get", "type")].value_type.value == "TypeError")
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 55)
 
@@ -651,9 +652,9 @@ class TestDictionary(TestCase):
                 return foo[3]?;
             }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
-        self.assertNotIn("exception", result.opcode.break_types)
-        self.assertTrue(result.opcode.break_types["value"][1]["out"].micro_op_types[("get", "type")].value_type.value == "TypeError")
+        func, result = bootstrap_function(code, check_safe_exit=False)
+        self.assertNotIn("exception", func.break_types)
+        self.assertTrue(func.break_types["value"][1]["out"].micro_op_types[("get", "type")].value_type.value == "TypeError")
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 55)
 
@@ -665,7 +666,7 @@ class TestDictionary(TestCase):
                 return foo[6];
             }
         """)
-        result = bootstrap_function(code)
+        _, result = bootstrap_function(code, check_safe_exit=False)
         self.assertEquals(result.caught_break_mode, "exception")
         self.assertEquals(result.value._to_dict()["message"], "DereferenceOp: invalid_dereference")
 
@@ -677,8 +678,8 @@ class TestDictionary(TestCase):
                 return foo[3];
             }
         """)
-        result = bootstrap_function(code)
-        self.assertNotIn("exception", result.opcode.break_types)
+        func, result = bootstrap_function(code)
+        self.assertNotIn("exception", func.break_types)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 55)
 
@@ -691,8 +692,8 @@ class TestDictionary(TestCase):
                 return foo[3]?;
             }
         """)
-        result = bootstrap_function(code)
-        self.assertNotIn("exception", result.opcode.break_types)
+        func, result = bootstrap_function(code, check_safe_exit=False)
+        self.assertNotIn("exception", func.break_types)
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 55)
 
@@ -728,10 +729,11 @@ class TestSpeed(TestCase):
                 return i * j;
             }
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True, measure=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.value, 20 * 20)
         end = time()
-        self.assertLess(end - start, 16)
+        print end - start
+        self.assertLess(end - start, 20)
 
     def test_loop_faster(self):
         start = time()
@@ -752,7 +754,7 @@ class TestSpeed(TestCase):
                 return i * j;
             }
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True, transpile=True, measure=True)
+        _, result = bootstrap_function(code, transpile=True)
         self.assertEquals(result.value, 100 * 100)
         end = time()
         self.assertLess(end - start, 25)
@@ -776,7 +778,7 @@ class TestEuler(TestCase):
                 return result;
             };
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.value, 233168)
 
 #     def test_1a(self):
@@ -790,7 +792,7 @@ class TestEuler(TestCase):
 #             };
 #         """, debug=True)
 # 
-#         result = bootstrap_function(code, check_safe_exit=True)
+#         _, result = bootstrap_function(code)
 #         self.assertEquals(result.value, 233168)
 
     def test_2(self):
@@ -808,7 +810,7 @@ class TestEuler(TestCase):
                 return result;
             }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.value, 4613732)
 
     def test_3(self):
@@ -825,7 +827,7 @@ class TestEuler(TestCase):
                 return test;
             }
         """)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.value, 6857)
 
     def test_4(self):
@@ -855,7 +857,7 @@ class TestEuler(TestCase):
                 return bestResult;
             }
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.value, 906609)
 
     def test_6(self):
@@ -869,7 +871,7 @@ class TestEuler(TestCase):
                 return sum * sum - sumSquares;
             }
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.value, 25164150)
 
     def test_7(self):
@@ -896,7 +898,7 @@ class TestEuler(TestCase):
                 };
             }
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.value, 73)
 
     def test_9(self):
@@ -922,7 +924,7 @@ class TestEuler(TestCase):
              }
 
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.value, 31875000)
 
     def test_14(self):
@@ -950,7 +952,7 @@ class TestEuler(TestCase):
                 return max(|results|);
             }
         """, debug=True)
-        result = bootstrap_function(code, check_safe_exit=True, print_ast=True)
+        _, result = bootstrap_function(code)
         self.assertEquals(result.value, 20)
 
 
@@ -961,7 +963,8 @@ class TestTranspilation(TestCase):
                 return 42;
             }
         """)
-        result = bootstrap_function(code, transpile=True)
+        with environment(transpile=True):
+            _, result = bootstrap_function(code)
         self.assertEquals(result.value, 42)
 
     def test_multiplication(self):
@@ -970,7 +973,8 @@ class TestTranspilation(TestCase):
                 return 21 * 2;
             }
         """)
-        result = bootstrap_function(code, transpile=True)
+        with environment(transpile=True):
+            _, result = bootstrap_function(code)
         self.assertEquals(result.value, 42)
 
     def test_comma_op(self):
@@ -980,6 +984,7 @@ class TestTranspilation(TestCase):
                 return 21 * 2;
             }
         """)
-        result = bootstrap_function(code, transpile=True)
+        with environment(transpile=True):
+            _, result = bootstrap_function(code)
         self.assertEquals(result.value, 42)
 

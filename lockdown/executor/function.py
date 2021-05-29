@@ -30,8 +30,8 @@ from lockdown.type_system.managers import get_manager, get_type_of_value
 from lockdown.type_system.reasoner import DUMMY_REASONER, Reasoner
 from lockdown.type_system.universal_type import PythonObject, \
     UniversalObjectType, DEFAULT_READONLY_COMPOSITE_TYPE, PythonList, PythonDict
-from lockdown.utils import MISSING, is_debug, runtime_type_information, raise_from, \
-    spread_dict
+from lockdown.utils import MISSING, raise_from, \
+    spread_dict, get_environment
 from log import logger
 
 
@@ -425,7 +425,7 @@ class OpenFunction(object):
         return OpenFunctionType(self.argument_type, self.outer_type, self.break_types)
 
     def close(self, outer_context):
-        if is_debug() and not is_type_bindable_to_value(outer_context, self.outer_type):
+        if get_environment().opcode_bindings and not is_type_bindable_to_value(outer_context, self.outer_type):
             raise FatalError()
 
         return ClosedFunction(self, outer_context)
@@ -588,7 +588,7 @@ class ClosedFunction(LockdownFunction):
 
     def invoke(self, argument, frame_manager):
         logger.debug("ClosedFunction")
-        if is_debug() and not is_type_bindable_to_value(argument, self.open_function.argument_type):
+        if get_environment().opcode_bindings and not is_type_bindable_to_value(argument, self.open_function.argument_type):
             raise FatalError()
         logger.debug("ClosedFunction:argument_check")
 
@@ -601,7 +601,7 @@ class ClosedFunction(LockdownFunction):
                         "static": self.open_function.static,
                         "types": self.open_function.types_context
                     },
-                        bind=self.open_function.local_initialization_context_type if runtime_type_information() else None,
+                        bind=self.open_function.local_initialization_context_type if get_environment().rtti else None,
                         debug_reason="local-initialization-context"
                     )
                 )
@@ -613,11 +613,11 @@ class ClosedFunction(LockdownFunction):
             logger.debug("ClosedFunction:local_initializer")
             local = frame.step("local", lambda: evaluate(self.open_function.local_initializer, new_context, frame_manager))
 
-            if runtime_type_information():
+            if get_environment().rtti:
                 frame.step("remove_local_initialization_context_type", lambda: get_manager(new_context).remove_composite_type(self.open_function.local_initialization_context_type))
 
             logger.debug("ClosedFunction:local_check")
-            if is_debug() and not is_type_bindable_to_value(local, self.open_function.local_type):
+            if get_environment().opcode_bindings and not is_type_bindable_to_value(local, self.open_function.local_type):
                 raise FatalError()
 
             logger.debug("ClosedFunction:code_context")
@@ -633,7 +633,7 @@ class ClosedFunction(LockdownFunction):
                         "local": local,
                         "types": self.open_function.types_context
                     },
-                        bind=self.open_function.execution_context_type if runtime_type_information() else None,
+                        bind=self.open_function.execution_context_type if get_environment().rtti else None,
                         debug_reason="code-execution-context",
                         reasoner=code_context_binding_reasoner
                     )
@@ -651,7 +651,7 @@ class ClosedFunction(LockdownFunction):
             logger.debug("ClosedFunction:code_execute")
             result = frame.step("code", lambda: evaluate(self.open_function.code, new_context, frame_manager))
 
-            if runtime_type_information():
+            if get_environment().rtti:
                 frame.step("remove_code_execution_context_type", lambda: get_manager(new_context).remove_composite_type(self.open_function.execution_context_type))
 
             return frame.value(result)

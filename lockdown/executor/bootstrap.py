@@ -16,7 +16,7 @@ from lockdown.executor.raw_code_factories import function_lit, list_type, \
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.universal_type import PythonObject, \
     DEFAULT_READONLY_COMPOSITE_TYPE
-from lockdown.utils import NO_VALUE, print_code, MISSING
+from lockdown.utils import NO_VALUE, print_code, MISSING, get_environment
 
 
 class ObjectDictWrapper(object):
@@ -212,7 +212,7 @@ def format_unhandled_break(mode, value, caused_by, opcode, data):
 def raise_unhandled_break(mode, value, caused_by, opcode, data):
     raise BootstrapException(format_unhandled_break(mode, value, caused_by, opcode, data))
 
-def bootstrap_function(data, argument=None, context=None, check_safe_exit=False, transpile=False, measure=False, print_ast=False):
+def bootstrap_function(data, argument=None, context=None, check_safe_exit=True, print_ast=False):
     if argument is None:
         argument = NO_VALUE
     if context is None:
@@ -243,16 +243,9 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=False,
         raise_unhandled_break(capture_preparation.caught_break_mode, capture_preparation.value, None, capture_preparation.opcode, data)
 
     with frame_manager.capture() as capture_result:
-        if transpile:
+        if get_environment().transpile:
             closed_function = closed_function.transpile()
-
-        if measure:
-            start = time()
 
         capture_result.attempt_capture_or_raise(*closed_function.invoke(argument, frame_manager))
 
-        if measure:
-            end = time()
-            print end - start
-
-    return capture_result
+    return closed_function, capture_result
