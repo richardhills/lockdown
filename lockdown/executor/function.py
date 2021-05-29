@@ -3,10 +3,8 @@ from __future__ import unicode_literals
 
 import ast
 
-from lockdown.executor.ast_utils import unwrap_expr, \
-    build_and_compile_ast_function, compile_module, compile_statement, \
-    DependencyBuilder, compile_function, compile_ast_function_def, \
-    get_dependency_key
+from lockdown.executor.ast_utils import build_and_compile_ast_function, compile_module, \
+    compile_statement, DependencyBuilder, compile_ast_function_def
 from lockdown.executor.exceptions import PreparationException
 from lockdown.executor.flow_control import BreakTypesFactory, FrameManager, \
     is_restartable
@@ -15,7 +13,7 @@ from lockdown.executor.function_type import enrich_break_type, OpenFunctionType,
 from lockdown.executor.opcodes import enrich_opcode, get_context_type, evaluate, \
     get_expression_break_types, flatten_out_types, TransformOp
 from lockdown.executor.raw_code_factories import dynamic_dereference_op, \
-    static_op, match_op, prepared_function, inferred_type, invoke_op,\
+    static_op, match_op, prepared_function, inferred_type, invoke_op, \
     object_template_op, object_type, dereference
 from lockdown.executor.type_factories import enrich_type
 from lockdown.type_system.composites import prepare_lhs_type, \
@@ -49,6 +47,7 @@ def prepare_piece_of_context(declared_type, suggested_type):
         raise FatalError(is_piece_self_consistent_reasoner.to_message())
 
     return final_type
+
 
 def prepare(data, outer_context, frame_manager, immediate_context=None):
     if not isinstance(data, Composite):
@@ -369,12 +368,14 @@ def type_conditional_converter(expression):
     get_manager(new_match).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
     return new_match
 
+
 def combine(*funcs):
     def wrapped(expression):
         for func in funcs:
             expression = func(expression)
         return expression
     return wrapped
+
 
 class LockdownFunction(object):
     def get_type(self):
@@ -503,11 +504,13 @@ class {open_function_id}(object):
 
         local_initializer_ast = self.local_initializer.to_ast(context_name, dependency_builder)
 
-        return_types = self.break_types.get("value", [])
+#         return_types = self.break_types.get("value", [])
+#         will_ignore_return_value = True
+#         for return_type in return_types:
+#             if not isinstance(return_type["out"], NoValueType):
+#                 will_ignore_return_value = False
+
         will_ignore_return_value = True
-        for return_type in return_types:
-            if not isinstance(return_type["out"], NoValueType):
-                will_ignore_return_value = False
 
         code_ast = self.code.to_ast(
             context_name,
@@ -567,6 +570,7 @@ class {open_function_id}(object):
 
         return compile_ast_function_def(combined_ast, open_function_id, dependencies)
 
+
 class ClosedFunction(LockdownFunction):
     def __init__(self, open_function, outer_context):
         self.open_function = open_function
@@ -588,8 +592,11 @@ class ClosedFunction(LockdownFunction):
 
     def invoke(self, argument, frame_manager):
         logger.debug("ClosedFunction")
-        if get_environment().opcode_bindings and not is_type_bindable_to_value(argument, self.open_function.argument_type):
-            raise FatalError()
+        if get_environment().opcode_bindings:
+            bindable_reasoner = Reasoner()
+            bindable = is_type_bindable_to_value(argument, self.open_function.argument_type, bindable_reasoner)
+            if not bindable:
+                raise FatalError(bindable_reasoner.to_message())
         logger.debug("ClosedFunction:argument_check")
 
         with frame_manager.get_next_frame(self) as frame:
@@ -657,27 +664,22 @@ class ClosedFunction(LockdownFunction):
             return frame.value(result)
 
 
-class WrappedFunction(LockdownFunction):
-    def __init__(self, wrapped):
-        self.wrapped = wrapped
-
-    def invoke(self, *args, **kwargs):
-        return self.wrapped(*args, **kwargs)
-
-
 class TranspiledFunction(LockdownFunction):
     def __init__(self, body, dependency_builder, context_name):
+        """
+        Create a LockdownFunction from an array of Python ast.stmt objects
+        """
         function_name = b"ClosedFunction_{}".format(id(self))
 
+        # Make sure everything in the body is a statement (not an expression)
+        body = [ast.Expr(part) if isinstance(part, ast.expr) else part for part in body]
+
+        # Put a return statement at the end of the function, if we need one
         final_thing = body[-1]
         if isinstance(final_thing, ast.Expr):
             body[-1] = compile_statement('return ("value", {value}, None, None)', context_name, dependency_builder, value=final_thing.value)
-        elif isinstance(final_thing, ast.expr):
-            body[-1] = compile_statement('return ("value", {value}, None, None)', context_name, dependency_builder, value=final_thing)
         else:
             raise FatalError()
-
-        body = [ast.Expr(part) if isinstance(part, ast.expr) else part for part in body]
 
         self.wrapped_function = build_and_compile_ast_function(
             function_name, [ b"_argument", b"_frame_manager"], body, dependency_builder.build()

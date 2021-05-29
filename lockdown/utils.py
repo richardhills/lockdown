@@ -125,6 +125,16 @@ environment_stack = None
 def get_environment():
     return environment_stack[-1]
 
+fastest = {
+    "rtti": False,
+    "frame_shortcut": True,
+    "validate_flow_control": False,
+    "opcode_bindings": False,
+    "consume_python_objects": False,
+    "return_value_optimization": True,
+    "transpile": True
+}
+
 @contextmanager
 def environment(
     rtti=MISSING,
@@ -136,6 +146,9 @@ def environment(
     transpile=MISSING,
     base=False
 ):
+    if transpile and not return_value_optimization:
+        raise FatalError("Transpiling has return_value_optomization baked in")
+
     if base:
         global environment_stack
         if environment_stack is not None:

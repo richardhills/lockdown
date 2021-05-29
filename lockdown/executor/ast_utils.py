@@ -1,40 +1,32 @@
 # -*- coding: utf-8 -*-
+"""
+Utility functions that make it easy to compile and manipulate Python
+ast.* objects, in particular ast.stmt, ast.expr, ast.Module.
+
+These utilities make it easier for Opcodes, Functions and MicroOps to transpile
+themselves down to Python. They make it easy to write that Python code in a
+template form, and to then declare hooks for so that the Python code can call
+back into the interpretor when needed.
+"""
+
 from __future__ import unicode_literals
 
 import ast
 from types import FunctionType, MethodType
 
+from astor.code_gen import to_source
+
 from lockdown.type_system.exceptions import FatalError
 from lockdown.utils import spread_dict, NO_VALUE
 
 
-def extract_single_statement(module):
-    return module.body[0]
-
-def unwrap_expr(node):
-    if isinstance(node, ast.Expr):
-        return node.value
-    if isinstance(node, ast.expr):
-        return node
-    raise FatalError()
-
-def wrap_as_statement(node):
-    if isinstance(node, ast.stmt):
-        return node
-    if isinstance(node, ast.expr):
-        return ast.Expr(node)
-    raise FatalError()
-
-def unwrap_modules(nodes):
-    resulting_nodes = []
-    for n in nodes:
-        if isinstance(n, ast.Module):
-            resulting_nodes.extend(n.body)
-        else:
-            resulting_nodes.append(n)
-    return resulting_nodes
-
 def compile_module(code, context_name, dependency_builder, **subs):
+    """
+    Compiles a string of Python code into Python ast.Module, including applying substitutions
+    provided as kwargs. It is similar to the string.format function, except that
+    the variable substitutions are also converted to AST before being injected into
+    the resulting AST for the whole code block.
+    """
     string_subs = {}
     ast_subs = {}
 
@@ -46,36 +38,72 @@ def compile_module(code, context_name, dependency_builder, **subs):
         elif isinstance(value, ast.FunctionDef):
             string_subs[key] = dependency_builder.add(value)
         elif isinstance(value, (ast.stmt, ast.expr, ast.Module)):
+            # For a { key } in our code template, we substitute a unique string
+            # similar to "ast_1234". This comes through the parsing step in the
+            # resulting ast as a ast.Name node. We later scan the ast for these
+            # nodes and replace them with the ast for the original substitution. 
             ast_key = "ast_{}".format(id(value))
             string_subs[key] = ast_key
             ast_subs[ast_key] = value
         else:
             string_subs[key] = dependency_builder.add(value)
-
-    try:
-        code = code.format(**string_subs)
-    except KeyError:
-        raise
+    code = code.format(**string_subs)
     code = ast.parse(code)
 
     for key, sub_ast in ast_subs.items():
+        # For each ast_1234 ast.Name node, we now replace with the substitute ast
         code = ASTInliner(key, sub_ast, context_name, dependency_builder).visit(code)
-
-    rough_check = ast.dump(code)
-    for key in ast_subs.keys():
-        if key in rough_check:
-            print rough_check
-            raise FatalError()
 
     return code
 
 def compile_statement(code, context_name, dependency_builder, **subs):
+    # Compile to a module first, then extract the only statement
     code = compile_module(code, context_name, dependency_builder, **subs)
     return extract_single_statement(code)
 
+def extract_single_statement(module):
+    return module.body[0]
+
 def compile_expression(code, context_name, dependency_builder, **subs):
+    # Compile to a module, then extract a statement, then extract as a expression,
+    # throwing an exception if it's not possible
     code = compile_statement(code, context_name, dependency_builder, **subs)
     return unwrap_expr(code)
+
+def wrap_as_statement(node):
+    """
+    Python ast treats statements and expressions differently. Always returns a ast.stmt
+    object, even if passed an ast.expr.
+    """
+    if isinstance(node, ast.stmt):
+        return node
+    if isinstance(node, ast.expr):
+        return ast.Expr(node)
+    raise FatalError()
+
+def unwrap_expr(node):
+    """
+    Returns an ast.expr from a statement, but throws an exception if the statement
+    can not be converted to an expression.
+    """
+    if isinstance(node, ast.Expr):
+        return node.value
+    if isinstance(node, ast.expr):
+        return node
+    raise FatalError()
+
+def unwrap_modules(nodes):
+    """
+    Returns an array of ast.stmt objects, expanding out the ast.Module objects to
+    extract their ast.stmt objects too.
+    """
+    resulting_nodes = []
+    for n in nodes:
+        if isinstance(n, ast.Module):
+            resulting_nodes.extend(n.body)
+        else:
+            resulting_nodes.append(n)
+    return resulting_nodes
 
 def compile_function(code, context_name, initial_dependencies=None, **subs):
     dependency_builder = DependencyBuilder(initial_dependencies)
@@ -101,11 +129,10 @@ def build_and_compile_ast_function(name, arguments, body, dependencies):
     )
 
 def compile_ast_function_def(function_creator_ast, open_function_id, dependencies):
-#    print ast.dump(function_creator_ast)
     ast.fix_missing_locations(function_creator_ast)
 
-#    print "--- {} ---".format(open_function_id)
-#    print to_source(function_creator_ast)
+    print "--- {} ---".format(open_function_id)
+    print to_source(function_creator_ast)
 
     function_creator = compile(function_creator_ast, "<string>", "exec")
 
@@ -121,21 +148,28 @@ def default_globals():
     from lockdown.executor.flow_control import BreakException
     from lockdown.type_system.managers import get_manager
     from lockdown.type_system.universal_type import PythonObject
+    from lockdown.type_system.universal_type import CALCULATE_INITIAL_LENGTH, \
+        Universal
+    from lockdown.type_system.composites import bind_key, unbind_key
+
     return {
         "__builtins": None,
         "PythonObject": PythonObject,
+        "Universal": Universal,
         "BreakException": BreakException,
         "NoValue": NO_VALUE,
-        "get_manager": get_manager
+        "get_manager": get_manager,
+        "CALCULATE_INITIAL_LENGTH": CALCULATE_INITIAL_LENGTH,
+        "FatalError": FatalError,
+        "bind_key": bind_key,
+        "unbind_key": unbind_key,
     }
 
 def get_dependency_key(dependency):
-    if isinstance(dependency, int):
-        pass
     if isinstance(dependency, ast.FunctionDef):
         return dependency.name
     if isinstance(dependency, FunctionType):
-        return "{}{}".format(dependency.__name__, id(dependency))
+        return "{}_{}_{}".format(dependency.__name__, id(dependency))
     elif isinstance(dependency, MethodType):
         return "{}{}{}".format(dependency.im_class.__name__, dependency.__name__, id(dependency))
     else:
@@ -146,12 +180,16 @@ class DependencyBuilder(object):
         self.dependencies = {}
         if initial_dependencies:
             self.dependencies.update(initial_dependencies)
+        self.counter = 0
+
+    def get_next_id(self):
+        self.counter = self.counter + 1
+        return self.counter
 
     def add(self, dependency):
         key = get_dependency_key(dependency)
         if key not in self.dependencies:
             self.dependencies[key] = dependency
-#        print "{} ===> {}".format(key, type(dependency).__name__)
         return key
 
     def replace(self, key, replacement):
@@ -226,7 +264,7 @@ def stmt_wrapper_{ast_id}({context_name}, _frame_manager):
     return ("value", NoValue, None, None)
                     """,
                     self.context_name, self.dependency_builder,
-                    ast_id=id(self.replacement_ast),
+                    ast_id=self.dependency_builder.get_next_id(),
                     ast=self.replacement_ast
                 )
                 return compile_expression(

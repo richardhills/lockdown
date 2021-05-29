@@ -11,7 +11,7 @@ from lockdown.testing import miss_test
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.universal_type import DEFAULT_READONLY_COMPOSITE_TYPE, \
     PythonList, PythonObject
-from lockdown.utils import environment
+from lockdown.utils import environment, fastest
 
 
 class TestJSONParsing(TestCase):
@@ -732,7 +732,6 @@ class TestSpeed(TestCase):
         _, result = bootstrap_function(code)
         self.assertEquals(result.value, 20 * 20)
         end = time()
-        print end - start
         self.assertLess(end - start, 20)
 
     def test_loop_faster(self):
@@ -874,7 +873,7 @@ class TestEuler(TestCase):
         _, result = bootstrap_function(code)
         self.assertEquals(result.value, 25164150)
 
-    def test_7(self):
+    def test_7_slow(self):
         code = parse("""
             function() => int {
                 var isPrime = function(int number) => bool {
@@ -886,7 +885,7 @@ class TestEuler(TestCase):
                     return true;
                 };
 
-                int count = 0, test = 3;
+                int count = 1, test = 3;
                 loop {
                     if(isPrime(test)) {
                         count = count + 1;
@@ -899,7 +898,35 @@ class TestEuler(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.value, 73)
+        self.assertEquals(result.value, 71)
+
+    def test_7_fast(self):
+        code = parse("""
+            function() => int {
+                var isPrime = function(int number) => bool {
+                    for(var i from range(2, number / 2)) {
+                        if(number % i == 0) {
+                            return false;
+                        };
+                    };
+                    return true;
+                };
+
+                int count = 1, test = 3;
+                loop {
+                    if(isPrime(test)) {
+                        count = count + 1;
+                        if(count >= 100) {
+                            return test;
+                        };
+                    };
+                    test = test + 2;
+                };
+            }
+        """, debug=True)
+        with environment(**fastest):
+            _, result = bootstrap_function(code)
+        self.assertEquals(result.value, 541)
 
     def test_9(self):
         code = parse("""
@@ -987,4 +1014,18 @@ class TestTranspilation(TestCase):
         with environment(transpile=True):
             _, result = bootstrap_function(code)
         self.assertEquals(result.value, 42)
+
+    def test_loops(self):
+        code = parse("""
+            function() {
+                int result = 0;
+                for(var i from range(0, 100)) {
+                    result = result + i;
+                };
+                return result;
+            }
+        """)
+        with environment(transpile=True):
+            _, result = bootstrap_function(code)
+        self.assertEquals(result.value, 4950)
 

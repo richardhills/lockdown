@@ -28,6 +28,7 @@ from lockdown.type_system.universal_type import UniversalObjectType, \
     UniversalTupleType, Universal, SPARSE_ELEMENT
 from lockdown.utils import MISSING, NO_VALUE, InternalMarker, get_environment
 from log import logger
+from __builtin__ import False
 
 
 class Opcode(object):
@@ -150,7 +151,7 @@ class TypeErrorFactory(object):
         data = {
             "type": "TypeError",
             "message": message or self.message,
-            "kwargs": kwargs
+            "kwargs": PythonDict(kwargs)
         }
         return PythonObject(data, bind=self.get_type(message), debug_reason="type-error")
 
@@ -215,6 +216,12 @@ class MicroOpBinder(object):
                 return self.bound[key]
 
         return ( None, None ) 
+
+    def simple_bind(self):
+        if len(self.bound) == 1:
+            return self.bound.values()[0]
+
+        return (None, None)
 
 class Nop(Opcode):
     def get_break_types(self, context, frame_manager, immediate_context=None):
@@ -370,12 +377,12 @@ class TemplateOp(Opcode):
             for key, opcode in self.opcodes
         })
         parameters.update({
-            "value_ast{}".format(id(key)): opcode.to_ast(context_name, dependency_builder)
+            "value_ast{}".format(id(opcode)): opcode.to_ast(context_name, dependency_builder)
             for key, opcode in self.opcodes
         })
-        parameter_template = ",".join("{{key_ast{}}}: {{value_ast{}}}".format(id(key), id(key)) for key in self.opcodes)
+        parameter_template = ",".join("{{key_ast{}}}: {{value_ast{}}}".format(id(key), id(opcode)) for key, opcode in self.opcodes)
         return compile_expression(
-            "PythonObject({{ " + parameter_template + " }})",
+            "Universal(True, initial_wrapped={{ " + parameter_template + " }}, initial_length=CALCULATE_INITIAL_LENGTH)",
             context_name, dependency_builder, **parameters
         )
  
@@ -429,9 +436,12 @@ class DereferenceOp(Opcode):
         self.reference = enrich_opcode(data.reference, visitor)
         self.safe = data.safe
         self.binder = MicroOpBinder()
+        self.generates_exceptions = True
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
+
+        self.generates_exceptions = False
 
         reference_types = get_operand(self.reference, context, frame_manager, break_types)
         of_types = get_operand(self.of, context, frame_manager, break_types)
@@ -472,6 +482,8 @@ class DereferenceOp(Opcode):
             ), opcode=self)
         if invalid_unknown_dereference:
             break_types.add(exception_break_mode, self.INVALID_DEREFERENCE.get_type(), opcode=self)
+
+        self.generates_exceptions = len(invalid_dereferences) > 0 or invalid_unknown_dereference
 
         return break_types.build()
 
@@ -527,27 +539,19 @@ class DereferenceOp(Opcode):
                 ), None, None)
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
-        micro_op_to_compile = None
-        direct = None
-
-        if self.wildcard_micro_op:
-            micro_op_to_compile = self.wildcard_micro_op
-            direct = False
-        if not micro_op_to_compile:
-            direct_micro_ops = [m for d, m in self.micro_ops.values() if d]
-            if len(direct_micro_ops) == 1:
-                micro_op_to_compile = direct_micro_ops[0]
-                direct = True
+        tag, micro_op_to_compile = self.binder.simple_bind()
 
         need_interpreted_version = (
             micro_op_to_compile is None
             or micro_op_to_compile.key_error
             or micro_op_to_compile.type_error
-            or self.invalid_dereference_error
+            or self.generates_exceptions
         )
 
         if need_interpreted_version:
             return super(DereferenceOp, self).to_ast(context_name, dependency_builder)
+
+        direct = tag[0] == "set"
 
         if not direct:
             reference_ast = self.reference.to_ast(context_name, dependency_builder)
@@ -598,9 +602,12 @@ class AssignmentOp(Opcode):
         self.reference = enrich_opcode(data.reference, visitor)
         self.rvalue = enrich_opcode(data.rvalue, visitor)
         self.binder = MicroOpBinder()
+        self.generates_exceptions = True
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
+
+        self.generates_exceptions = False
 
         reference_types = get_operand(self.reference, context, frame_manager, break_types)
         of_types = get_operand(self.of, context, frame_manager, break_types)
@@ -640,6 +647,8 @@ class AssignmentOp(Opcode):
         if invalid_lvalue_error:
             break_types.add("exception", self.INVALID_LVALUE.get_type(), opcode=self)
 
+        self.generates_exceptions = invalid_assignment_error or invalid_rvalue_error or invalid_lvalue_error
+
         return break_types.build()
 
     def jump(self, context, frame_manager, immediate_context=None):
@@ -672,31 +681,21 @@ class AssignmentOp(Opcode):
                 return frame.exception(self.INVALID_ASSIGNMENT())
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
-        micro_op_to_compile = None
-        direct = None
-
-        if self.wildcard_micro_op:
-            micro_op_to_compile = self.wildcard_micro_op
-            direct = False
-        if not micro_op_to_compile:
-            direct_micro_ops = [m for d, m in self.micro_ops.values() if d]
-            if len(direct_micro_ops) == 1:
-                micro_op_to_compile = direct_micro_ops[0]
-                direct = True
+        tag, micro_op_to_compile = self.binder.simple_bind()
 
         need_interpreted_version = (
             micro_op_to_compile is None
             or micro_op_to_compile.key_error
             or micro_op_to_compile.type_error
-            or self.invalid_assignment_error
-            or self.invalid_lvalue_error
-            or self.invalid_rvalue_error
+            or self.generates_exceptions
         )
 
         if need_interpreted_version:
             return super(AssignmentOp, self).to_ast(context_name, dependency_builder)
 
         rvalue_ast = self.rvalue.to_ast(context_name, dependency_builder)
+
+        direct = tag[0] == "set"
 
         if not direct:
             reference_ast = self.reference.to_ast(context_name, dependency_builder)
@@ -1074,7 +1073,7 @@ def TransformOpTryCatcher{opcode_id}({context_name}, _frame_manager):
             return b.value
         raise
                     """, context_name, dependency_builder,
-                    opcode_id=id(self),
+                    opcode_id=dependency_builder.get_next_id(),
                     input=self.input,
                     expression=expression_ast
                 )
@@ -1290,10 +1289,10 @@ class CommaOp(Opcode):
                 context_name, dependency_builder, ast=asts[-1]
             )
             asts = [wrap_as_statement(a) for a in asts]
-            ast_placeholders = { "ast{}".format(i): e_ast for i, e_ast in enumerate(asts) }
+            ast_placeholders = [ ("ast_{}_{}".format(id(self), id(e_ast)), e_ast) for e_ast in asts ]
             comma_function = compile_statement(
-                "def CommaOp{opcode_id}({context_name}, _frame_manager):\n\t{" + "}\n\t{".join(ast_placeholders.keys()) + "}",
-                context_name, dependency_builder, opcode_id=id(self), **ast_placeholders
+                "def CommaOp{opcode_id}({context_name}, _frame_manager):\n\t{" + "}\n\t{".join([ k for (k, _) in ast_placeholders ]) + "}",
+                context_name, dependency_builder, opcode_id=id(self), **dict(ast_placeholders)
             )
             return compile_expression(
                 "{comma_function}({context_name}, _frame_manager)",
@@ -1304,6 +1303,9 @@ class CommaOp(Opcode):
 class LoopOp(Opcode):
     def __init__(self, data, visitor):
         self.code = enrich_opcode(data.code, visitor)
+        self.has_continues = True
+        self.has_ends = True
+        self.has_breaks = True
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
@@ -1311,6 +1313,10 @@ class LoopOp(Opcode):
         continue_value_type = other_break_types.pop("continue", MISSING)
         end_break = other_break_types.pop("end", MISSING)
         mode_break_type = other_break_types.pop("break", MISSING)
+
+        self.has_continues = continue_value_type is not MISSING
+        self.has_ends = end_break is not MISSING
+        self.has_breaks = mode_break_type is not MISSING
 
         if end_break is not MISSING:
             # The loop might end gracefully
@@ -1350,9 +1356,16 @@ class LoopOp(Opcode):
         raise FatalError()
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
+        if not will_ignore_return_value or self.has_breaks or self.has_continues:
+            return super(LoopOp, self).to_ast(context_name, dependency_builder)
+
         return compile_statement("""
-while(True):
-    {expression}
+try:
+    while True:
+        {expression}
+except BreakException as e:
+    if e.mode != "end":
+        raise
 """,
             context_name,
             dependency_builder,
@@ -1579,15 +1592,12 @@ class StaticOp(Opcode):
             return frame.unwind("value", self.value, None, None)
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
-        if self.mode == "value":
-            return compile_expression(
-                "{static_value}",
-                context_name,
-                dependency_builder,
-                static_value=self.value
-            )
-        else:
-            return super(StaticOp, self).to_ast(context_name, dependency_builder)
+        return compile_expression(
+            "{static_value}",
+            context_name,
+            dependency_builder,
+            static_value=self.value
+        )
 
 
 class InvokeOp(Opcode):
@@ -1652,7 +1662,6 @@ class InvokeOp(Opcode):
         if (isinstance(self.function, CloseOp)
             and isinstance(self.function.function, StaticOp)
             and isinstance(self.function.function.value, OpenFunction)
-            and self.function.function.mode == "value"
         ):
             open_function = self.function.function.value
             if will_ignore_return_value:

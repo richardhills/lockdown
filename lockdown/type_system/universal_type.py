@@ -4,6 +4,8 @@ from __future__ import unicode_literals
 from UserDict import DictMixin
 from _abcoll import MutableSequence
 
+from lockdown.executor.ast_utils import compile_statement, compile_expression,\
+    compile_module
 from lockdown.type_system.composites import Composite, CompositeType, \
     does_value_fit_through_type, unbind_key, bind_key, \
     can_add_composite_type_with_filter
@@ -19,7 +21,7 @@ from lockdown.utils import MISSING, default, micro_op_repr, InternalMarker
 
 
 SPARSE_ELEMENT = InternalMarker("SPARSE_ELEMENT")
-
+CALCULATE_INITIAL_LENGTH = InternalMarker("CALCULATE_INITIAL_LENGTH")
 
 class Universal(Composite):
     def __init__(self, is_sparse, default_factory=None, bind=None, debug_reason=None, initial_wrapped=None, initial_length=0, reasoner=None):
@@ -33,7 +35,10 @@ class Universal(Composite):
         manager.is_sparse = is_sparse
         manager.debug_reason = debug_reason
 
-        self._length = initial_length
+        if initial_length is CALCULATE_INITIAL_LENGTH:
+            self._length = max([ k + 1 for k in self._wrapped.keys() if isinstance(k, int) ] + [ 0 ])
+        else:
+            self._length = initial_length
 
         if bind:
             manager.add_composite_type(bind, reasoner=reasoner)
@@ -485,6 +490,18 @@ class GetterMicroOpType(MicroOpType):
 
         return ( values, self.value_type )
 
+    def to_ast(self, dependency_builder, target, *args):
+        # Doesn't support default factories...
+        key = self.key
+        if isinstance(self.key, basestring):
+            key = "\"{}\"".format(key)
+
+        return compile_expression(
+            "{target}._get({key})",
+            None, dependency_builder,
+            target=target, key=key
+        )
+
     def merge(self, other_micro_op_type):
         return GetterMicroOpType(
             self.key,
@@ -556,6 +573,22 @@ class SetterMicroOpType(MicroOpType):
 
     def prepare_bind(self, target, key_filter, substitute_value):
         return ([], None)
+
+    def to_ast(self, dependency_builder, target, new_value):
+        # Doesn't support default factories...
+        key = self.key
+        if isinstance(key, basestring):
+            key = "\"{}\"".format(key)
+        return compile_module(
+            """
+{temp} = get_manager({target})
+unbind_key({temp}, {key})
+{temp}.get_obj()._set({key}, {new_value})
+bind_key({temp}, {key})
+            """,
+            None, dependency_builder,
+            target=target, key=key, new_value=new_value, temp="s_{}".format(dependency_builder.get_next_id())
+        )
 
     def merge(self, other_micro_op_type):
         return SetterMicroOpType(

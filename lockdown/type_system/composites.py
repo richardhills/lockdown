@@ -423,8 +423,8 @@ def remove_composite_type(target_manager, remove_type, reasoner=DUMMY_REASONER, 
 def can_add_composite_type_with_filter(target, new_type, key_filter, substitute_value):
     return build_binding_map_for_type(None, new_type, target, get_manager(target), key_filter, substitute_value, {}, {}, DUMMY_REASONER)
 
-def is_type_bindable_to_value(value, type):
-    return build_binding_map_for_type(None, type, value, get_manager(value), None, MISSING, {}, {}, DUMMY_REASONER)
+def is_type_bindable_to_value(value, type, reasoner=DUMMY_REASONER):
+    return build_binding_map_for_type(None, type, value, get_manager(value), None, MISSING, {}, {}, reasoner)
 
 def does_value_fit_through_type(value, type, reasoner=DUMMY_REASONER):
     return build_binding_map_for_type(None, type, value, get_manager(value), None, MISSING, {}, None, reasoner, build_binding_map=False)
