@@ -758,6 +758,59 @@ class TestSpeed(TestCase):
         end = time()
         self.assertLess(end - start, 25)
 
+class TestError(TestCase):
+    def test_1(self):
+        code = parse("""
+            function(int foo) => int {
+                return foo;
+            };
+        """, debug=True)
+        _, result = bootstrap_function(
+            code,
+            argument=PythonList([ 5 ])
+        )
+        self.assertEqual(result.value, 5)
+
+    def test_2(self):
+        code = parse("""
+            function(any foo) {
+                return foo.bar;
+            };
+        """, debug=True)
+        _, result = bootstrap_function(
+            code,
+            argument=PythonList([ PythonObject({ "bar" : 5 }, bind=DEFAULT_READONLY_COMPOSITE_TYPE) ]),
+            check_safe_exit=False
+        )
+        self.assertEqual(result.value, 5)
+
+    def test_3(self):
+        code = parse("""
+            function(any foo) {
+                return foo + 3;
+            };
+        """, debug=True)
+        _, result = bootstrap_function(
+            code,
+            argument=PythonList([ 5 ]),
+            check_safe_exit=False
+        )
+        self.assertEqual(result.value, 8)
+        
+    def test_4(self):
+        code = parse("""
+            function(any foo) {
+                foo = "hello";
+                return foo;
+            };
+        """, debug=True)
+        _, result = bootstrap_function(
+            code,
+            argument=PythonList([ 5 ]),
+            check_safe_exit=False
+        )
+        self.assertEqual(result.value, "hello")
+
 
 class TestEuler(TestCase):
     """

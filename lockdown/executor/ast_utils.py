@@ -131,8 +131,8 @@ def build_and_compile_ast_function(name, arguments, body, dependencies):
 def compile_ast_function_def(function_creator_ast, open_function_id, dependencies):
     ast.fix_missing_locations(function_creator_ast)
 
-    print "--- {} ---".format(open_function_id)
-    print to_source(function_creator_ast)
+#    print "--- {} ---".format(open_function_id)
+#    print to_source(function_creator_ast)
 
     function_creator = compile(function_creator_ast, "<string>", "exec")
 
