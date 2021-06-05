@@ -6,7 +6,7 @@ import weakref
 from lockdown.type_system.core_types import Type, UnitType, NoValueType
 from lockdown.type_system.exceptions import FatalError, InvalidData
 from lockdown.type_system.runtime import replace_all_refs
-from lockdown.utils import InternalMarker, NO_VALUE, get_environment
+from lockdown.utils.utils import InternalMarker, NO_VALUE, get_environment
 
 managers_by_object_id = {}
 

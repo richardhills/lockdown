@@ -17,7 +17,8 @@ from lockdown.type_system.exceptions import FatalError, MissingMicroOp, \
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.micro_ops import MicroOpType
 from lockdown.type_system.reasoner import DUMMY_REASONER
-from lockdown.utils import MISSING, default, micro_op_repr, InternalMarker
+from lockdown.utils.utils import MISSING, default, micro_op_repr, InternalMarker,\
+    raise_from
 
 
 SPARSE_ELEMENT = InternalMarker("SPARSE_ELEMENT")
@@ -184,7 +185,7 @@ class PythonObject(Universal):
             micro_op_type = manager.get_micro_op_type(("set", key))
             if micro_op_type is not None:
                 if not does_value_fit_through_type(value, micro_op_type.value_type):
-                    raise TypeError()
+                    raise InvalidAssignmentType()
 
                 micro_op_type.invoke(manager, value, allow_failure=True)
             else:
@@ -197,6 +198,8 @@ class PythonObject(Universal):
                     raise TypeError()
 
                 micro_op_type.invoke(manager, key, value, allow_failure=True)
+        except (AttributeError, TypeError, KeyError) as e:
+            raise raise_from(FatalError, e)
         except (InvalidAssignmentKey, MissingMicroOp):
             raise AttributeError(key)
         except InvalidAssignmentType:
@@ -219,6 +222,8 @@ class PythonObject(Universal):
                     raise MissingMicroOp(key)
 
                 return micro_op_type.invoke(manager, key)
+        except AttributeError as e:
+            raise raise_from(FatalError, e)
         except InvalidDereferenceKey:
             raise AttributeError(key)
         except MissingMicroOp:
@@ -659,7 +664,7 @@ class InsertStartMicroOpType(MicroOpType):
             return False
 
         # Check that future left shifts are safe
-        for getter in our_type.micro_op_types.values():
+        for getter in our_type.get_micro_op_types().values():
             if isinstance(getter, GetterMicroOpType) and isinstance(getter.key, int):
                 for i in range(getter.key, target._length):
                     if not getter.would_be_bindable_to(manager, i):
@@ -674,7 +679,7 @@ class InsertStartMicroOpType(MicroOpType):
                 reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_getter)
                 return True
 
-            for tag, possible_detail_getter in other_type.micro_op_types.items():
+            for tag, possible_detail_getter in other_type.get_micro_op_types().items():
                 if len(tag) == 2 and tag[0] == "get" and isinstance(tag[1], int):
                     if not possible_detail_getter.value_type.is_copyable_from(self.value_type, reasoner):
                         reasoner.push_micro_op_conflicts_with_micro_op(self, possible_detail_getter)
@@ -831,7 +836,7 @@ class GetterWildcardMicroOpType(MicroOpType):
             reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_setter)
             return True
 
-        for tag in other_type.micro_op_types.keys():
+        for tag in other_type.get_micro_op_types().keys():
             if len(tag) == 2 and tag[0] == "set":
                 detail_setter = other_type.get_micro_op_type(("set", tag[1]))
                 if detail_setter and not self.value_type.is_copyable_from(detail_setter.value_type, reasoner):
@@ -920,7 +925,7 @@ class SetterWildcardMicroOpType(MicroOpType):
                 reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_getter)
                 return True
 
-            for tag, possible_detail_getter in other_type.micro_op_types.items():
+            for tag, possible_detail_getter in other_type.get_micro_op_types().items():
                 if len(tag) == 2 and tag[0] == "get" and does_value_fit_through_type(tag[1], self.key_type):
                     if not possible_detail_getter.value_type.is_copyable_from(self.value_type, reasoner):
                         reasoner.push_micro_op_conflicts_with_micro_op(self, possible_detail_getter)
@@ -1055,7 +1060,7 @@ class RemoverWildcardMicroOpType(MicroOpType):
             return False
 
         # Check that future right shifts are safe
-        for getter in our_type.micro_op_types.values():
+        for getter in our_type.get_micro_op_types().values():
             if isinstance(getter, GetterMicroOpType) and isinstance(getter.key, int):
                 for i in range(getter.key, target._length):
                     if not getter.would_be_bindable_to(manager, i):
@@ -1136,7 +1141,7 @@ class InserterWildcardMicroOpType(MicroOpType):
             return False
 
         # Check that future right shifts are safe
-        for getter in our_type.micro_op_types.values():
+        for getter in our_type.get_micro_op_types().values():
             if isinstance(getter, GetterMicroOpType) and isinstance(getter.key, int):
                 for i in range(0, getter.key):
                     if not getter.would_be_bindable_to(manager, i):
@@ -1151,7 +1156,7 @@ class InserterWildcardMicroOpType(MicroOpType):
             return True
 
         if not self.type_error:
-            for tag, getter in other_type.micro_op_types.items():
+            for tag, getter in other_type.get_micro_op_types().items():
                 if len(tag) == 2 and tag[0] == "get" and isinstance(tag[1], int):
                     if not getter.value_type.is_copyable_from(self.value_type, reasoner):
                         reasoner.push_micro_op_conflicts_with_micro_op(self, getter)
@@ -1228,7 +1233,7 @@ class IterMicroOpType(MicroOpType):
             reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_setter)
             return True
 
-        for tag in other_type.micro_op_types.keys():
+        for tag in other_type.get_micro_op_types().keys():
             if len(tag) == 2 and tag[0] == "set":
                 detail_setter = other_type.get_micro_op_type(("set", tag[1]))
                 if detail_setter and not self.value_type.is_copyable_from(detail_setter.value_type, reasoner):
@@ -1414,18 +1419,18 @@ EMPTY_COMPOSITE_TYPE = CompositeType({}, "EmptyCompositeType")
 
 DEFAULT_READONLY_COMPOSITE_TYPE = CompositeType({}, "DefaultReadonlyUniversalType")
 RICH_READONLY_TYPE = OneOfType([ AnyType(), DEFAULT_READONLY_COMPOSITE_TYPE ])
-DEFAULT_READONLY_COMPOSITE_TYPE.micro_op_types[("get-wildcard",)] = GetterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), RICH_READONLY_TYPE, True)
+DEFAULT_READONLY_COMPOSITE_TYPE.set_micro_op_type(("get-wildcard",), GetterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), RICH_READONLY_TYPE, True))
 
 DEFAULT_COMPOSITE_TYPE = CompositeType({}, "DefaultUniversalType")
 RICH_TYPE = OneOfType([ AnyType(), DEFAULT_COMPOSITE_TYPE ])
-DEFAULT_COMPOSITE_TYPE.micro_op_types[("get-wildcard",)] = GetterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), RICH_TYPE, True)
-DEFAULT_COMPOSITE_TYPE.micro_op_types[("set-wildcard",)] = SetterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), RICH_TYPE, True, True)
-DEFAULT_COMPOSITE_TYPE.micro_op_types[("delete-wildcard",)] = DeletterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), True)
+DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("get-wildcard",), GetterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), RICH_TYPE, True))
+DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("set-wildcard",), SetterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), RICH_TYPE, True, True))
+DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("delete-wildcard",), DeletterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), True))
 
 # A Type that you can always set values on without any errors
 # Similar to how a standard unsafe Python Object works
 NO_SETTER_ERROR_COMPOSITE_TYPE = CompositeType({}, "NoSetterError")
 NO_SETTER_ERROR_TYPE = OneOfType([ AnyType(), NO_SETTER_ERROR_COMPOSITE_TYPE ])
-NO_SETTER_ERROR_COMPOSITE_TYPE.micro_op_types[("get-wildcard",)] = GetterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), NO_SETTER_ERROR_TYPE, True)
-NO_SETTER_ERROR_COMPOSITE_TYPE.micro_op_types[("set-wildcard",)] = SetterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), NO_SETTER_ERROR_TYPE, False, False)
+NO_SETTER_ERROR_COMPOSITE_TYPE.set_micro_op_type(("get-wildcard",), GetterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), NO_SETTER_ERROR_TYPE, True))
+NO_SETTER_ERROR_COMPOSITE_TYPE.set_micro_op_type(("set-wildcard",), SetterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), NO_SETTER_ERROR_TYPE, False, False))
 

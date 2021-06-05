@@ -18,6 +18,9 @@ class Type(object):
     def is_copyable_from(self, other, reasoner):
         raise NotImplementedError()
 
+    def is_nominally_the_same(self, other):
+        return other is self
+
     def get_all_permitted_values(self):
         raise PermittedValuesDoesNotExist(self)
 
@@ -237,6 +240,20 @@ class OneOfType(Type):
                 reasoner.push_not_copyable_type(other, t)
                 return False
         return True
+
+    def map(self, mapper):
+        new_types = []
+        requires_new_one_of_type = False
+
+        for t in self.types:
+            new_t = mapper(t)
+            new_types.append(new_t)
+            if not new_t.is_nominally_the_same(t):
+                requires_new_one_of_type = True
+
+        if requires_new_one_of_type:
+            return merge_types(new_types, "exact")
+        return self
 
     def __repr__(self, *args, **kwargs):
         return "OneOfType<{}>".format(", ".join(t.short_str() for t in self.types))

@@ -24,7 +24,7 @@ from lockdown.parser.grammar.langVisitor import langVisitor
 from lockdown.type_system.exceptions import FatalError
 from lockdown.type_system.universal_type import DEFAULT_READONLY_COMPOSITE_TYPE, \
     PythonObject
-from lockdown.utils import MISSING, default
+from lockdown.utils.utils import MISSING, default
 
 
 class RDHLang5Visitor(langVisitor):

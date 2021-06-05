@@ -127,18 +127,18 @@ class MicroOpType(object):
 def merge_composite_types(types, name=None):
     from lockdown.type_system.composites import CompositeType
 
-    types_with_opcodes = [t for t in types if t.micro_op_types]
+    types_with_opcodes = [t for t in types if t.get_micro_op_types()]
 
     from lockdown.type_system.universal_type import EMPTY_COMPOSITE_TYPE
 
     if len(types_with_opcodes) == 0:
         return EMPTY_COMPOSITE_TYPE
     if len(types_with_opcodes) == 1:
-        return CompositeType(types_with_opcodes[0].micro_op_types, name=name) 
+        return types_with_opcodes[0].clone(name=name)
 
     result = {}
     for type in types_with_opcodes:
-        for tag, micro_op_type in type.micro_op_types.items():
+        for tag, micro_op_type in type.get_micro_op_types().items():
             if tag in result:
                 result[tag] = result[tag].merge(micro_op_type)
             else:

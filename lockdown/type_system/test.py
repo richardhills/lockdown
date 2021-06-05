@@ -231,7 +231,7 @@ class TestRevConstType(TestCase):
 
         rev_const_type = prepare_lhs_type(rev_const_type, None)
 
-        self.assertTrue(isinstance(rev_const_type.micro_op_types[("set", "foo")].value_type, StringType))
+        self.assertTrue(isinstance(rev_const_type.get_micro_op_type(("set", "foo")).value_type, StringType))
 
         self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type, DUMMY_REASONER))
 
@@ -248,7 +248,7 @@ class TestRevConstType(TestCase):
 
         rev_const_type = prepare_lhs_type(rev_const_type, None)
 
-        self.assertTrue(isinstance(rev_const_type.micro_op_types[("set-wildcard",)].value_type, StringType))
+        self.assertTrue(isinstance(rev_const_type.get_micro_op_type(("set-wildcard",)).value_type, StringType))
 
         self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type, DUMMY_REASONER))
 
@@ -265,7 +265,7 @@ class TestRevConstType(TestCase):
 
         rev_const_type = prepare_lhs_type(rev_const_type, None)
 
-        self.assertTrue(isinstance(rev_const_type.micro_op_types[("set", 0)].value_type, StringType))
+        self.assertTrue(isinstance(rev_const_type.get_micro_op_type(("set", 0)).value_type, StringType))
 
         self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type, DUMMY_REASONER))
 
@@ -1082,7 +1082,7 @@ class TestInferredTypes(TestCase):
         foo = prepare_lhs_type(foo, UniversalObjectType({
             "bar": IntegerType()
         }))
-        self.assertIsInstance(foo.micro_op_types[("get", "bar")].value_type, IntegerType)
+        self.assertIsInstance(foo.get_micro_op_type(("get", "bar")).value_type, IntegerType)
 
     def test_basic_ignored(self):
         foo = UniversalObjectType({
@@ -1091,7 +1091,7 @@ class TestInferredTypes(TestCase):
         foo = prepare_lhs_type(foo, UniversalObjectType({
             "bar": IntegerType()
         }))
-        self.assertIsInstance(foo.micro_op_types[("get", "bar")].value_type, StringType)
+        self.assertIsInstance(foo.get_micro_op_type(("get", "bar")).value_type, StringType)
 
     def test_basic_ignored2(self):
         foo = UniversalObjectType({
@@ -1101,7 +1101,7 @@ class TestInferredTypes(TestCase):
             "bar": IntegerType(),
             "bam": StringType()
         }))
-        self.assertIsInstance(foo.micro_op_types[("get", "bar")].value_type, IntegerType)
+        self.assertIsInstance(foo.get_micro_op_type(("get", "bar")).value_type, IntegerType)
 
     def test_dangling_error(self):
         foo = UniversalObjectType({
@@ -1126,7 +1126,7 @@ class TestInferredTypes(TestCase):
         })
 
         resolved_Foo = prepare_lhs_type(Initial_Foo, RHS_Foo)
-        self.assertIsInstance(resolved_Foo.micro_op_types[("get", "bar")].value_type.micro_op_types[("get", "bam")].value_type, IntegerType)
+        self.assertIsInstance(resolved_Foo.get_micro_op_type(("get", "bar")).value_type.get_micro_op_type(("get", "bam")).value_type, IntegerType)
 
     def test_composite_types_inferred(self):
         foo = UniversalObjectType({
@@ -1137,7 +1137,7 @@ class TestInferredTypes(TestCase):
                 "bam": IntegerType()
             })
         }))
-        self.assertIsInstance(foo.micro_op_types[("get", "bar")].value_type.micro_op_types[("get", "bam")].value_type, IntegerType)
+        self.assertIsInstance(foo.get_micro_op_type(("get", "bar")).value_type.get_micro_op_type(("get", "bam")).value_type, IntegerType)
 
 
 class TestOneOfTypes(TestCase):

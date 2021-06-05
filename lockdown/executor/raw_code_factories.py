@@ -3,7 +3,7 @@ from __future__ import unicode_literals
 
 from lockdown.type_system.exceptions import FatalError
 from lockdown.type_system.universal_type import PythonObject, PythonList
-from lockdown.utils import spread_dict
+from lockdown.utils.utils import spread_dict
 
 
 def is_opcode(data):

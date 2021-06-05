@@ -7,7 +7,7 @@ import inspect
 import types
 
 from lockdown.type_system.exceptions import FatalError
-from lockdown.utils import get_environment
+from lockdown.utils.utils import get_environment
 
 
 def proxy0(data):

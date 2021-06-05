@@ -18,7 +18,7 @@ from lockdown.executor.raw_code_factories import dynamic_dereference_op, \
 from lockdown.executor.type_factories import enrich_type
 from lockdown.type_system.composites import prepare_lhs_type, \
     check_dangling_inferred_types, CompositeType, InferredType, \
-    is_type_bindable_to_value, Composite
+    is_type_bindable_to_value, Composite, scoped_bind
 from lockdown.type_system.core_types import Type, NoValueType, IntegerType, \
     AnyType
 from lockdown.type_system.exceptions import FatalError, InvalidInferredType, \
@@ -28,9 +28,8 @@ from lockdown.type_system.managers import get_manager, get_type_of_value
 from lockdown.type_system.reasoner import DUMMY_REASONER, Reasoner
 from lockdown.type_system.universal_type import PythonObject, \
     UniversalObjectType, DEFAULT_READONLY_COMPOSITE_TYPE, PythonList, PythonDict
-from lockdown.utils import MISSING, raise_from, \
+from lockdown.utils.utils import MISSING, raise_from, \
     spread_dict, get_environment
-from log import logger
 
 
 def prepare_piece_of_context(declared_type, suggested_type):
@@ -235,13 +234,13 @@ class UnboundDereferenceBinder(object):
         from lockdown.executor.raw_code_factories import dereference_op, assignment_op, \
             literal_op, dereference, context_op
 
-        area_getter = context_type.micro_op_types.get(("get", area), None)
+        area_getter = context_type.get_micro_op_type(("get", area))
         if not area_getter:
             return None
         area_type = area_getter.value_type
         if not isinstance(area_type, CompositeType):
             return None
-        getter = area_type.micro_op_types.get(("get", reference), None)
+        getter = area_type.get_micro_op_type(("get", reference))
         if getter:
             return dereference(prepend_context, area, **debug_info)
 
@@ -256,7 +255,7 @@ class UnboundDereferenceBinder(object):
         if local_search:
             return local_search
 
-        outer_getter = context_type.micro_op_types.get(("get", "outer"), None)
+        outer_getter = context_type.get_micro_op_type(("get", "outer"))
         if outer_getter:
             outer_search = self.search_context_type_for_reference(reference, outer_getter.value_type, prepend_context + [ "outer" ], debug_info)
             if outer_search:
@@ -504,12 +503,6 @@ class {open_function_id}(object):
 
         local_initializer_ast = self.local_initializer.to_ast(context_name, dependency_builder)
 
-#         return_types = self.break_types.get("value", [])
-#         will_ignore_return_value = True
-#         for return_type in return_types:
-#             if not isinstance(return_type["out"], NoValueType):
-#                 will_ignore_return_value = False
-
         will_ignore_return_value = True
 
         code_ast = self.code.to_ast(
@@ -591,43 +584,35 @@ class ClosedFunction(LockdownFunction):
         return open_function_transpile.close(self.outer_context)
 
     def invoke(self, argument, frame_manager):
-        logger.debug("ClosedFunction")
         if get_environment().opcode_bindings:
             bindable_reasoner = Reasoner()
             bindable = is_type_bindable_to_value(argument, self.open_function.argument_type, bindable_reasoner)
             if not bindable:
                 raise FatalError(bindable_reasoner.to_message())
-        logger.debug("ClosedFunction:argument_check")
 
         with frame_manager.get_next_frame(self) as frame:
-            try:
-                new_context = frame.step("local_initialization_context", lambda: PythonObject({
-                        "prepare": self.open_function.prepare_context,
-                        "outer": self.outer_context,
-                        "argument": argument,
-                        "static": self.open_function.static,
-                        "types": self.open_function.types_context
-                    },
-                        bind=self.open_function.local_initialization_context_type if get_environment().rtti else None,
-                        debug_reason="local-initialization-context"
-                    )
-                )
-            except Exception as e:
-                raise_from(FatalError, e)
+            new_context = frame.step(
+                "local_initialization_context",
+                lambda: PythonObject({
+                    "prepare": self.open_function.prepare_context,
+                    "outer": self.outer_context,
+                    "argument": argument,
+                    "static": self.open_function.static,
+                    "types": self.open_function.types_context
+                }, debug_reason="local-initialization-context")
+            )
 
-            get_manager(new_context)._context_type = self.open_function.local_initialization_context_type
+            with scoped_bind(
+                new_context,
+                self.open_function.local_initialization_context_type,
+                bind=get_environment().rtti
+            ):
+                get_manager(new_context)._context_type = self.open_function.local_initialization_context_type
+                local = frame.step("local", lambda: evaluate(self.open_function.local_initializer, new_context, frame_manager))
 
-            logger.debug("ClosedFunction:local_initializer")
-            local = frame.step("local", lambda: evaluate(self.open_function.local_initializer, new_context, frame_manager))
-
-            if get_environment().rtti:
-                frame.step("remove_local_initialization_context_type", lambda: get_manager(new_context).remove_composite_type(self.open_function.local_initialization_context_type))
-
-            logger.debug("ClosedFunction:local_check")
             if get_environment().opcode_bindings and not is_type_bindable_to_value(local, self.open_function.local_type):
                 raise FatalError()
 
-            logger.debug("ClosedFunction:code_context")
             code_context_binding_reasoner = Reasoner()
             try:
                 new_context = frame.step(
@@ -639,55 +624,21 @@ class ClosedFunction(LockdownFunction):
                         "static": self.open_function.static,
                         "local": local,
                         "types": self.open_function.types_context
-                    },
-                        bind=self.open_function.execution_context_type if get_environment().rtti else None,
-                        debug_reason="code-execution-context",
-                        reasoner=code_context_binding_reasoner
-                    )
+                    }, debug_reason="code-execution-context")
                 )
+                with scoped_bind(
+                    new_context,
+                    self.open_function.execution_context_type,
+                    bind=get_environment().rtti,
+                    reasoner=code_context_binding_reasoner
+                ):
+                    get_manager(new_context)._context_type = self.open_function.execution_context_type
+                    result = frame.step("code", lambda: evaluate(self.open_function.code, new_context, frame_manager))
+                    return frame.value(result)
             except CompositeTypeIncompatibleWithTarget:
                 raise FatalError(code_context_binding_reasoner.to_message())
             except CompositeTypeIsInconsistent as e:
                 raise raise_from(FatalError, e)
-            except Exception as e:
-                raise raise_from(FatalError, e)
-
-            # In conjunction with get_context_type, for performance
-            get_manager(new_context)._context_type = self.open_function.execution_context_type
-
-            logger.debug("ClosedFunction:code_execute")
-            result = frame.step("code", lambda: evaluate(self.open_function.code, new_context, frame_manager))
-
-            if get_environment().rtti:
-                frame.step("remove_code_execution_context_type", lambda: get_manager(new_context).remove_composite_type(self.open_function.execution_context_type))
-
-            return frame.value(result)
-
-
-class TranspiledFunction(LockdownFunction):
-    def __init__(self, body, dependency_builder, context_name):
-        """
-        Create a LockdownFunction from an array of Python ast.stmt objects
-        """
-        function_name = b"ClosedFunction_{}".format(id(self))
-
-        # Make sure everything in the body is a statement (not an expression)
-        body = [ast.Expr(part) if isinstance(part, ast.expr) else part for part in body]
-
-        # Put a return statement at the end of the function, if we need one
-        final_thing = body[-1]
-        if isinstance(final_thing, ast.Expr):
-            body[-1] = compile_statement('return ("value", {value}, None, None)', context_name, dependency_builder, value=final_thing.value)
-        else:
-            raise FatalError()
-
-        self.wrapped_function = build_and_compile_ast_function(
-            function_name, [ b"_argument", b"_frame_manager"], body, dependency_builder.build()
-        )
-
-    def invoke(self, argument, frame_manager):
-        return self.wrapped_function(argument, frame_manager)
-
 
 class Continuation(LockdownFunction):
     __slots__ = [ "frame_manager", "frames", "callback", "restart_type", "break_types" ]

@@ -16,7 +16,7 @@ from lockdown.executor.raw_code_factories import function_lit, list_type, \
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.universal_type import PythonObject, \
     DEFAULT_READONLY_COMPOSITE_TYPE
-from lockdown.utils import NO_VALUE, print_code, MISSING, get_environment
+from lockdown.utils.utils import NO_VALUE, print_code, MISSING, get_environment
 
 
 class ObjectDictWrapper(object):

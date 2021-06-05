@@ -26,9 +26,7 @@ from lockdown.type_system.universal_type import UniversalObjectType, \
     InsertStartMicroOpType, InsertEndMicroOpType, DeletterWildcardMicroOpType, \
     IterMicroOpType, RemoverWildcardMicroOpType, InserterWildcardMicroOpType, \
     UniversalTupleType, Universal, SPARSE_ELEMENT
-from lockdown.utils import MISSING, NO_VALUE, InternalMarker, get_environment
-from log import logger
-from __builtin__ import False
+from lockdown.utils.utils import MISSING, NO_VALUE, InternalMarker, get_environment
 
 
 class Opcode(object):
@@ -872,7 +870,7 @@ class MapOp(Opcode):
 
             micro_ops = {}
 
-            keys = [ getattr(micro_op, "key", None) for micro_op in composite_type.micro_op_types.values() ]
+            keys = [ getattr(micro_op, "key", None) for micro_op in composite_type.get_micro_op_types().values() ]
             integer_keys = [ k for k in keys if isinstance(k, int) ]
 
             if every_input_key_is_in_output:
@@ -1561,10 +1559,10 @@ def create_readonly_static_type(value):
             merged_types = merge_types(types_of_values, "exact")
 
             for key, type_of_value in zip(value._keys(), types_of_values):
-                result.micro_op_types[("get", key)] = GetterMicroOpType(key, type_of_value)
+                result.set_micro_op_type(("get", key), GetterMicroOpType(key, type_of_value))
 
-            result.micro_op_types[("get-wildcard",)] = GetterWildcardMicroOpType(IntegerType(), merged_types, True)
-            result.micro_op_types[("iter",)] = IterMicroOpType(merged_types)
+            result.set_micro_op_type(("get-wildcard",), GetterWildcardMicroOpType(IntegerType(), merged_types, True))
+            result.set_micro_op_type(("iter",), IterMicroOpType(merged_types))
         return result
     else:
         return get_type_of_value(value)
@@ -1641,7 +1639,6 @@ class InvokeOp(Opcode):
         return break_types.build()
 
     def jump(self, context, frame_manager, immediate_context=None):
-        logger.debug("Invoke:jump")
         from lockdown.executor.function import LockdownFunction
 
         with frame_manager.get_next_frame(self) as frame:

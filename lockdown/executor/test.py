@@ -21,7 +21,7 @@ from lockdown.type_system.reasoner import DUMMY_REASONER
 from lockdown.type_system.universal_type import PythonObject, \
     DEFAULT_READONLY_COMPOSITE_TYPE, PythonList, UniversalTupleType, \
     UniversalObjectType, RICH_READONLY_TYPE, Universal
-from lockdown.utils import NO_VALUE
+from lockdown.utils.utils import NO_VALUE
 
 
 class TestPreparedFunction(TestCase):

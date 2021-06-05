@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+from UserDict import DictMixin
 import cProfile
 from collections import OrderedDict
 from contextlib import contextmanager
 from json.encoder import JSONEncoder
 import sys
+import weakref
 
 from lockdown.type_system.exceptions import FatalError
 
@@ -180,3 +182,45 @@ def environment(
         yield new_environment
     finally:
         environment_stack.pop()
+
+class WeakIdentityKeyDictionary(DictMixin, object):
+    def __init__(self, dict={}):
+        self.weak_refs_by_id = {}
+        self.weak_ref_ids_by_key_id = {}
+        self.key_ids_by_weak_ref_id = {}
+        self.values_by_key_id = {}
+
+        for k, v in dict.items():
+            self[k] = v
+
+    def __setitem__(self, key, value):
+        if id(key) in self.weak_ref_ids_by_key_id:
+            weak_ref_id = self.weak_ref_ids_by_key_id[id(key)]
+        else:
+            ref = weakref.ref(key, self.key_gced)
+            weak_ref_id = id(ref)
+            self.weak_refs_by_id[id(ref)] = ref
+
+        self.weak_ref_ids_by_key_id[id(key)] = weak_ref_id
+        self.key_ids_by_weak_ref_id[weak_ref_id] = id(key)
+        self.values_by_key_id[id(key)] = value
+
+    def key_gced(self, ref):
+        key_id = self.key_ids_by_weak_ref_id[id(ref)]
+        del self.weak_refs_by_id[id(ref)]
+        del self.weak_ref_ids_by_key_id[key_id]
+        del self.key_ids_by_weak_ref_id[id(ref)]
+        del self.values_by_key_id[key_id]
+
+    def __getitem__(self, key):
+        return self.values_by_key_id[id(key)]
+
+    def __delitem__(self, key):
+        weak_ref_id = self.weak_ref_ids_by_key_id[id(key)]
+        del self.weak_refs_by_id[weak_ref_id]
+        del self.weak_ref_ids_by_key_id[id(key)]
+        del self.key_ids_by_weak_ref_id[weak_ref_id]
+        del self.values_by_key_id[id(key)]
+
+    def keys(self):
+        return [v for v in (ref() for ref in self.weak_refs_by_id.values()) if v]

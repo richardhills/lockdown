@@ -9,7 +9,7 @@ from lockdown.type_system.composites import is_type_bindable_to_value, \
 from lockdown.type_system.core_types import Type
 from lockdown.type_system.exceptions import FatalError
 from lockdown.type_system.reasoner import DUMMY_REASONER, Reasoner
-from lockdown.utils import MISSING, InternalMarker, get_environment
+from lockdown.utils.utils import MISSING, InternalMarker, get_environment
 
 
 class BreakException(Exception):

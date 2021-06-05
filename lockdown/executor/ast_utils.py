@@ -17,7 +17,7 @@ from types import FunctionType, MethodType
 from astor.code_gen import to_source
 
 from lockdown.type_system.exceptions import FatalError
-from lockdown.utils import spread_dict, NO_VALUE
+from lockdown.utils.utils import spread_dict, NO_VALUE
 
 
 def compile_module(code, context_name, dependency_builder, **subs):

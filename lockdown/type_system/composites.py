@@ -14,7 +14,7 @@ from lockdown.type_system.exceptions import FatalError, IsNotCompositeType, \
 from lockdown.type_system.managers import get_manager, get_type_of_value
 from lockdown.type_system.micro_ops import merge_composite_types
 from lockdown.type_system.reasoner import Reasoner, DUMMY_REASONER
-from lockdown.utils import MISSING
+from lockdown.utils.utils import MISSING, WeakIdentityKeyDictionary
 
 
 composite_type_is_copyable_cache = threading.local()
@@ -39,25 +39,58 @@ class CompositeType(Type):
     Concretely, these are used for Lists, Arrays, Dictionaries, Objects etc - types
     that contain other types.
     """
-    def __init__(self, micro_op_types, name):
+    def __init__(self, micro_op_types, name, delegate=None):
         if not isinstance(micro_op_types, dict):
             raise FatalError()
         for tag in micro_op_types.keys():
             if not isinstance(tag, tuple):
                 raise FatalError()
 
-        self.micro_op_types = micro_op_types
+        self._micro_op_types = micro_op_types
         self.name = name
         self._is_self_consistent = None
+        self.is_copyable_cache = WeakIdentityKeyDictionary()
+        self.delegate = delegate
 
     def clone(self, name):
-        result = CompositeType(dict(self.micro_op_types), name)
+        if self.delegate:
+            return self.delegate.clone(name)
+
+        result = CompositeType(dict(self._micro_op_types), name, delegate=self)
+
         if hasattr(self, "from_opcode"):
             result.from_opcode = self.from_opcode
+
         return result
 
     def get_micro_op_type(self, tag):
-        return self.micro_op_types.get(tag, None)
+        if self.delegate:
+            return self.delegate.get_micro_op_type(tag)
+
+        return self._micro_op_types.get(tag, None)
+
+    def set_micro_op_type(self, tag, micro_op):
+        if "post-conflict-resolution><post-conflict-resolution" in self.name:
+            pass
+        if self.delegate:
+            self.delegate = None
+
+        self._micro_op_types[tag] = micro_op
+
+    def remove_micro_op_type(self, tag):
+        if tag not in self._micro_op_types:
+            return
+
+        if self.delegate:
+            self.delegate = None
+
+        self._micro_op_types.pop(tag, None)
+
+    def get_micro_op_types(self):
+        if self.delegate:
+            return self.delegate.get_micro_op_types()
+
+        return self._micro_op_types
 
     def is_self_consistent(self, reasoner):
         """
@@ -71,10 +104,13 @@ class CompositeType(Type):
 
         See lockdown/type_system/README.md for a more details description.
         """
+        if self.delegate:
+            return self.delegate.is_self_consistent(reasoner)
+
         if self._is_self_consistent is None:
             self._is_self_consistent = True
 
-            for micro_op in self.micro_op_types.values():
+            for micro_op in self._micro_op_types.values():
                 if micro_op.conflicts_with(self, self, reasoner):
                     reasoner.push_micro_op_conflicts_with_type(micro_op, self)
                     self._is_self_consistent = False
@@ -82,7 +118,21 @@ class CompositeType(Type):
 
         return self._is_self_consistent
 
+    def is_nominally_the_same(self, other):
+        if not isinstance(other, CompositeType):
+            return False
+
+        return self.get_delegate() is other.get_delegate()
+
+    def get_delegate(self):
+        if self.delegate:
+            return self.delegate.get_delegate()
+        return self
+
     def is_copyable_from(self, other, reasoner):
+        if self.delegate:
+            return self.delegate.is_copyable_from(other, reasoner)
+
         if isinstance(other, BottomType):
             return True
         if self is other:
@@ -91,42 +141,26 @@ class CompositeType(Type):
             return other.is_copyable_to(self, reasoner)
         if not isinstance(other, CompositeType):
             return IsNotCompositeType()
-        if self.micro_op_types is other.micro_op_types:
+
+        other = other.get_delegate()
+
+        if self._micro_op_types is other._micro_op_types:
             return True
 
-        try:
-            # CompositeTypes contain other types... which can contain other types, including
-            # the one we started with. These can form a cyclic graph, where types contain
-            # themselves, or other types that then contain themselves.
-            # We build a cache of results during this calculation so we do not execute loops.
-            cache_initialized_here = False
-            if getattr(composite_type_is_copyable_cache, "_is_copyable_from_cache", None) is None:
-                composite_type_is_copyable_cache._is_copyable_from_cache = {}
-                cache_initialized_here = True
-            cache = composite_type_is_copyable_cache._is_copyable_from_cache
-
-            result_key = (id(self), id(other))
-
-            if result_key in cache:
-                return cache[result_key]
-
-            cache[result_key] = True
-
-            for micro_op_type in self.micro_op_types.values():
+        if other not in self.is_copyable_cache:
+            self.is_copyable_cache[other] = True
+            for micro_op_type in self._micro_op_types.values():
                 if micro_op_type is None:
                     pass
                 if not micro_op_type.is_derivable_from(other, reasoner):
                     reasoner.push_micro_op_not_derivable_from(micro_op_type, other)
-                    cache[result_key] = False
+                    self.is_copyable_cache[other] = False
                     break
-        finally:
-            if cache_initialized_here:
-                composite_type_is_copyable_cache._is_copyable_from_cache = None
 
-        return cache[result_key]
+        return self.is_copyable_cache[other]
 
     def __repr__(self):
-        return "{}[{}]".format(self.name, ";".join([str(m) for m in self.micro_op_types.values()]))
+        return "{}[{}]".format(self.name, ";".join([str(m) for m in self._micro_op_types.values()]))
 
     def short_str(self):
         return "Composite<{}>".format(self.name)
@@ -211,7 +245,7 @@ class CompositeObjectManager(object):
 
     def get_micro_op_type(self, tag):
         effective_composite_type = self.get_effective_composite_type()
-        return effective_composite_type.micro_op_types.get(tag, None)
+        return effective_composite_type.get_micro_op_type(tag)
 
     def add_composite_type(self, new_type, reasoner=None):
         # TODO: remove
@@ -248,7 +282,6 @@ def prepare_lhs_type(lhs_type, rhs_type):
     post_conflict_resolution_lhs_type = resolve_micro_op_conflicts(post_inferred_lhs_type, {})
 
     if not check_dangling_inferred_types(post_conflict_resolution_lhs_type, {}):
-        replace_inferred_types(lhs_type, rhs_type, {})
         raise DanglingInferredType()
 
     return post_conflict_resolution_lhs_type
@@ -271,7 +304,7 @@ def check_dangling_inferred_types(type, results):
 
     results[id(type)] = True
 
-    for tag, micro_op_type in type.micro_op_types.items():
+    for tag, micro_op_type in type.get_micro_op_types().items():
         if tag[0] == "infer-remainder":
             return False
         if hasattr(micro_op_type, "value_type"):
@@ -309,17 +342,17 @@ def replace_inferred_types_in_composite(lhs_type, rhs_type, results):
 
     results[result_key] = finished_type
 
-    infer_remainder = ("infer-remainder", ) in lhs_type.micro_op_types
+    infer_remainder = ("infer-remainder", ) in lhs_type.get_micro_op_types()
 
     if infer_remainder:
         if isinstance(rhs_type, CompositeType):
-            for rhs_tag, rhs_micro_op in rhs_type.micro_op_types.items():
-                if rhs_tag not in finished_type.micro_op_types:
-                    finished_type.micro_op_types[rhs_tag] = rhs_micro_op
+            for rhs_tag, rhs_micro_op in rhs_type.get_micro_op_types().items():
+                if rhs_tag not in finished_type.get_micro_op_types():
+                    finished_type.set_micro_op_type(rhs_tag, rhs_micro_op)
 
-            finished_type.micro_op_types.pop(( "infer-remainder", ), None)
+            finished_type.remove_micro_op_type(( "infer-remainder", ))
 
-    for tag, lhs_micro_op in lhs_type.micro_op_types.items():
+    for tag, lhs_micro_op in lhs_type.get_micro_op_types().items():
         if hasattr(lhs_micro_op, "value_type"):
             rhs_value_type = None
 
@@ -328,13 +361,14 @@ def replace_inferred_types_in_composite(lhs_type, rhs_type, results):
                 if hasattr(rhs_micro_op, "value_type"):
                     rhs_value_type = rhs_micro_op.value_type
 
-            finished_type.micro_op_types[tag] = lhs_micro_op.clone(
-                value_type=replace_inferred_types(
-                    lhs_micro_op.value_type,
-                    rhs_value_type,
-                    results
-                )
+            new_value_type = replace_inferred_types(
+                lhs_micro_op.value_type,
+                rhs_value_type,
+                results
             )
+
+            if not new_value_type.is_nominally_the_same(lhs_micro_op.value_type):
+                finished_type.set_micro_op_type(tag, lhs_micro_op.clone(value_type=new_value_type))
 
     return finished_type
 
@@ -343,10 +377,7 @@ def resolve_micro_op_conflicts(type, results):
         return results[id(type)]
 
     if isinstance(type, OneOfType):
-        return merge_types(
-            [ resolve_micro_op_conflicts(t, results) for t in unwrap_types(type)],
-            "exact"
-        )
+        return type.map(lambda t: resolve_micro_op_conflicts(t, results))
 
     if not isinstance(type, CompositeType):
         return type
@@ -355,37 +386,50 @@ def resolve_micro_op_conflicts(type, results):
 
     results[id(type)] = finished_type
 
-    for tag, micro_op in finished_type.micro_op_types.items():
+    for tag, micro_op in finished_type.get_micro_op_types().items():
         if hasattr(micro_op, "value_type"):
-            finished_type.micro_op_types[tag] = micro_op.clone(
-                value_type=resolve_micro_op_conflicts(micro_op.value_type, results)
-            )
+            new_value_type = resolve_micro_op_conflicts(micro_op.value_type, results)
+            if not new_value_type.is_nominally_the_same(micro_op.value_type):
+                finished_type.set_micro_op_type(tag, micro_op.clone(
+                    value_type=new_value_type
+                ))
 
-    for tag, micro_op in finished_type.micro_op_types.items():
+    for tag, micro_op in finished_type.get_micro_op_types().items():
         if len(tag) == 2 and tag[0] == "get":
             setter = finished_type.get_micro_op_type(( "set", tag[1] ))
-            if setter:
-                finished_type.micro_op_types[( "set", tag[1] )] = setter.clone(
+            if setter and replace_setter_value_type_with_getter(setter, micro_op):
+                finished_type.set_micro_op_type(( "set", tag[1] ), setter.clone(
                     value_type=micro_op.value_type
-                )
+                ))
             wildcard_setter = finished_type.get_micro_op_type(( "set-wildcard", ))
             if wildcard_setter and not wildcard_setter.type_error:
-                finished_type.micro_op_types[( "set-wildcard", )] = wildcard_setter.clone(
+                finished_type.set_micro_op_type(( "set-wildcard", ), wildcard_setter.clone(
                     type_error=True
-                )
+                ))
         if len(tag) == 1 and tag[0] == "get-wildcard":
             setter = finished_type.get_micro_op_type(( "set-wildcard", ))
-            if setter:
-                finished_type.micro_op_types[( "set-wildcard", )] = setter.clone(
+            if setter and replace_setter_value_type_with_getter(setter, micro_op):
+                finished_type.set_micro_op_type(( "set-wildcard", ), setter.clone(
                     value_type=micro_op.value_type
-                )
+                ))
         if tag[0] in ("get", "get-wildcard") and not micro_op.key_error:
-            finished_type.micro_op_types.pop(( "insert-start", ), None)
-            finished_type.micro_op_types.pop(( "insert-wildcard", ), None)
-            finished_type.micro_op_types.pop(( "remove-wildcard", ), None)
+            finished_type.remove_micro_op_type(( "insert-start", ))
+            finished_type.remove_micro_op_type(( "insert-wildcard", ))
+            finished_type.remove_micro_op_type(( "remove-wildcard", ))
 
     return finished_type
 
+def replace_setter_value_type_with_getter(setter, getter):
+    # Identify those cases where we can get away without replacing the setter value_type with
+    # the getter, so that we don't end up creating a load of new CompositeTypes and having
+    # to calculate the relationships between them all
+    if isinstance(setter.value_type, InferredType):
+        return True
+    if not isinstance(setter.value_type, CompositeType) and not isinstance(getter.value_type, CompositeType):
+        return not getter.value_type.is_copyable_from(setter.value_type, DUMMY_REASONER)
+    if isinstance(setter.value_type, CompositeType) and isinstance(getter.value_type, CompositeType):
+        return not setter.value_type.is_nominally_the_same(getter.value_type)
+    return True
 
 def add_composite_type(target_manager, new_type, reasoner=None, key_filter=None, multiplier=1):
     """
@@ -496,7 +540,7 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
 
             micro_ops_checks_worked = True
 
-            for key, micro_op in sub_type.micro_op_types.items():
+            for key, micro_op in sub_type.get_micro_op_types().items():
                 if not micro_op.is_bindable_to(sub_type, target):
                     child_reasoner.push_micro_op_not_bindable_to(micro_op, sub_type, target)
                     micro_ops_checks_worked = False
@@ -542,14 +586,16 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
     return atleast_one_sub_type_worked
 
 @contextmanager
-def scoped_bind(value, composite_type):
+def scoped_bind(value, composite_type, bind=True, reasoner=DUMMY_REASONER):
     if not isinstance(composite_type, CompositeType):
         raise FatalError()
 
-    manager = get_manager(value)
     try:
-        manager.add_composite_type(composite_type)
+        if bind:
+            manager = get_manager(value)
+            manager.add_composite_type(composite_type, reasoner=reasoner)
         yield
     finally:
-        manager.remove_composite_type(composite_type)
+        if bind:
+            manager.remove_composite_type(composite_type, reasoner=reasoner)
 

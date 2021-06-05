@@ -5,7 +5,7 @@ import argparse
 import sys
 import unittest
 
-from lockdown.utils import profile, environment
+from lockdown.utils.utils import profile, environment
 
 
 parser = argparse.ArgumentParser()
@@ -23,12 +23,10 @@ sys.argv[1:] = unknown_args
 sys.setrecursionlimit(10000)
 
 if __name__ == "__main__":
-    from lockdown.executor import test as executor_tests
     from lockdown.executor.test import *
-    from lockdown.parser import test as parser_tests
     from lockdown.parser.test import *
-    from lockdown.type_system import test as type_system_tests
     from lockdown.type_system.test import *
+    from lockdown.utils.test import *
 
     with environment(
         rtti=args.t,
@@ -41,7 +39,7 @@ if __name__ == "__main__":
         base=True
     ):
         if args.P:
-            with profile(args.p):
+            with profile(args.P):
                 unittest.main()
         else:
             unittest.main()
