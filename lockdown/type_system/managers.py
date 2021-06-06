@@ -77,7 +77,7 @@ def get_manager(obj, trigger=None):
             raise FatalError()
         from lockdown.type_system.universal_type import PythonObject
         original_type = obj.__class__
-        new_type = type("Lockdown{}".format(original_type.__name__), (PythonObject, original_type,), {})
+        new_type = type("Lockdown{}".format(original_type.__name__).encode("utf-8"), (PythonObject, original_type,), {})
         obj = new_type(obj.__dict__)
         replace_all_refs(old_obj, obj)
         manager = CompositeObjectManager(obj, obj_cleared_callback, True)

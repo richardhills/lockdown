@@ -456,7 +456,7 @@ class OpenFunction(object):
 class {open_function_id}(object):
     @classmethod
     def invoke(cls, {context_name}_argument, {context_name}_outer_context, _frame_manager):
-        {context_name} = PythonObject({{
+        {context_name} = Universal(True, initial_wrapped={{
             "prepare": {prepare_context},
             "outer": {context_name}_outer_context,
             "argument": {context_name}_argument,
@@ -513,7 +513,7 @@ class {open_function_id}(object):
         )
 
         return compile_module("""
-{context_name} = PythonObject({{
+{context_name} = Universal(True, initial_wrapped={{
     "prepare": {prepare_context},
     "outer": {outer_context},
     "argument": {argument},

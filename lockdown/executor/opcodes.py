@@ -1305,7 +1305,7 @@ class LoopOp(Opcode):
         self.code = enrich_opcode(data.code, visitor)
         self.has_continues = True
         self.has_ends = True
-        self.has_breaks = True
+        self.has_breaks = True # TODO remove - this can be achieved with a outer TransformOp
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
@@ -1356,21 +1356,26 @@ class LoopOp(Opcode):
         raise FatalError()
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
-        if not will_ignore_return_value or self.has_breaks or self.has_continues:
+        if not will_ignore_return_value:
             return super(LoopOp, self).to_ast(context_name, dependency_builder)
-
-        return compile_statement("""
+        else:
+            return compile_statement("""
 try:
     while True:
-        {expression}
+        try:
+            {expression}
+        except BreakException as e:
+            if e.mode == "continue":
+                pass
+            raise
 except BreakException as e:
-    if e.mode != "end":
+    if e.mode not in ("end", "break"):
         raise
-""",
-            context_name,
-            dependency_builder,
-            expression=self.code.to_ast(context_name, dependency_builder, will_ignore_return_value=True)
-        )
+    """,
+                context_name,
+                dependency_builder,
+                expression=self.code.to_ast(context_name, dependency_builder, will_ignore_return_value=True)
+            )
 
 
 class ConditionalOp(Opcode):
