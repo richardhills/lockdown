@@ -466,6 +466,8 @@ class DereferenceOp(Opcode):
 
             if micro_op:
                 break_types.add("value", micro_op.value_type)
+            else:
+                break_types.add("value", AnyType())
 
             if not micro_op or micro_op.type_error or micro_op.key_error:
                 if reference is MISSING:

@@ -14,7 +14,8 @@ from lockdown.type_system.exceptions import FatalError, IsNotCompositeType, \
 from lockdown.type_system.managers import get_manager, get_type_of_value
 from lockdown.type_system.micro_ops import merge_composite_types
 from lockdown.type_system.reasoner import Reasoner, DUMMY_REASONER
-from lockdown.utils.utils import MISSING, WeakIdentityKeyDictionary
+from lockdown.utils.utils import MISSING, WeakIdentityKeyDictionary,\
+    get_environment
 
 
 composite_type_is_copyable_cache = threading.local()
@@ -431,7 +432,7 @@ def replace_setter_value_type_with_getter(setter, getter):
         return not setter.value_type.is_nominally_the_same(getter.value_type)
     return True
 
-def add_composite_type(target_manager, new_type, reasoner=None, key_filter=None, multiplier=1):
+def add_composite_type(target_manager, new_type, reasoner=None, key_filter=None, multiplier=1, enforce_safety_checks=True):
     """
     Safely adds a new CompositeType to a CompositeObjectManager, so that run time verification
     of mutations to the object owned by the CompositeObjectManager can be enforced.
@@ -444,7 +445,7 @@ def add_composite_type(target_manager, new_type, reasoner=None, key_filter=None,
         reasoner = Reasoner()
 
     types_to_bind = {}
-    succeeded = build_binding_map_for_type(None, new_type, target_manager.get_obj(), target_manager, key_filter, MISSING, {}, types_to_bind, reasoner)
+    succeeded = build_binding_map_for_type(None, new_type, target_manager.get_obj(), target_manager, key_filter, MISSING, {}, types_to_bind, reasoner, enforce_safety_checks=enforce_safety_checks)
     if not succeeded:
         raise CompositeTypeIncompatibleWithTarget()
 
@@ -452,12 +453,12 @@ def add_composite_type(target_manager, new_type, reasoner=None, key_filter=None,
         get_manager(target).attach_type(type, multiplier=multiplier)
 
 
-def remove_composite_type(target_manager, remove_type, reasoner=DUMMY_REASONER, key_filter=None, multiplier=1):
+def remove_composite_type(target_manager, remove_type, reasoner=DUMMY_REASONER, key_filter=None, multiplier=1, enforce_safety_checks=True):
     if not reasoner:
         reasoner = Reasoner()
 
     types_to_bind = {}
-    succeeded = build_binding_map_for_type(None, remove_type, target_manager.get_obj(), target_manager, key_filter, MISSING, {}, types_to_bind, reasoner)
+    succeeded = build_binding_map_for_type(None, remove_type, target_manager.get_obj(), target_manager, key_filter, MISSING, {}, types_to_bind, reasoner, enforce_safety_checks=enforce_safety_checks)
     if not succeeded:
         raise CompositeTypeIncompatibleWithTarget()
 
@@ -465,13 +466,13 @@ def remove_composite_type(target_manager, remove_type, reasoner=DUMMY_REASONER, 
         get_manager(target).detach_type(type, multiplier=multiplier)
 
 def can_add_composite_type_with_filter(target, new_type, key_filter, substitute_value):
-    return build_binding_map_for_type(None, new_type, target, get_manager(target), key_filter, substitute_value, {}, {}, DUMMY_REASONER)
+    return build_binding_map_for_type(None, new_type, target, get_manager(target), key_filter, substitute_value, {}, None, DUMMY_REASONER)
 
 def is_type_bindable_to_value(value, type, reasoner=DUMMY_REASONER):
     return build_binding_map_for_type(None, type, value, get_manager(value), None, MISSING, {}, {}, reasoner)
 
 def does_value_fit_through_type(value, type, reasoner=DUMMY_REASONER):
-    return build_binding_map_for_type(None, type, value, get_manager(value), None, MISSING, {}, None, reasoner, build_binding_map=False)
+    return build_binding_map_for_type(None, type, value, get_manager(value), None, MISSING, {}, None, reasoner)
 
 def bind_key(manager, key_filter):
     for attached_type in manager.attached_types.values():
@@ -479,7 +480,8 @@ def bind_key(manager, key_filter):
             manager,
             attached_type,
             key_filter=key_filter,
-            multiplier=manager.attached_type_counts[id(attached_type)]
+            multiplier=manager.attached_type_counts[id(attached_type)],
+            enforce_safety_checks=False
         )
 
 
@@ -489,11 +491,12 @@ def unbind_key(manager, key_filter):
             manager,
             attached_type,
             key_filter=key_filter,
-            multiplier=manager.attached_type_counts[id(attached_type)]
+            multiplier=manager.attached_type_counts[id(attached_type)],
+            enforce_safety_checks=False
         )
 
 
-def build_binding_map_for_type(source_micro_op, new_type, target, target_manager, key_filter, substitute_value, cache, types_to_bind, reasoner, build_binding_map=True):
+def build_binding_map_for_type(source_micro_op, new_type, target, target_manager, key_filter, substitute_value, cache, types_to_bind, reasoner, enforce_safety_checks=True):
     """
     Builds a binding map of the Type new_type against the object target.
 
@@ -514,7 +517,10 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
 
     cache[result_key] = True
 
-    extra_types_to_bind = {}
+    if types_to_bind is not None:
+        extra_types_to_bind = {}
+    else:
+        extra_types_to_bind = None
 
     target_is_composite = isinstance(target, Composite)
     target_effective_type = None
@@ -523,13 +529,17 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
 
     child_reasoners = []
 
+    if isinstance(new_type, OneOfType):
+        # We need the safety checks to identify which types to bind
+        enforce_safety_checks = True
+
     atleast_one_sub_type_worked = False
     for sub_type in unwrap_types(new_type):
         child_reasoner = Reasoner()
         child_reasoners.append(child_reasoner)
 
         if isinstance(sub_type, CompositeType) and target_is_composite:
-            if build_binding_map:
+            if types_to_bind is not None and get_environment().opcode_bindings:
                 # It only matters that the subtype is consistent if we intend to actually bind the types
                 # at the end, since inconsistent types can't be bound to runtime objects. But if we're
                 # simply testing that the data structure has the right shape, that's fine.
@@ -541,26 +551,36 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
             micro_ops_checks_worked = True
 
             for key, micro_op in sub_type.get_micro_op_types().items():
-                if not micro_op.is_bindable_to(sub_type, target):
-                    child_reasoner.push_micro_op_not_bindable_to(micro_op, sub_type, target)
-                    micro_ops_checks_worked = False
-                    break
+                if get_environment().opcode_bindings or enforce_safety_checks:
+                    if not micro_op.is_bindable_to(sub_type, target):
+                        child_reasoner.push_micro_op_not_bindable_to(micro_op, sub_type, target)
+                        micro_ops_checks_worked = False
+                        break
 
-                if micro_op.conflicts_with(sub_type, target_effective_type, child_reasoner):
-                    micro_ops_checks_worked = False
-                    break
+                    if micro_op.conflicts_with(sub_type, target_effective_type, child_reasoner):
+                        micro_ops_checks_worked = False
+                        break
 
                 next_targets, next_new_type = micro_op.prepare_bind(target, key_filter, substitute_value)
 
                 for next_target in next_targets:
                     if not build_binding_map_for_type(
-                        micro_op, next_new_type, next_target, get_manager(next_target), None, MISSING, cache, extra_types_to_bind, child_reasoner, build_binding_map=build_binding_map
+                        micro_op,
+                        next_new_type,
+                        next_target,
+                        get_manager(next_target),
+                        None,
+                        MISSING,
+                        cache,
+                        extra_types_to_bind,
+                        child_reasoner,
+                        enforce_safety_checks=enforce_safety_checks
                     ):
                         micro_ops_checks_worked = False
                         break
 
             if micro_ops_checks_worked:
-                if key_filter is None and build_binding_map:
+                if key_filter is None and types_to_bind is not None:
                     extra_types_to_bind[result_key] = (source_micro_op, sub_type, target)
                 atleast_one_sub_type_worked = True
 
@@ -577,7 +597,7 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
             if sub_type.is_copyable_from(get_type_of_value(target), child_reasoner):
                 atleast_one_sub_type_worked = True
 
-    if atleast_one_sub_type_worked and build_binding_map:
+    if atleast_one_sub_type_worked and types_to_bind is not None:
         types_to_bind.update(extra_types_to_bind)
     if not atleast_one_sub_type_worked:
         cache[result_key] = False
@@ -593,9 +613,9 @@ def scoped_bind(value, composite_type, bind=True, reasoner=DUMMY_REASONER):
     try:
         if bind:
             manager = get_manager(value)
-            manager.add_composite_type(composite_type, reasoner=reasoner)
+            add_composite_type(manager, composite_type, reasoner=reasoner, enforce_safety_checks=get_environment().opcode_bindings)
         yield
     finally:
         if bind:
-            manager.remove_composite_type(composite_type, reasoner=reasoner)
+            remove_composite_type(manager, composite_type, reasoner=reasoner, enforce_safety_checks=get_environment().opcode_bindings)
 

@@ -125,7 +125,8 @@ class Environment(object):
 environment_stack = None
 
 def get_environment():
-    return environment_stack[-1]
+    if environment_stack:
+        return environment_stack[-1]
 
 fastest = {
     "rtti": False,
@@ -148,7 +149,8 @@ def environment(
     transpile=MISSING,
     base=False
 ):
-    if transpile and not return_value_optimization:
+    environment = get_environment()
+    if (environment and environment.transpile or transpile is True) and not (environment and environment.return_value_optimization or return_value_optimization is True):
         raise FatalError("Transpiling has return_value_optomization baked in")
 
     if base:

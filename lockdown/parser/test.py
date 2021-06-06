@@ -1043,7 +1043,7 @@ class TestTranspilation(TestCase):
                 return 42;
             }
         """)
-        with environment(transpile=True):
+        with environment(transpile=True, return_value_optimization=True):
             _, result = bootstrap_function(code)
         self.assertEquals(result.value, 42)
 
@@ -1053,7 +1053,7 @@ class TestTranspilation(TestCase):
                 return 21 * 2;
             }
         """)
-        with environment(transpile=True):
+        with environment(transpile=True, return_value_optimization=True):
             _, result = bootstrap_function(code)
         self.assertEquals(result.value, 42)
 
@@ -1064,7 +1064,7 @@ class TestTranspilation(TestCase):
                 return 21 * 2;
             }
         """)
-        with environment(transpile=True):
+        with environment(transpile=True, return_value_optimization=True):
             _, result = bootstrap_function(code)
         self.assertEquals(result.value, 42)
 
@@ -1078,7 +1078,7 @@ class TestTranspilation(TestCase):
                 return result;
             }
         """)
-        with environment(transpile=True):
+        with environment(transpile=True, return_value_optimization=True):
             _, result = bootstrap_function(code)
         self.assertEquals(result.value, 4950)
 

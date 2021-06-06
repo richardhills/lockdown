@@ -27,7 +27,8 @@ from lockdown.type_system.exceptions import FatalError, InvalidInferredType, \
 from lockdown.type_system.managers import get_manager, get_type_of_value
 from lockdown.type_system.reasoner import DUMMY_REASONER, Reasoner
 from lockdown.type_system.universal_type import PythonObject, \
-    UniversalObjectType, DEFAULT_READONLY_COMPOSITE_TYPE, PythonList, PythonDict
+    UniversalObjectType, DEFAULT_READONLY_COMPOSITE_TYPE, PythonList, PythonDict, \
+    Universal
 from lockdown.utils.utils import MISSING, raise_from, \
     spread_dict, get_environment
 
@@ -58,7 +59,7 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
 
     actual_break_types_factory = BreakTypesFactory(None)
 
-    context = PythonObject({
+    context = Universal(True, initial_wrapped={
         "prepare": outer_context
     }, bind=DEFAULT_READONLY_COMPOSITE_TYPE, debug_reason="static-prepare-context")
 
@@ -95,10 +96,10 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
 
     local_type = enrich_type(static._get("local"))
 
-    context = PythonObject({
+    context = Universal(True, initial_wrapped={
         "prepare": outer_context,
         "static": static,
-        "types": PythonObject({
+        "types": Universal(True, initial_wrapped={
             "outer": outer_type,
             "argument": argument_type,
 #            "local": local_type
@@ -149,10 +150,10 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
 
     get_manager(declared_break_types).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
 
-    context = PythonObject({
+    context = Universal(True, initial_wrapped={
         "prepare": outer_context,
         "static": static,
-        "types": PythonObject({
+        "types": Universal(True, initial_wrapped={
             "outer": outer_type,
             "argument": argument_type,
             "local": local_type
@@ -265,11 +266,11 @@ class UnboundDereferenceBinder(object):
         from lockdown.executor.raw_code_factories import dereference_op, assignment_op, \
             literal_op, dereference, context_op
 
-        static = getattr(context, "static", None)
+        static = context._get("static", None)
         if static and hasattr(static, reference):
             return dereference(prepend_context, "static", **debug_info)
 
-        prepare = getattr(context, "prepare", None)
+        prepare = context._get("prepare", None)
         if prepare:
             prepare_search = self.search_statics_for_reference(reference, prepare, prepend_context + [ "prepare" ], debug_info)
             if prepare_search:
@@ -300,7 +301,7 @@ class UnboundDereferenceBinder(object):
 
         debug_info = get_debug_info_from_opcode(expression)
 
-        if getattr(expression, "opcode", None) == "unbound_dereference":
+        if expression._get("opcode", None) == "unbound_dereference":
             reference = expression.reference
             bound_countext_op, is_static = self.search_for_reference(reference, debug_info)
 
@@ -315,7 +316,7 @@ class UnboundDereferenceBinder(object):
                 get_manager(new_dereference).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
                 return new_dereference
 
-        if getattr(expression, "opcode", None) == "unbound_assignment":
+        if expression._get("opcode", None) == "unbound_assignment":
             reference = expression.reference
             bound_countext_op, _ = self.search_for_reference(reference, debug_info)
 
@@ -396,7 +397,7 @@ class OpenFunction(object):
         self.local_initializer = local_initializer
         self.break_types = break_types
 
-        self.types_context = PythonObject({
+        self.types_context = Universal(True, initial_wrapped={
             "outer": self.outer_type,
             "argument": self.argument_type
         }, debug_reason="local-initialization-context")
@@ -593,7 +594,7 @@ class ClosedFunction(LockdownFunction):
         with frame_manager.get_next_frame(self) as frame:
             new_context = frame.step(
                 "local_initialization_context",
-                lambda: PythonObject({
+                lambda: Universal(True, initial_wrapped={
                     "prepare": self.open_function.prepare_context,
                     "outer": self.outer_context,
                     "argument": argument,
@@ -617,7 +618,7 @@ class ClosedFunction(LockdownFunction):
             try:
                 new_context = frame.step(
                     "code_execution_context",
-                    lambda: PythonObject({
+                    lambda: Universal(True, initial_wrapped={
                         "prepare": self.open_function.prepare_context,
                         "outer": self.outer_context,
                         "argument": argument,

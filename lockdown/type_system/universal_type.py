@@ -164,6 +164,7 @@ class Universal(Composite):
     def __str__(self):
         return str(self._wrapped)
 
+UNIVERSAL_OBJECT_BUILTINS = set(["__dict__", "__class__", "_contains", "_get", "_set", "_items", "_delete", "_keys", "_values", "_wrapped", "_length", "_is_key_within_range", "_range", "_to_dict"])
 
 class PythonObject(Universal):
     def __init__(self, initial_data, **kwargs):
@@ -206,7 +207,7 @@ class PythonObject(Universal):
             raise TypeError()
 
     def __getattribute__(self, key):
-        if key in ("__dict__", "__class__", "_contains", "_get", "_set", "_items", "_delete", "_keys", "_values", "_wrapped", "_length", "_is_key_within_range", "_range", "_to_dict"):
+        if key in UNIVERSAL_OBJECT_BUILTINS:
             return super(PythonObject, self).__getattribute__(key)
 
         try:
