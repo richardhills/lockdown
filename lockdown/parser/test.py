@@ -767,7 +767,7 @@ class TestError(TestCase):
         code = parse("""
             function(int foo) => int {
                 return foo;
-            };
+            }
         """, debug=True)
         _, result = bootstrap_function(
             code,
@@ -779,7 +779,7 @@ class TestError(TestCase):
         code = parse("""
             function(any foo) {
                 return foo.bar;
-            };
+            }
         """, debug=True)
         _, result = bootstrap_function(
             code,
@@ -792,7 +792,7 @@ class TestError(TestCase):
         code = parse("""
             function(any foo) {
                 return foo + 3;
-            };
+            }
         """, debug=True)
         _, result = bootstrap_function(
             code,
@@ -806,7 +806,7 @@ class TestError(TestCase):
             function(any foo) {
                 foo = "hello";
                 return foo;
-            };
+            }
         """, debug=True)
         _, result = bootstrap_function(
             code,
@@ -832,7 +832,7 @@ class TestEuler(TestCase):
                     };
                 };
                 return result;
-            };
+            }
         """, debug=True)
         _, result = bootstrap_function(code)
         self.assertEquals(result.value, 233168)
@@ -859,9 +859,7 @@ class TestEuler(TestCase):
                     if(j % 2 == 0) {
                         result = result + j;
                     };
-                    var k = j;
-                    j = i + j;
-                    i = k;
+                    [ i, j ] = [ j, i + j ];
                 };
                 return result;
             }
@@ -889,8 +887,7 @@ class TestEuler(TestCase):
     def test_4(self):
         code = parse("""
             function() {
-                int bestResult = 0;
-                int i = 999;
+                int bestResult = 0, i = 999;
                 while(i >= 100) {
                     int j = 999;
                     while(j >= i) {

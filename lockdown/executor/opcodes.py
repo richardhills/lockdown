@@ -18,7 +18,7 @@ from lockdown.type_system.core_types import AnyType, Type, merge_types, Const, \
 from lockdown.type_system.exceptions import FatalError, InvalidDereferenceType, \
     InvalidDereferenceKey, InvalidAssignmentType, InvalidAssignmentKey
 from lockdown.type_system.managers import get_type_of_value, get_manager
-from lockdown.type_system.reasoner import DUMMY_REASONER
+from lockdown.type_system.reasoner import DUMMY_REASONER, Reasoner
 from lockdown.type_system.universal_type import UniversalObjectType, \
     DEFAULT_READONLY_COMPOSITE_TYPE, PythonList, UniversalListType, PythonObject, \
     GetterMicroOpType, SetterMicroOpType, GetterWildcardMicroOpType, \
@@ -1539,8 +1539,11 @@ class CloseOp(Opcode):
             if not isinstance(open_function, OpenFunction):
                 return frame.exception(self.INVALID_FUNCTION())
 
-            if (get_environment().opcode_bindings or self.outer_context_type_error) and not does_value_fit_through_type(outer_context, open_function.outer_type):
-                return frame.exception(self.INVALID_OUTER_CONTEXT())
+            if (get_environment().opcode_bindings or self.outer_context_type_error):
+                reasoner = Reasoner()
+                if not does_value_fit_through_type(outer_context, open_function.outer_type, reasoner):
+                    print(reasoner)
+                    return frame.exception(self.INVALID_OUTER_CONTEXT())
 
             return frame.value(open_function.close(outer_context))
 

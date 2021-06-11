@@ -35,6 +35,11 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#codeBlockAsFunction.
+    def visitCodeBlockAsFunction(self, ctx):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#argumentDestructurings.
     def visitArgumentDestructurings(self, ctx):
         return self.visitChildren(ctx)

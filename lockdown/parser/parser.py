@@ -59,6 +59,8 @@ class RDHLang5Visitor(langVisitor):
             return None
         if ctx.function():
             return self.visit(ctx.function())[1]
+        if ctx.codeBlockAsFunction():
+            return self.visit(ctx.codeBlockAsFunction())
 
     def visitFunction(self, ctx):
         argument_destructuring = ctx.argumentDestructurings()
@@ -87,6 +89,11 @@ class RDHLang5Visitor(langVisitor):
             function_name = function_name_symbol.getText()
 
         return function_name, function_builder.create("first-class-function", get_debug_info(ctx))
+
+    def visitCodeBlockAsFunction(self, ctx):
+        code_block = self.visit(ctx.codeBlock())
+
+        return code_block.create("first-class-function", get_debug_info(ctx))
 
     def visitArgumentDestructurings(self, ctx):
         initializers = [self.visit(l) for l in ctx.argumentDestructuring()]
@@ -859,6 +866,4 @@ def parse(code, debug=False):
     ast = visitor.visit(ast)
     if debug:
         ast._set("raw_code", code)
-#        get_manager(ast, "parse-code").add_composite_type(DEFAULT_OBJECT_TYPE)
-#        ast.raw_code = code
     return ast

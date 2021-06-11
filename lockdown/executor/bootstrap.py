@@ -212,13 +212,13 @@ def format_unhandled_break(mode, value, caused_by, opcode, data):
 def raise_unhandled_break(mode, value, caused_by, opcode, data):
     raise BootstrapException(format_unhandled_break(mode, value, caused_by, opcode, data))
 
-def bootstrap_function(data, argument=None, context=None, check_safe_exit=True, print_ast=False):
+def bootstrap_function(data, argument=None, outer_context=None, check_safe_exit=True, print_ast=False):
     if argument is None:
         argument = NO_VALUE
-    if context is None:
-        context = get_default_global_context()
+    if outer_context is None:
+        outer_context = get_default_global_context()
 
-    get_manager(context).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+    get_manager(outer_context).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
 
     frame_manager = FrameManager()
 
@@ -227,17 +227,17 @@ def bootstrap_function(data, argument=None, context=None, check_safe_exit=True, 
             print_code(data)
         open_function = prepare(
             data,
-            context,
+            outer_context,
             frame_manager,
             immediate_context={
-                "suggested_outer_type": get_context_type(context)
+                "suggested_outer_type": get_context_type(outer_context)
             }
         )
 
         if check_safe_exit:
             raise_unhandled_break_types(open_function, data)
 
-        closed_function = open_function.close(context)
+        closed_function = open_function.close(outer_context)
 
     if capture_preparation.caught_break_mode is not MISSING:
         raise_unhandled_break(capture_preparation.caught_break_mode, capture_preparation.value, None, capture_preparation.opcode, data)

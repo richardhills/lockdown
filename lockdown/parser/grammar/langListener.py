@@ -58,6 +58,15 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#codeBlockAsFunction.
+    def enterCodeBlockAsFunction(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#codeBlockAsFunction.
+    def exitCodeBlockAsFunction(self, ctx):
+        pass
+
+
     # Enter a parse tree produced by langParser#argumentDestructurings.
     def enterArgumentDestructurings(self, ctx):
         pass

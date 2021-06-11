@@ -30,6 +30,7 @@ value
    | 'false'
    | 'null'
    | function // Where our language extends json...
+   | codeBlockAsFunction
    ;
 
 STRING
@@ -78,6 +79,10 @@ WS
 function
    : 'function' SYMBOL? '(' argumentDestructurings? ')' ('=>' return_type=expression)? '{' codeBlock '}'
    | 'function' SYMBOL? '(|' raw_argument=expression '|)' ('=>' return_type=expression)? '{' codeBlock '}'
+   ;
+
+codeBlockAsFunction
+   : codeBlock
    ;
 
 argumentDestructurings

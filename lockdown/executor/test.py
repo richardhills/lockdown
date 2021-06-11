@@ -79,7 +79,7 @@ class TestDereference(TestCase):
             "types": DEFAULT_READONLY_COMPOSITE_TYPE
         }, wildcard_type=RICH_READONLY_TYPE))
 
-        _, result = bootstrap_function(func, context=context)
+        _, result = bootstrap_function(func, outer_context=context)
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
@@ -129,7 +129,7 @@ class TestDereference(TestCase):
             "types": DEFAULT_READONLY_COMPOSITE_TYPE
         }))
 
-        _, result = bootstrap_function(func, context=context)
+        _, result = bootstrap_function(func, outer_context=context)
 
         self.assertEquals(result.caught_break_mode, "return")
         self.assertEquals(result.value, 42)
