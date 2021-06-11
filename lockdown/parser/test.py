@@ -1008,6 +1008,33 @@ class TestEuler(TestCase):
         _, result = bootstrap_function(code)
         self.assertEquals(result.value, 31875000)
 
+    def test_12(self):
+        # The original test goes to 500, but I can only do 10 atm...
+        code = parse("""
+            function() {
+                var countDivisors = function(int number) {
+                    int test = number, count = 1;
+                    for(var test from range(1, number)) {
+                        if(number % test == 0) {
+                            count = count + 1;
+                        };
+                    };
+                    return count;
+                };
+
+                int triangleNumber = 1, step = 2;
+                while(countDivisors(triangleNumber) < 10) {
+                    triangleNumber = triangleNumber + step;
+                    step = step + 1;
+                };
+                return triangleNumber;
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEquals(result.value, 120)
+
+
+
     def test_14(self):
         code = parse("""
             function() => int {
