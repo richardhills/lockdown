@@ -211,7 +211,7 @@ functionType
    ;
 
 ifStatement
-   : 'if' '(' expression ')' '{' codeBlock '}' ( 'else' '{' codeBlock '}' )?
+   : 'if' '(' expression ')' '{' codeBlock '}' ( 'else if' '(' expression ')' '{' codeBlock '}' )* ( 'else' '{' codeBlock '}' )?
    ;
 
 loop

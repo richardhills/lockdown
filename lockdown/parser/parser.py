@@ -483,18 +483,20 @@ class RDHLang5Visitor(langVisitor):
         return transform_op("break")
 
     def visitIfStatement(self, ctx):
-        condition = self.visit(ctx.expression())
-        outcomes = ctx.codeBlock()
+        expressions = [self.visit(e) for e in ctx.expression()]
+        code_blocks = [self.visit(c).create("expression", get_debug_info(ctx)) for c in ctx.codeBlock()]
 
-        if len(outcomes) == 1:
-            when_true, = outcomes
-            when_false = nop()
+        if len(expressions) == len(code_blocks):
+            other_branch = nop()
         else:
-            when_true, when_false = outcomes
-            when_false = self.visit(when_false).create("expression", get_debug_info(ctx))
+            other_branch = code_blocks[-1]
 
-        when_true = self.visit(when_true).create("expression", get_debug_info(ctx))
+        for condition, when_true in reversed(zip(expressions, code_blocks)):
+            other_branch = condition_op(condition, when_true, other_branch)
 
+        return other_branch
+
+    def visit_conditional_pair(self, condition, when_true, when_false):
         return condition_op(condition, when_true, when_false)
 
     def visitLoop(self, ctx):

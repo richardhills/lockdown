@@ -7,11 +7,12 @@ from lockdown.executor.function import prepare
 from lockdown.executor.raw_code_factories import prepared_function, shift_op, \
     nop, function_type, invoke_op, no_value_type, close_op, prepare_op, \
     context_op, dereference, any_type, reset_op, literal_op, function_lit, \
-    transform_op, static_op
+    transform_op, static_op, transform
 from lockdown.parser.parser import parse, CodeBlockBuilder
 from lockdown.utils.utils import environment, NO_VALUE
 from log import logger
 
+import readline
 
 def read_input():
     value = raw_input(">> ")
@@ -81,17 +82,16 @@ def repl():
 
                     continuation = previous_capturer.value.continuation
 
-                    with frame_manager.capture("read") as new_capturer:
+                    with frame_manager.capture() as new_capturer:
                         new_capturer.attempt_capture_or_raise(*continuation.invoke(code, frame_manager))
 
                     if new_capturer.caught_break_mode == "read":
                         previous_capturer = new_capturer
                     else:
-                        print("shell broke out by {}: {}".format(
+                        print("command broke out by {}: {}".format(
                             new_capturer.caught_break_mode,
                             new_capturer.value
                         ))
-                        exit()
                 except Exception as e:
                     logger.exception("Error on input {}: {} {}".format(raw_code, type(e), e))
         except KeyboardInterrupt as e:

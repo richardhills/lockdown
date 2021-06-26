@@ -1064,6 +1064,21 @@ class TestEuler(TestCase):
         self.assertEquals(result.value, 20)
 
 
+    def test_28(self):
+        code = parse("""
+            function() => int {
+                int sum = 1, n = 3;
+                while(n <= 1001) {
+                    sum = sum + 4 * n * n - 6 * (n - 1);
+                    n = n + 2;
+                };
+                return sum;
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEquals(result.value, 669171001)
+
+
 class TestTranspilation(TestCase):
     def test_basic(self):
         code = parse("""
