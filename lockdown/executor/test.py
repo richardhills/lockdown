@@ -71,12 +71,12 @@ class TestDereference(TestCase):
 
         context = PythonObject({
             "local": 42,
-            "types": PythonObject({
+            "_types": PythonObject({
                 "local": IntegerType()
             })
         }, bind=UniversalObjectType({
             "local": IntegerType(),
-            "types": DEFAULT_READONLY_COMPOSITE_TYPE
+            "_types": DEFAULT_READONLY_COMPOSITE_TYPE
         }, wildcard_type=RICH_READONLY_TYPE))
 
         _, result = bootstrap_function(func, outer_context=context)
@@ -121,12 +121,12 @@ class TestDereference(TestCase):
 
         context = PythonObject({
             "local": PythonList([ 39, 3 ]),
-            "types": PythonObject({
+            "_types": PythonObject({
                 "local": UniversalTupleType([ IntegerType(), IntegerType() ])
             })
         }, bind=UniversalObjectType({
             "local": UniversalTupleType([ IntegerType(), IntegerType() ]),
-            "types": DEFAULT_READONLY_COMPOSITE_TYPE
+            "_types": DEFAULT_READONLY_COMPOSITE_TYPE
         }))
 
         _, result = bootstrap_function(func, outer_context=context)

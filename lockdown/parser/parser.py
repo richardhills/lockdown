@@ -28,6 +28,10 @@ from lockdown.utils.utils import MISSING, default
 
 
 class RDHLang5Visitor(langVisitor):
+    def __init__(self, post_chain_function=None, pre_chain_function=None):
+        self.pre_chain_function = pre_chain_function
+        self.post_chain_function = post_chain_function
+
     def visitObj(self, ctx):
         result = {}
         for pair in ctx.pair() or []:
@@ -91,9 +95,15 @@ class RDHLang5Visitor(langVisitor):
         return function_name, function_builder.create("first-class-function", get_debug_info(ctx))
 
     def visitCodeBlockAsFunction(self, ctx):
-        code_block = self.visit(ctx.codeBlock())
+        function_builder = self.visit(ctx.codeBlock())
 
-        return code_block.create("first-class-function", get_debug_info(ctx))
+        if self.pre_chain_function:
+            function_builder = self.pre_chain_function.chain(function_builder, {})
+
+        if self.post_chain_function:
+            function_builder = function_builder.chain(self.post_chain_function, {})
+
+        return function_builder.create("first-class-function", get_debug_info(ctx))
 
     def visitArgumentDestructurings(self, ctx):
         initializers = [self.visit(l) for l in ctx.argumentDestructuring()]
@@ -855,14 +865,14 @@ class AlwaysFailErrorListener(ConsoleErrorListener):
         raise ParseError()
 
 
-def parse(code, debug=False):
+def parse(code, debug=False, pre_chain_function=None, post_chain_function=None):
     lexer = langLexer(InputStream(code))
     lexer.addErrorListener(AlwaysFailErrorListener())
     tokens = CommonTokenStream(lexer)
     parser = langParser(tokens)
     parser.addErrorListener(AlwaysFailErrorListener())
     ast = parser.json()
-    visitor = RDHLang5Visitor()
+    visitor = RDHLang5Visitor(pre_chain_function=pre_chain_function, post_chain_function=post_chain_function)
     ast = visitor.visit(ast)
     if debug:
         ast._set("raw_code", code)

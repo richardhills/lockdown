@@ -31,6 +31,7 @@ from lockdown.type_system.universal_type import PythonObject, \
     Universal
 from lockdown.utils.utils import MISSING, raise_from, \
     spread_dict, get_environment
+from types import ObjectType
 
 
 def prepare_piece_of_context(declared_type, suggested_type):
@@ -99,7 +100,14 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
     context = Universal(True, initial_wrapped={
         "prepare": outer_context,
         "static": static,
-        "types": Universal(True, initial_wrapped={
+#        "types": derich_type(
+#            UniversalObjectType({
+#                "outer": outer_type,
+#                "argument": argument_type,
+##                "local": local_type
+#            }), {}
+#        ),
+        "_types": Universal(True, initial_wrapped={
             "outer": outer_type,
             "argument": argument_type,
 #            "local": local_type
@@ -153,7 +161,14 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
     context = Universal(True, initial_wrapped={
         "prepare": outer_context,
         "static": static,
-        "types": Universal(True, initial_wrapped={
+#        "types": derich_type(
+#            UniversalObjectType({
+#                "outer": outer_type,
+#                "argument": argument_type,
+#                "local": local_type
+#            }), {}
+#        ),
+        "_types": Universal(True, initial_wrapped={
             "outer": outer_type,
             "argument": argument_type,
             "local": local_type
@@ -248,6 +263,9 @@ class UnboundDereferenceBinder(object):
     def search_context_type_for_reference(self, reference, context_type, prepend_context, debug_info):
         from lockdown.executor.raw_code_factories import dereference_op, assignment_op, \
             literal_op, dereference, context_op
+
+        if not isinstance(context_type, CompositeType):
+            return None
 
         argument_search = self.search_context_type_area_for_reference(reference, "argument", context_type, prepend_context, debug_info)
         if argument_search:
@@ -461,7 +479,7 @@ class {open_function_id}(object):
             "outer": {context_name}_outer_context,
             "argument": {context_name}_argument,
             "static": {static},
-            "types": {types_context}
+            "_types": {types_context}
         }})
         {context_name}._set("local", {local_initializer})
         """ \
@@ -518,7 +536,7 @@ class {open_function_id}(object):
     "outer": {outer_context},
     "argument": {argument},
     "static": {static},
-    "types": {types_context}
+    "_types": {types_context}
 }})
 {context_name}._set("local", {local_initializer})
 {function_code}
@@ -599,7 +617,8 @@ class ClosedFunction(LockdownFunction):
                     "outer": self.outer_context,
                     "argument": argument,
                     "static": self.open_function.static,
-                    "types": self.open_function.types_context
+#                    "types": derich_type(self.open_function.types_context, {}),
+                    "_types": self.open_function.types_context
                 }, debug_reason="local-initialization-context")
             )
 
@@ -624,7 +643,8 @@ class ClosedFunction(LockdownFunction):
                         "argument": argument,
                         "static": self.open_function.static,
                         "local": local,
-                        "types": self.open_function.types_context
+#                        "types": derich_type(self.open_function.types_context, {}),
+                        "_types": self.open_function.types_context
                     }, debug_reason="code-execution-context")
                 )
                 with scoped_bind(

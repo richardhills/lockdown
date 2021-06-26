@@ -294,10 +294,10 @@ class Frame(object):
         if get_environment().validate_flow_control and isinstance(exc_value, BreakException) and self.target.break_types is not None:
             # Verifies that execution is leaving the target opcode at run-time in a way that was forecast
             # at verification time. 
-            break_types = self.target.break_types.get(exc_value.mode, MISSING)
+            break_types = self.target.break_types.get(exc_value.mode, []) + self.target.break_types.get("*", [])
 
-            if break_types is MISSING:
-                raise FatalError("Can not unwind {}: {}, target {} allowed {}".format(exc_value.mode, exc_value.value, self.target, break_types))
+#            if break_types is MISSING:
+#                raise FatalError("Can not unwind {}: {}, target {} allowed {}".format(exc_value.mode, exc_value.value, self.target, break_types))
 
             failures = []
 

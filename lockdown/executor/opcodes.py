@@ -392,13 +392,13 @@ def get_context_type(context):
         value_type = {}
         if context is NO_VALUE:
             return NoValueType()
-        if hasattr(context, "types"):
-            if hasattr(context.types, "argument"):
-                value_type["argument"] = context.types.argument
-            if hasattr(context.types, "local"):
-                value_type["local"] = context.types.local
-            if hasattr(context.types, "outer"):
-                value_type["outer"] = context.types.outer
+        if hasattr(context, "_types"):
+            if hasattr(context._types, "argument"):
+                value_type["argument"] = context._types.argument
+            if hasattr(context._types, "local"):
+                value_type["local"] = context._types.local
+            if hasattr(context._types, "outer"):
+                value_type["outer"] = context._types.outer
         if hasattr(context, "prepare"):
             value_type["prepare"] = DEFAULT_READONLY_COMPOSITE_TYPE
         if hasattr(context, "static"):
@@ -423,7 +423,6 @@ class ContextOp(Opcode):
 
     def __str__(self):
         return "Context"
-
 
 class DereferenceOp(Opcode):
     INVALID_DEREFERENCE = TypeErrorFactory("DereferenceOp: invalid_dereference")
@@ -1466,7 +1465,7 @@ class PrepareOp(Opcode):
 
         if function_value_type is not MISSING:
             break_types.add(
-                "value", AnyType()
+                "value", AnyType() #OpenFunctionType(BottomType(), get_context_type(context), {})
             )
 
         break_types.add("exception", self.PREPARATION_ERROR.get_type(), opcode=self)
@@ -1642,6 +1641,7 @@ class InvokeOp(Opcode):
                     self.invalid_argument_type_exception_is_possible = False
             else:
                 break_types.add("exception", self.INVALID_FUNCTION_TYPE.get_type(), opcode=self)
+                break_types.add("*", AnyType(), opcode=self)
 
             if self.invalid_argument_type_exception_is_possible:
                 break_types.add("exception", self.INVALID_ARGUMENT_TYPE.get_type(), opcode=self)
