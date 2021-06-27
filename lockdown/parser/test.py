@@ -1078,6 +1078,25 @@ class TestEuler(TestCase):
         _, result = bootstrap_function(code)
         self.assertEquals(result.value, 669171001)
 
+    def test_31(self):
+        return
+        code = parse("""
+            function() {
+                List<int> coins = [ 1, 2, 5, 10, 20, 50, 100, 200 ];
+                Dictionary<Tuple<int, int>: int> ways = {};
+                ways[ [0, 0] ] = 1;
+                for(var i from range(0, 8)) {
+                    var coin = coins[i];
+                    for (var j from range(0, 200)) {
+                        ways[ [i + 1, j] ] = ways[ [ i, j] ] + (j >= coin ? ways[ [i + 1, j - coin] ] : 0);
+                    };
+                };
+                return ways[ [ COINS.length, TOTAL ] ];
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code, check_safe_exit=False)
+        self.assertEquals(result.value, 73682)
+
 
 class TestTranspilation(TestCase):
     def test_basic(self):

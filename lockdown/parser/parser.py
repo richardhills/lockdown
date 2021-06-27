@@ -635,7 +635,7 @@ class RDHLang5Visitor(langVisitor):
         if ctx.splat():
             inferred_splat_type = expressions.pop()
 
-        for index, expression in expressions:
+        for index, expression in enumerate(expressions):
             micro_ops.append(object_template_op({
                 "type": literal_op("get"),
                 "index": literal_op(index),
