@@ -26,7 +26,8 @@ from lockdown.type_system.universal_type import UniversalObjectType, \
     InsertStartMicroOpType, InsertEndMicroOpType, DeletterWildcardMicroOpType, \
     IterMicroOpType, RemoverWildcardMicroOpType, InserterWildcardMicroOpType, \
     UniversalTupleType, Universal, SPARSE_ELEMENT
-from lockdown.utils.utils import MISSING, NO_VALUE, InternalMarker, get_environment
+from lockdown.utils.utils import MISSING, NO_VALUE, InternalMarker, get_environment,\
+    spread_dict
 
 
 class Opcode(object):
@@ -161,8 +162,10 @@ class TypeErrorFactory(object):
         }
         return UniversalObjectType(properties, wildcard_type=AnyType(), name="TypeError")
 
-def get_operand(expression, context, frame_manager, break_types):
-    value_type, other_break_types = get_expression_break_types(expression, context, frame_manager)
+def get_operand_type(expression, context, frame_manager, break_types, immediate_context=None):
+    value_type, other_break_types = get_expression_break_types(
+        expression, context, frame_manager, immediate_context=immediate_context
+    )
     break_types.merge(other_break_types)
     if value_type is not MISSING:
         value_type = flatten_out_types(value_type)
@@ -326,7 +329,7 @@ class TemplateOp(Opcode):
             wildcard_key_type = OneOfType([ StringType(), IntegerType() ])
 
             micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(wildcard_key_type, combined_value_types, True)
-            micro_ops[("iter",)] = IterMicroOpType(combined_value_types)
+            micro_ops[("iter",)] = IterMicroOpType(BottomType(), combined_value_types)
 
             have_default_factory = False
 
@@ -440,8 +443,8 @@ class DereferenceOp(Opcode):
 
         self.generates_exceptions = False
 
-        reference_types = get_operand(self.reference, context, frame_manager, break_types)
-        of_types = get_operand(self.of, context, frame_manager, break_types)
+        reference_types = get_operand_type(self.reference, context, frame_manager, break_types)
+        of_types = get_operand_type(self.of, context, frame_manager, break_types)
 
         if reference_types is MISSING or of_types is MISSING:
             return break_types.build()
@@ -608,9 +611,9 @@ class AssignmentOp(Opcode):
 
         self.generates_exceptions = False
 
-        reference_types = get_operand(self.reference, context, frame_manager, break_types)
-        of_types = get_operand(self.of, context, frame_manager, break_types)
-        rvalue_type = get_operand(self.rvalue, context, frame_manager, break_types)
+        reference_types = get_operand_type(self.reference, context, frame_manager, break_types)
+        of_types = get_operand_type(self.of, context, frame_manager, break_types)
+        rvalue_type = get_operand_type(self.rvalue, context, frame_manager, break_types)
 
         if reference_types is MISSING or of_types is MISSING or rvalue_type is MISSING:
             # If any are missing, then this opcode can not execute
@@ -828,22 +831,25 @@ class MapOp(Opcode):
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
 
-        composite_type, composite_other_break_types = get_expression_break_types(self.composite, context, frame_manager)
-        if composite_type is not MISSING:
-            composite_type = flatten_out_types(composite_type)
-        break_types.merge(composite_other_break_types)
+        composite_type = get_operand_type(
+            self.composite, context, frame_manager, break_types
+        )
 
         if composite_type and isinstance(composite_type, CompositeType):
             self.iter_micro_op = composite_type.get_micro_op_type(("iter", ))
 
         if self.iter_micro_op:
             immediate_context = immediate_context or {}
-            immediate_context["suggested_argument_type"] = self.iter_micro_op.value_type
+            immediate_context["suggested_argument_type"] = UniversalTupleType([
+                IntegerType(),
+                self.iter_micro_op.key_type,
+                self.iter_micro_op.value_type
+            ])
 
-        mapper_type, mapper_other_break_types = get_expression_break_types(self.mapper, context, frame_manager, immediate_context)
-        if mapper_type is not MISSING:
-            mapper_type = flatten_out_types(mapper_type)
-        break_types.merge(mapper_other_break_types)
+        mapper_type = get_operand_type(
+            self.mapper, context, frame_manager, break_types,
+            immediate_context=immediate_context
+        )
 
         if not isinstance(composite_type, CompositeType):
             break_types.add("exception", self.MISSING_COMPOSITE_TYPE.get_type(), opcode=self)
@@ -867,6 +873,8 @@ class MapOp(Opcode):
             ends = mapper_break_types.pop("end", MISSING) is not MISSING
             skips = mapper_break_types.pop("value", MISSING) is not MISSING
 
+            break_types.merge(mapper_break_types)
+
             every_input_key_is_in_output = not ends and not skips
 
             micro_ops = {}
@@ -881,7 +889,7 @@ class MapOp(Opcode):
 
             if mapper_continue_type is not MISSING:
                 micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(IntegerType(), mapper_continue_type, True)
-                micro_ops[("iter",)] = IterMicroOpType(mapper_continue_type)
+                micro_ops[("iter",)] = IterMicroOpType(IntegerType(), mapper_continue_type)
 
             micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(IntegerType(), AnyType(), True, False)
             micro_ops[("remove-wildcard",)] = RemoverWildcardMicroOpType(True, False)
@@ -906,11 +914,11 @@ class MapOp(Opcode):
                 composite_manager = get_manager(composite)
 
                 # TODO: Make restartable - can not yet be used in a continuation
-                for v in self.iter_micro_op.invoke(composite_manager):
+                for i, k, v in self.iter_micro_op.invoke(composite_manager):
                     with frame_manager.capture("end") as ender:
                         with frame_manager.capture("continue") as capturer:
                             with frame_manager.capture("value"):
-                                mapper.invoke(v, frame_manager)
+                                mapper.invoke(PythonList([ i, k, v ]), frame_manager)
                         if capturer.value is not MISSING:
                             results.append(capturer.value)
                     if ender.value is not MISSING:
@@ -920,6 +928,35 @@ class MapOp(Opcode):
                 return frame.value(breaker.value)
 
             raise FatalError()
+
+class LengthOp(Opcode):
+    INVALID_COMPOSITE_TYPE = TypeErrorFactory("{}: invalid_composite_type")
+
+    def __init__(self, data, visitor):
+        super(LengthOp, self).__init__(data, visitor)
+        self.composite = enrich_opcode(data.composite, visitor)
+
+    def get_break_types(self, context, frame_manager, immediate_context=None):
+        break_types = BreakTypesFactory(self)
+
+        composite_type = get_operand_type(self.composite, context, frame_manager, break_types)
+
+        if composite_type is not MISSING:
+            break_types.add("value", IntegerType(), opcode=self)
+        if not isinstance(composite_type, CompositeType):
+            break_types.add("exception", self.INVALID_COMPOSITE_TYPE.get_type(), opcode=self)
+
+        return break_types.build()
+
+    @abstractmethod
+    def jump(self, context, frame_manager, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
+            composite = frame.step("composite", lambda: evaluate(self.composite, context, frame_manager))
+
+            if not isinstance(composite, Composite):
+                frame.exception(self.INVALID_COMPOSITE_TYPE())
+
+            return frame.value(composite._length)
 
 
 def BinaryOp(name, symbol, func, argument_type, result_type, number_op=None, cmp_op=None):
@@ -1571,7 +1608,7 @@ def create_readonly_static_type(value):
                 result.set_micro_op_type(("get", key), GetterMicroOpType(key, type_of_value))
 
             result.set_micro_op_type(("get-wildcard",), GetterWildcardMicroOpType(IntegerType(), merged_types, True))
-            result.set_micro_op_type(("iter",), IterMicroOpType(merged_types))
+            result.set_micro_op_type(("iter",), IterMicroOpType(IntegerType(), merged_types))
         return result
     else:
         return get_type_of_value(value)
@@ -1763,14 +1800,19 @@ class PrintOp(Opcode):
             print evaluate(self.expression, context, frame_manager)
             return frame.value(NO_VALUE)
 
-OPCODES = {
+FLOW_CONTROL_OPCODES = {
     "nop": Nop,
     "transform": TransformOp,
     "shift": ShiftOp,
     "reset": ResetOp,
-    "literal": LiteralOp,
-    "template": TemplateOp,
-    "multiplication": BinaryOp(
+    "comma": CommaOp,
+    "loop": LoopOp,
+    "conditional": ConditionalOp,
+
+}
+
+MATH_AND_LOGIC_OPCODES = {
+        "multiplication": BinaryOp(
         "Multiplication", "*",
         lambda lvalue, rvalue: lvalue() * rvalue(), IntegerType(), IntegerType(), number_op=ast.Mult()
     ),
@@ -1813,22 +1855,39 @@ OPCODES = {
     ),
     "or": BinaryOp("Or", "||", lambda lvalue, rvalue: lvalue() or rvalue(), BooleanType(), BooleanType()),
     "and": BinaryOp("And", "&&", lambda lvalue, rvalue: lvalue() and rvalue(), BooleanType(), BooleanType()),
+}
+
+DATA_OPCODES = {
     "dereference": DereferenceOp,
     "dynamic_dereference": DynamicDereferenceOp,
     "assignment": AssignmentOp,
+    "literal": LiteralOp,
+    "template": TemplateOp,
     "insert": InsertOp,
     "map": MapOp,
+    "length": LengthOp,
     "context": ContextOp,
-    "comma": CommaOp,
-    "loop": LoopOp,
-    "conditional": ConditionalOp,
+    "static": StaticOp,
+    "match": MatchOp,
+}
+
+FUNCTION_OPCODES = {
     "prepare": PrepareOp,
     "close": CloseOp,
-    "static": StaticOp,
     "invoke": InvokeOp,
-    "match": MatchOp,
+}
+
+MISC_OPCODES = {
     "print": PrintOp
 }
+
+OPCODES = spread_dict(
+    FLOW_CONTROL_OPCODES,
+    MATH_AND_LOGIC_OPCODES,
+    DATA_OPCODES,
+    FUNCTION_OPCODES,
+    MISC_OPCODES
+)
 
 
 def enrich_opcode(data, visitor):

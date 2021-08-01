@@ -95,7 +95,7 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
     except DanglingInferredType:
         raise PreparationException("Failed to infer outer types in {} from {}".format(argument_type, suggested_argument_type))
 
-    local_type = enrich_type(static._get("local"))
+    declared_local_type = enrich_type(static._get("local"))
 
     context = Universal(True, initial_wrapped={
         "prepare": outer_context,
@@ -141,7 +141,7 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
 
     actual_local_type = flatten_out_types(actual_local_type)
 
-    local_type = prepare_piece_of_context(local_type, actual_local_type)
+    local_type = prepare_piece_of_context(declared_local_type, actual_local_type)
 
     local_type_reasoner = Reasoner()
 

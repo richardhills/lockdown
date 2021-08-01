@@ -588,7 +588,7 @@ class RDHLang5Visitor(langVisitor):
                 invoke_op(
                     prepare_function_lit(loop_code, **get_debug_info(ctx)),
                     object_template_op({
-                        iterator_name: dereference("argument", **get_debug_info(ctx))
+                        iterator_name: dereference("argument.2", **get_debug_info(ctx))
                     }, **get_debug_info(ctx)),
                     **get_debug_info(ctx)
                 ),

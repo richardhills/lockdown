@@ -932,6 +932,11 @@ class SetterWildcardMicroOpType(MicroOpType):
                         reasoner.push_micro_op_conflicts_with_micro_op(self, possible_detail_getter)
                         return True
 
+#         iter = other_type.get_micro_op_type(("iter", ))
+#         if iter and not iter.key_type.is_copyable_from(self.key_type, reasoner):
+#             reasoner.push_micro_op_conflicts_with_micro_op(self, iter)
+#             return True
+
         return False
 
     def prepare_bind(self, target, key_filter, substitute_value):
@@ -1189,14 +1194,15 @@ class IterMicroOpType(MicroOpType):
     key_error = False
     type_error = False
 
-    def __init__(self, value_type):
+    def __init__(self, key_type, value_type):
+        self.key_type = key_type
         self.value_type = value_type
 
     def invoke(self, target_manager, *args, **kwargs):
         try:
             obj = target_manager.get_obj()
-            for v in obj._values():
-                yield v
+            for i, (k, v) in enumerate(obj._items()):
+                yield (i, k, v)
         except KeyError:
             raise FatalError()
         except TypeError:
@@ -1206,6 +1212,7 @@ class IterMicroOpType(MicroOpType):
         other_micro_op_type = other_type.get_micro_op_type(("iter",))
         return (
             other_micro_op_type
+            and self.key_type.is_copyable_from(other_micro_op_type.key_type, reasoner)
             and self.value_type.is_copyable_from(other_micro_op_type.value_type, reasoner)
         )
 
@@ -1234,6 +1241,10 @@ class IterMicroOpType(MicroOpType):
             reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_setter)
             return True
 
+#         if wildcard_setter and not self.key_type.is_copyable_from(wildcard_setter.key_type, reasoner):
+#             reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_setter)
+#             return True
+
         for tag in other_type.get_micro_op_types().keys():
             if len(tag) == 2 and tag[0] == "set":
                 detail_setter = other_type.get_micro_op_type(("set", tag[1]))
@@ -1260,11 +1271,15 @@ class IterMicroOpType(MicroOpType):
 
     def merge(self, other_micro_op_type):
         return IterMicroOpType(
+            merge_types([ self.key_type, other_micro_op_type.key_type ], "sub"),            
             merge_types([ self.value_type, other_micro_op_type.value_type ], "sub")
         )
 
     def clone(self, value_type=MISSING):
-        return IterMicroOpType(default(value_type, self.value_type))
+        return IterMicroOpType(
+            self.key_type,
+            default(value_type, self.value_type),
+        )
 
     def __repr__(self):
         return micro_op_repr("iter", "-", False, type=self.value_type)
@@ -1334,7 +1349,7 @@ def UniversalListType(child_type, is_sparse=False, name=None):
         raise FatalError()
 
     micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(IntegerType(), child_type, True)
-    micro_ops[("iter",)] = IterMicroOpType(child_type)
+    micro_ops[("iter",)] = IterMicroOpType(IntegerType(), child_type)
 
     if not is_const:
         micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(IntegerType(), child_type, not is_sparse, False)
@@ -1381,7 +1396,7 @@ def UniversalLupleType(properties, element_type, is_sparse=False, name=None):
     micro_ops[("remove-wildcard",)] = RemoverWildcardMicroOpType(True, True)
     micro_ops[("insert-wildcard",)] = InserterWildcardMicroOpType(IntegerType(), not is_sparse, True)
     micro_ops[("insert-end",)] = InsertEndMicroOpType(element_type, True)
-    micro_ops[("iter",)] = IterMicroOpType(element_type)
+    micro_ops[("iter",)] = IterMicroOpType(IntegerType(), element_type)
 
     if is_sparse:
         micro_ops[("delete-wildcard",)] = DeletterWildcardMicroOpType(IntegerType(), True)

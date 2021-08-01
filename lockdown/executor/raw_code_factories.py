@@ -2,13 +2,14 @@
 from __future__ import unicode_literals
 
 from lockdown.type_system.exceptions import FatalError
-from lockdown.type_system.universal_type import PythonObject, PythonList
+from lockdown.type_system.universal_type import Universal, PythonObject, \
+    PythonList
 from lockdown.utils.utils import spread_dict
 
 
 def is_opcode(data):
-    if not isinstance(data, (PythonObject, PythonObject)):
-        raise FatalError()
+    if not isinstance(data, Universal):
+        raise FatalError(data)
     return data._contains("opcode")
 
 def check_is_opcode(data):
@@ -63,6 +64,14 @@ def composite_type(micro_ops):
     })
 
 
+def iter_micro_op(key_type, value_type):
+    return object_template_op({
+        "type": literal_op("iter"),
+        "params": list_template_op([
+            key_type, value_type
+        ])
+    })
+
 def function_type(argument_type, break_types):
     if not isinstance(break_types, dict):
         raise FatalError()
@@ -90,7 +99,7 @@ def build_break_types(return_type=None, exception_type=None, yield_types=None, v
 
 def infer_all():
     return {
-        "wildcard": list_template_op([
+        literal_op("wildcard"): list_template_op([
             object_template_op({
                 "out": inferred_type(),
                 "in": inferred_type()
@@ -166,6 +175,8 @@ def object_template_op(values, debug_reason="code", **kwargs):
         check_is_opcode(v)
         if isinstance(k, basestring):
             k = literal_op(k)
+
+        check_is_opcode(k)
 
         values_list.append(PythonList([ k, v ]))
 
@@ -411,11 +422,21 @@ def insert_op(of, reference, rvalue):
 
 def map_op(composite, mapper):
     check_is_opcode(composite)
-    check_is_opcode(mapper)
-    return PythonObject({
+    code = {
         "opcode": "map",
         "composite": composite,
-        "mapper": mapper
+    }
+    if mapper:
+        check_is_opcode(mapper)
+        code["mapper"] = mapper
+    return PythonObject(code, debug_reason="code")
+
+
+def length_op(composite):
+    check_is_opcode(composite)
+    return PythonObject({
+        "opcode": "length",
+        "composite": composite,
     }, debug_reason="code")
 
 
@@ -497,6 +518,8 @@ def inferred_type():
 def any_type():
     return type_lit("Any")
 
+def bottom_type():
+    return type_lit("Bottom")
 
 def int_type():
     return type_lit("Integer")

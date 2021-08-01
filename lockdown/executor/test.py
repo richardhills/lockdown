@@ -1041,7 +1041,8 @@ class TestContinuations(TestCase):
 
         func = prepare(
             function_lit(
-                no_value_type(), build_break_types(any_type(), yield_types={ "out": any_type(), "in": int_type() }),
+                no_value_type(),
+                build_break_types(return_type=any_type(), yield_types={ "out": any_type(), "in": int_type() }),
                 return_op(addition_op(shift_op(literal_op(30), int_type()), shift_op(literal_op(10), int_type())))
             ),
             context, frame_manager

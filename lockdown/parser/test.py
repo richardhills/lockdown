@@ -311,6 +311,35 @@ class TestBuiltIns(TestCase):
         self.assertEquals(len(result.value), 4)
         self.assertEquals(list(result.value), [ 1, 2, 3, 4 ])
 
+    def test_array_length(self):
+        code = parse("""
+            function() {
+                return length([ 1, 4, 6 ]);
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEquals(result.value, 3)
+
+    def test_object_length(self):
+        code = parse("""
+            function() {
+                return length({ foo: "bar" });
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEquals(result.value, 0)
+
+    def test_keys(self):
+        code = parse("""
+            function() {
+                return keys({ foo: "bar" });
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEquals(result.value._to_list(), [ "foo" ])
 
 class TestInferredTypes(TestCase):
     def test_inferred_locals(self):
@@ -700,7 +729,6 @@ class TestDictionary(TestCase):
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEquals(result.value, 55)
 
-
 class TestParserMisc(TestCase):
     def test_invalid_list_assignment(self):
         code = parse("""
@@ -1088,7 +1116,7 @@ class TestEuler(TestCase):
                 for(var i from range(0, 8)) {
                     var coin = coins[i];
                     for (var j from range(0, 200)) {
-                        ways[ [i + 1, j] ] = ways[ [ i, j] ] + (j >= coin ? ways[ [i + 1, j - coin] ] : 0);
+                        ways[ [i + 1, j] ] = ways[ [i, j] ] + (j >= coin ? ways[ [i + 1, j - coin] ] : 0);
                     };
                 };
                 return ways[ [ COINS.length, TOTAL ] ];

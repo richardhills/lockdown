@@ -3,11 +3,17 @@ from __future__ import unicode_literals
 
 from lockdown.type_system.core_types import Type
 from lockdown.type_system.exceptions import FatalError
-from lockdown.type_system.universal_type import PythonDict
+from lockdown.type_system.universal_type import PythonDict, Universal
 
 
 def enrich_break_type(data):
     from lockdown.executor.type_factories import enrich_type
+
+    if not isinstance(data, Universal):
+        raise FatalError()
+    if not data._contains("out"):
+        raise FatalError()
+
     result = {
         "out": enrich_type(data._get("out"))
     }

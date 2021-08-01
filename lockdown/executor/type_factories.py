@@ -10,7 +10,7 @@ from lockdown.executor.raw_code_factories import one_of_type
 from lockdown.type_system.composites import InferredType, CompositeType, \
     Composite
 from lockdown.type_system.core_types import UnitType, OneOfType, Const, AnyType, \
-    IntegerType, BooleanType, NoValueType, StringType, Type
+    IntegerType, BooleanType, NoValueType, StringType, Type, BottomType
 from lockdown.type_system.exceptions import FatalError
 from lockdown.type_system.universal_type import GetterMicroOpType, \
     SetterMicroOpType, InsertStartMicroOpType, InsertEndMicroOpType, \
@@ -106,7 +106,7 @@ MICRO_OP_FACTORIES = {
     "delete-wildcard": lambda kt, ke: DeletterWildcardMicroOpType(enrich_type(kt), ke),
     "remove-wildcard": lambda ke, te: RemoverWildcardMicroOpType(ke, te),
     "insert-wildcard": lambda vt, ke, te: InserterWildcardMicroOpType(enrich_type(vt), ke, te),
-    "iter": lambda vt: IterMicroOpType(enrich_type(vt)),
+    "iter": lambda kt, vt: IterMicroOpType(enrich_type(kt), enrich_type(vt)),
     "infer-remainder": lambda *args: None
 }
 
@@ -123,7 +123,7 @@ def build_universal_type(data):
 
         micro_ops[tag] = Factory(*micro_op._get("params")._to_list())
 
-    return CompositeType(micro_ops, name="App")
+    return CompositeType(micro_ops, name="User")
 
 # def deconstruct_micro_op(micro_op, results):
 #     if isinstance(micro_op, GetterMicroOpType):
@@ -191,6 +191,7 @@ def build_universal_type(data):
 
 TYPES = {
     "Any": lambda data: AnyType(),
+    "Bottom": lambda data: BottomType(),
     "Object": build_object_type,
     "List": build_list_type,
     "Universal": build_universal_type,

@@ -12,10 +12,11 @@ from lockdown.executor.raw_code_factories import function_lit, list_type, \
     binary_integer_op, comma_op, shift_op, no_value_type, assignment_op, \
     literal_op, addition_op, transform_op, list_template_op, inferred_type, \
     invoke_op, local_function, transform, reset_op, nop, map_op, \
-    object_template_op, function_type
+    object_template_op, function_type, length_op, composite_type, \
+    build_break_types, any_type, bottom_type, iter_micro_op
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.universal_type import PythonObject, \
-    DEFAULT_READONLY_COMPOSITE_TYPE
+    DEFAULT_READONLY_COMPOSITE_TYPE, IterMicroOpType
 from lockdown.utils.utils import NO_VALUE, print_code, MISSING, get_environment
 
 
@@ -109,6 +110,32 @@ def get_default_global_context():
                 ),
                 NO_VALUE, FrameManager()
             ).close(NO_VALUE),
+            "length": prepare(
+                function_lit(
+                    list_type([ composite_type([]) ], None),
+                    build_break_types(value_type=int_type()),
+                    length_op(
+                        dereference("argument.0")
+                    )
+                ),
+                NO_VALUE, FrameManager()
+            ).close(NO_VALUE),
+            "keys": prepare(
+                function_lit(
+                    list_type([
+                        composite_type([ iter_micro_op(any_type(), any_type()) ])
+                    ], None),
+#                    build_break_types(value_type=list_type([], any_type())),
+                    map_op(
+                        dereference("argument.0"),
+                        prepared_function(
+                            inferred_type(),
+                            transform_op("value", "continue", dereference("argument.1"))
+                        )
+                    )
+                ),
+                NO_VALUE, FrameManager()
+            ).close(NO_VALUE),
             "max": prepare(
                 function_lit(
                     list_type([ int_type() ], int_type()),
@@ -119,17 +146,17 @@ def get_default_global_context():
                         map_op(
                             dereference("argument"),
                             prepared_function(
-                                int_type(),
+                                inferred_type(),
                                 condition_op(
                                     binary_integer_op(
                                         "gt",
-                                        dereference("argument"),
+                                        dereference("argument.2"),
                                         dereference("outer.local")
                                     ),
                                     assignment_op(
                                         dereference("outer"),
                                         literal_op("local"),
-                                        dereference("argument")
+                                        dereference("argument.2")
                                     ),
                                     nop()
                                 )
