@@ -96,6 +96,10 @@ def build_list_type(data):
 def inferred_opcode_factory(*args, **kwargs):
     return None
 
+class InferRemainerPlaceholder(object):
+    def __init__(self, base_type):
+        self.base_type = base_type
+
 MICRO_OP_FACTORIES = {
     "get": lambda k, v: GetterMicroOpType(k, enrich_type(v)),
     "set": lambda k, v: SetterMicroOpType(k, enrich_type(v)),
@@ -107,7 +111,7 @@ MICRO_OP_FACTORIES = {
     "remove-wildcard": lambda ke, te: RemoverWildcardMicroOpType(ke, te),
     "insert-wildcard": lambda vt, ke, te: InserterWildcardMicroOpType(enrich_type(vt), ke, te),
     "iter": lambda kt, vt: IterMicroOpType(enrich_type(kt), enrich_type(vt)),
-    "infer-remainder": lambda *args: None
+    "infer-remainder": lambda base_type: InferRemainerPlaceholder(enrich_type(base_type))
 }
 
 def build_universal_type(data):    

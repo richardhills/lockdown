@@ -242,15 +242,15 @@ class TestRevConstType(TestCase):
         }, name="test")
 
         normal_broad_type = CompositeType({
-            ("get", "foo"): GetterWildcardMicroOpType(StringType(), StringType(), True),
-            ("set", "foo"): SetterWildcardMicroOpType(StringType(), StringType(), False, False)
+            ("get-wildcard", ): GetterWildcardMicroOpType(StringType(), AnyType(), True),
+            ("set-wildcard", ): SetterWildcardMicroOpType(StringType(), AnyType(), False, False)
         }, name="test")
 
         rev_const_type = prepare_lhs_type(rev_const_type, None)
 
-        self.assertTrue(isinstance(rev_const_type.get_micro_op_type(("set-wildcard",)).value_type, StringType))
+        self.assertTrue(isinstance(rev_const_type.get_micro_op_type(("set-wildcard",)).value_type, AnyType))
 
-        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type, DUMMY_REASONER))
+        self.assertTrue(normal_broadDereferenceOp_type.is_copyable_from(rev_const_type, DUMMY_REASONER))
 
     def test_rev_const_flatten_tuple(self):
         rev_const_type = CompositeType({

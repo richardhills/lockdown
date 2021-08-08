@@ -656,7 +656,7 @@ class RDHLang5Visitor(langVisitor):
         if inferred_splat_type:
             micro_ops.append(object_template_op({
                 "type": literal_op("infer-remainder"),
-                "params": list_template_op([])
+                "params": list_template_op([ inferred_splat_type ])
             }))
 
         return composite_type(micro_ops)

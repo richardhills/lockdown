@@ -9,6 +9,7 @@ from json.encoder import JSONEncoder
 import sys
 import weakref
 
+from lockdown.type_system.core_types import Type
 from lockdown.type_system.exceptions import FatalError
 
 

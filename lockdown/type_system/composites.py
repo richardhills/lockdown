@@ -65,12 +65,18 @@ class CompositeType(Type):
         return result
 
     def get_micro_op_type(self, tag):
+        if not isinstance(tag, tuple):
+            raise FatalError()
+
         if self.delegate:
             return self.delegate.get_micro_op_type(tag)
 
         return self._micro_op_types.get(tag, None)
 
     def set_micro_op_type(self, tag, micro_op):
+        if not isinstance(tag, tuple):
+            raise FatalError()
+
         if "post-conflict-resolution><post-conflict-resolution" in self.name:
             pass
         if self.delegate:
@@ -245,6 +251,8 @@ class CompositeObjectManager(object):
             del self.attached_type_counts[remove_type_id]
 
     def get_micro_op_type(self, tag):
+        if not isinstance(tag, tuple):
+            raise FatalError()
         effective_composite_type = self.get_effective_composite_type()
         return effective_composite_type.get_micro_op_type(tag)
 
@@ -343,15 +351,28 @@ def replace_inferred_types_in_composite(lhs_type, rhs_type, results):
 
     results[result_key] = finished_type
 
-    infer_remainder = ("infer-remainder", ) in lhs_type.get_micro_op_types()
+    infer_remainder = lhs_type.get_micro_op_type(( "infer-remainder", ))
 
-    if infer_remainder:
-        if isinstance(rhs_type, CompositeType):
-            for rhs_tag, rhs_micro_op in rhs_type.get_micro_op_types().items():
-                if rhs_tag not in finished_type.get_micro_op_types():
-                    finished_type.set_micro_op_type(rhs_tag, rhs_micro_op)
+    if infer_remainder and isinstance(rhs_type, CompositeType):
+        missing_rhs_tags = [
+            (tag, op) for (tag, op) in rhs_type.get_micro_op_types().items()
+            if tag not in finished_type.get_micro_op_types()
+        ]
 
-            finished_type.remove_micro_op_type(( "infer-remainder", ))
+        for rhs_tag, rhs_micro_op in missing_rhs_tags:
+            new_lhs_micro_op = rhs_micro_op
+
+            if rhs_tag in ( ( "set-wildcard", ), ):
+                if not rhs_micro_op.value_type.is_copyable_from(infer_remainder.base_type, DUMMY_REASONER):
+                    raise FatalError()
+
+                new_lhs_micro_op = new_lhs_micro_op.clone(
+                    value_type=infer_remainder.base_type
+                )
+
+            finished_type.set_micro_op_type(rhs_tag, new_lhs_micro_op)
+
+        finished_type.remove_micro_op_type(( "infer-remainder", ))
 
     for tag, lhs_micro_op in lhs_type.get_micro_op_types().items():
         if hasattr(lhs_micro_op, "value_type"):
@@ -407,12 +428,25 @@ def resolve_micro_op_conflicts(type, results):
                 finished_type.set_micro_op_type(( "set-wildcard", ), wildcard_setter.clone(
                     type_error=True
                 ))
-        if len(tag) == 1 and tag[0] == "get-wildcard":
-            setter = finished_type.get_micro_op_type(( "set-wildcard", ))
-            if setter and replace_setter_value_type_with_getter(setter, micro_op):
-                finished_type.set_micro_op_type(( "set-wildcard", ), setter.clone(
-                    value_type=micro_op.value_type
-                ))
+
+    wildcard_setter = finished_type.get_micro_op_type(( "set-wildcard", ))
+    wildcard_getter = finished_type.get_micro_op_type(( "get-wildcard", ))
+
+    if wildcard_setter and wildcard_getter:
+        finished_type.set_micro_op_type(( "get-wildcard", ), wildcard_getter.clone(
+            value_type=wildcard_setter.value_type
+        ))
+
+    wildcard_getter = finished_type.get_micro_op_type(( "get-wildcard", ))
+    iter = finished_type.get_micro_op_type(( "iter", ))
+
+    if wildcard_getter and iter:
+        finished_type.set_micro_op_type(( "iter", ), iter.clone(
+            key_type=wildcard_getter.key_type,
+            value_type=wildcard_getter.value_type
+        ))
+
+    for tag, micro_op in finished_type.get_micro_op_types().items():
         if tag[0] in ("get", "get-wildcard") and not micro_op.key_error:
             finished_type.remove_micro_op_type(( "insert-start", ))
             finished_type.remove_micro_op_type(( "insert-wildcard", ))

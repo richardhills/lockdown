@@ -286,6 +286,7 @@ class TemplateOp(Opcode):
 
         micro_ops = {}
 
+        all_key_types = []
         all_value_types = []
 
         can_break_with_value_type = True
@@ -320,25 +321,24 @@ class TemplateOp(Opcode):
                 break_types.add("exception", self.NO_VALUE_ASSIGNMENT.get_type())
             else:
                 all_value_types.extend(unwrap_types(value_type))
+                all_key_types.extend(unwrap_types(key_type))
                 micro_ops[("get", key)] = GetterMicroOpType(key, value_type)
                 micro_ops[("set", key)] = SetterMicroOpType(key, AnyType())
 
         if can_break_with_value_type:
+            combined_key_types = merge_types([ BottomType() ] + all_key_types, "exact")
             combined_value_types = merge_types([ BottomType() ] + all_value_types, "exact")
-
-            wildcard_key_type = OneOfType([ StringType(), IntegerType() ])
-
-            micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(wildcard_key_type, combined_value_types, True)
-            micro_ops[("iter",)] = IterMicroOpType(BottomType(), combined_value_types)
-
             have_default_factory = False
 
-            micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(wildcard_key_type, AnyType(), False, False)
+            micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(AnyType(), combined_value_types, True)
+            micro_ops[("iter",)] = IterMicroOpType(combined_key_types, combined_value_types)
+            micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(AnyType(), AnyType(), False, False)
+            micro_ops[("delete-wildcard",)] = DeletterWildcardMicroOpType(AnyType(), not have_default_factory)
             micro_ops[("remove-wildcard",)] = RemoverWildcardMicroOpType(not have_default_factory, False)
             micro_ops[("insert-wildcard",)] = InserterWildcardMicroOpType(AnyType(), False, False)
+
             micro_ops[("insert-start",)] = InsertStartMicroOpType(AnyType(), False)
             micro_ops[("insert-end",)] = InsertEndMicroOpType(AnyType(), False)
-            micro_ops[("delete-wildcard",)] = DeletterWildcardMicroOpType(wildcard_key_type, not have_default_factory)
 
             value_type = CompositeType(micro_ops, name="TemplateOp")
 
@@ -1674,8 +1674,11 @@ class InvokeOp(Opcode):
 
             if isinstance(function_type, ClosedFunctionType):
                 break_types.merge(function_type.break_types)
-                if function_type.argument_type.is_copyable_from(argument_type, DUMMY_REASONER):
+                reasoner = Reasoner()
+                if function_type.argument_type.is_copyable_from(argument_type, reasoner):
                     self.invalid_argument_type_exception_is_possible = False
+                else:
+                    pass
             else:
                 break_types.add("exception", self.INVALID_FUNCTION_TYPE.get_type(), opcode=self)
                 break_types.add("*", AnyType(), opcode=self)

@@ -882,6 +882,7 @@ class SetterWildcardMicroOpType(MicroOpType):
         self.key_type = key_type
         self.value_type = value_type
         self.key_error = key_error
+        # Type errors used for set.*.any! to safely exist on a type with get.foo.int
         self.type_error = type_error
 
     def invoke(self, target_manager, key, new_value, *args, **kwargs):
@@ -959,7 +960,7 @@ class SetterWildcardMicroOpType(MicroOpType):
         )
 
     def __repr__(self):
-        return micro_op_repr("set", "*", self.key_error, type=self.value_type, type_error=self.type_error)
+        return micro_op_repr("set", "*:{}".format(self.key_type.short_str()), self.key_error, type=self.value_type, type_error=self.type_error)
 
 
 class DeletterWildcardMicroOpType(MicroOpType):
@@ -1021,6 +1022,7 @@ class DeletterWildcardMicroOpType(MicroOpType):
 
 class RemoverWildcardMicroOpType(MicroOpType):
     def __init__(self, key_error, type_error):
+        # key_type is implicitly IntegerType()
         self.key_error = key_error
         self.type_error = type_error
 
@@ -1197,6 +1199,9 @@ class IterMicroOpType(MicroOpType):
     def __init__(self, key_type, value_type):
         self.key_type = key_type
         self.value_type = value_type
+        if isinstance(self.value_type, AnyType):
+            pass
+        pass
 
     def invoke(self, target_manager, *args, **kwargs):
         try:
@@ -1241,9 +1246,9 @@ class IterMicroOpType(MicroOpType):
             reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_setter)
             return True
 
-#         if wildcard_setter and not self.key_type.is_copyable_from(wildcard_setter.key_type, reasoner):
-#             reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_setter)
-#             return True
+        if wildcard_setter and not self.key_type.is_copyable_from(wildcard_setter.key_type, reasoner):
+            reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_setter)
+            return True
 
         for tag in other_type.get_micro_op_types().keys():
             if len(tag) == 2 and tag[0] == "set":
@@ -1275,14 +1280,14 @@ class IterMicroOpType(MicroOpType):
             merge_types([ self.value_type, other_micro_op_type.value_type ], "sub")
         )
 
-    def clone(self, value_type=MISSING):
+    def clone(self, value_type=MISSING, key_type=MISSING):
         return IterMicroOpType(
-            self.key_type,
+            default(key_type, self.key_type),
             default(value_type, self.value_type),
         )
 
     def __repr__(self):
-        return micro_op_repr("iter", "-", False, type=self.value_type)
+        return micro_op_repr("iter", self.key_type.short_str(), False, type=self.value_type)
 
 
 def UniversalObjectType(properties, wildcard_type=None, has_default_factory=False, name=None):
