@@ -100,18 +100,8 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by langParser#toForGeneratorLoop.
-    def visitToForGeneratorLoop(self, ctx):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by langParser#mod.
     def visitMod(self, ctx):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by langParser#singleParameterInvocation.
-    def visitSingleParameterInvocation(self, ctx):
         return self.visitChildren(ctx)
 
 
@@ -125,33 +115,13 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by langParser#toFunctionType.
-    def visitToFunctionType(self, ctx):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by langParser#subtraction.
-    def visitSubtraction(self, ctx):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by langParser#falseExpression.
     def visitFalseExpression(self, ctx):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by langParser#returnStatement.
-    def visitReturnStatement(self, ctx):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by langParser#toLoop.
     def visitToLoop(self, ctx):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by langParser#staticExpression.
-    def visitStaticExpression(self, ctx):
         return self.visitChildren(ctx)
 
 
@@ -180,16 +150,6 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by langParser#trueExpression.
-    def visitTrueExpression(self, ctx):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by langParser#boolAnd.
-    def visitBoolAnd(self, ctx):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by langParser#toWhileLoop.
     def visitToWhileLoop(self, ctx):
         return self.visitChildren(ctx)
@@ -210,28 +170,8 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by langParser#multiplication.
-    def visitMultiplication(self, ctx):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by langParser#neq.
     def visitNeq(self, ctx):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by langParser#lte.
-    def visitLte(self, ctx):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by langParser#dynamicAssignment.
-    def visitDynamicAssignment(self, ctx):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by langParser#toIfStatement.
-    def visitToIfStatement(self, ctx):
         return self.visitChildren(ctx)
 
 
@@ -245,33 +185,8 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by langParser#immediateDereference.
-    def visitImmediateDereference(self, ctx):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by langParser#toObjectType.
-    def visitToObjectType(self, ctx):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by langParser#boolOr.
-    def visitBoolOr(self, ctx):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by langParser#toObjectTemplate.
     def visitToObjectTemplate(self, ctx):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by langParser#toPrintStatement.
-    def visitToPrintStatement(self, ctx):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by langParser#breakStatement.
-    def visitBreakStatement(self, ctx):
         return self.visitChildren(ctx)
 
 
@@ -290,18 +205,8 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by langParser#gt.
-    def visitGt(self, ctx):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by langParser#dynamicInsertion.
     def visitDynamicInsertion(self, ctx):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by langParser#toFunctionExpression.
-    def visitToFunctionExpression(self, ctx):
         return self.visitChildren(ctx)
 
 
@@ -310,23 +215,123 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by langParser#toTupleType.
-    def visitToTupleType(self, ctx):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by langParser#immediateAssignment.
     def visitImmediateAssignment(self, ctx):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by langParser#continueStatement.
-    def visitContinueStatement(self, ctx):
+    # Visit a parse tree produced by langParser#toListTemplate.
+    def visitToListTemplate(self, ctx):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by langParser#toListTemplate.
-    def visitToListTemplate(self, ctx):
+    # Visit a parse tree produced by langParser#toForGeneratorLoop.
+    def visitToForGeneratorLoop(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#singleParameterInvocation.
+    def visitSingleParameterInvocation(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#toFunctionType.
+    def visitToFunctionType(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#subtraction.
+    def visitSubtraction(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#returnStatement.
+    def visitReturnStatement(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#staticExpression.
+    def visitStaticExpression(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#trueExpression.
+    def visitTrueExpression(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#boolAnd.
+    def visitBoolAnd(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#multiplication.
+    def visitMultiplication(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#lte.
+    def visitLte(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#dynamicAssignment.
+    def visitDynamicAssignment(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#toIfStatement.
+    def visitToIfStatement(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#immediateDereference.
+    def visitImmediateDereference(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#toObjectType.
+    def visitToObjectType(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#boolOr.
+    def visitBoolOr(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#toPrintStatement.
+    def visitToPrintStatement(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#breakStatement.
+    def visitBreakStatement(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#gt.
+    def visitGt(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#pipeline.
+    def visitPipeline(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#toFunctionExpression.
+    def visitToFunctionExpression(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#toTupleType.
+    def visitToTupleType(self, ctx):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#continueStatement.
+    def visitContinueStatement(self, ctx):
         return self.visitChildren(ctx)
 
 

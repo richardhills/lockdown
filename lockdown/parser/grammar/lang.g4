@@ -127,6 +127,7 @@ expression
    | expression '(' expression (',' expression)* ')' # invocation
    | expression '(|' expression '|)'     # singleParameterInvocation
    | expression '(' ')'     # noParameterInvocation
+   | expression '|>' expression # pipeline
    | '(' expression ')'     # parenthesis
    | '<' expression '>'		# staticExpression
    | expression 'is' expression # is

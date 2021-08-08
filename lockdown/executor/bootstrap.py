@@ -136,15 +136,33 @@ def get_default_global_context():
                 ),
                 NO_VALUE, FrameManager()
             ).close(NO_VALUE),
+            "values": prepare(
+                function_lit(
+                    list_type([
+                        composite_type([ iter_micro_op(any_type(), any_type()) ])
+                    ], None),
+#                    build_break_types(value_type=list_type([], any_type())),
+                    map_op(
+                        dereference("argument.0"),
+                        prepared_function(
+                            inferred_type(),
+                            transform_op("value", "continue", dereference("argument.2"))
+                        )
+                    )
+                ),
+                NO_VALUE, FrameManager()
+            ).close(NO_VALUE),
             "max": prepare(
                 function_lit(
-                    list_type([ int_type() ], int_type()),
+                    list_type([
+                        list_type([ int_type() ], int_type())
+                    ], None),
                     infer_all(),
                     inferred_type(),
-                    dereference("argument.0"),
+                    dereference("argument.0.0"),
                     comma_op(
                         map_op(
-                            dereference("argument"),
+                            dereference("argument.0"),
                             prepared_function(
                                 inferred_type(),
                                 condition_op(

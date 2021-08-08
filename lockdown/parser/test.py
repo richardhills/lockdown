@@ -334,12 +334,68 @@ class TestBuiltIns(TestCase):
     def test_keys(self):
         code = parse("""
             function() {
-                return keys({ foo: "bar" });
+                return keys({ foo: "bar", baz: 4 });
             }
         """, debug=True)
         _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value._to_list(), [ "foo" ])
+        self.assertEquals(sorted(result.value._to_list()), [ "baz", "foo" ])
+
+    def test_values(self):
+        code = parse("""
+            function() {
+                return values({ foo: "bar", baz: 4 });
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertIn("bar", result.value._to_list())
+        self.assertIn(4, result.value._to_list())
+
+class TestPipeline(TestCase):
+    def test_value_pipeline(self):
+        code = parse("""
+            function() {
+                return { foo: "bar", baz: 4 } |> values;
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertIn("bar", result.value._to_list())
+        self.assertIn(4, result.value._to_list())
+
+    def test_max_pipeline(self):
+        code = parse("""
+            function() {
+                return [ 3, 4, 5 ] |> max;
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 5)
+
+    def test_length_pipeline_chain(self):
+        code = parse("""
+            function() {
+                return { foo: 3, bar: 4, baz: 5 } |> values |> length;
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 3)
+
+
+    def test_max_pipeline_chain(self):
+        return # does not work because the max function needs a list of ints, but values returns a list of any
+        code = parse("""
+            function() {
+                return { foo: 3, bar: 4, baz: 5 } |> values |> max;
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 5)
+
 
 class TestInferredTypes(TestCase):
     def test_inferred_locals(self):
@@ -1085,7 +1141,7 @@ class TestEuler(TestCase):
                 };
 
                 Tuple<int...> results = for(var test in <list(range(1, 10))>) { continue testNumber(test); };
-                return max(|results|);
+                return max(results);
             }
         """, debug=True)
         _, result = bootstrap_function(code)

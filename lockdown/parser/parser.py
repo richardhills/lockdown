@@ -311,6 +311,12 @@ class RDHLang5Visitor(langVisitor):
     def visitNoParameterInvocation(self, ctx):
         return invoke_op(self.visit(ctx.expression()), **get_debug_info(ctx))
 
+    def visitPipeline(self, ctx):
+        argument, function = ctx.expression()
+        argument = self.visit(argument)
+        function = self.visit(function)
+        return invoke_op(function, list_template_op([ argument ]), **get_debug_info(ctx))
+
     def visitParenthesis(self, ctx):
         return self.visit(ctx.expression())
 
