@@ -250,7 +250,7 @@ class TestRevConstType(TestCase):
 
         self.assertTrue(isinstance(rev_const_type.get_micro_op_type(("set-wildcard",)).value_type, AnyType))
 
-        self.assertTrue(normal_broadDereferenceOp_type.is_copyable_from(rev_const_type, DUMMY_REASONER))
+        self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type, DUMMY_REASONER))
 
     def test_rev_const_flatten_tuple(self):
         rev_const_type = CompositeType({

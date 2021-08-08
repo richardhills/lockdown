@@ -933,10 +933,10 @@ class SetterWildcardMicroOpType(MicroOpType):
                         reasoner.push_micro_op_conflicts_with_micro_op(self, possible_detail_getter)
                         return True
 
-#         iter = other_type.get_micro_op_type(("iter", ))
-#         if iter and not iter.key_type.is_copyable_from(self.key_type, reasoner):
-#             reasoner.push_micro_op_conflicts_with_micro_op(self, iter)
-#             return True
+#        iter = other_type.get_micro_op_type(("iter", ))
+#        if iter and not iter.key_type.is_copyable_from(self.key_type, reasoner):
+#            reasoner.push_micro_op_conflicts_with_micro_op(self, iter)
+#            return True
 
         return False
 

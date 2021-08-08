@@ -244,8 +244,6 @@ class LiteralOp(Opcode):
         self.value = data.value
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
-        if self.value == 42:
-            pass
         break_types = BreakTypesFactory(self)
         break_types.add("value", get_type_of_value(self.value))
         return break_types.build()
@@ -1677,8 +1675,6 @@ class InvokeOp(Opcode):
                 reasoner = Reasoner()
                 if function_type.argument_type.is_copyable_from(argument_type, reasoner):
                     self.invalid_argument_type_exception_is_possible = False
-                else:
-                    pass
             else:
                 break_types.add("exception", self.INVALID_FUNCTION_TYPE.get_type(), opcode=self)
                 break_types.add("*", AnyType(), opcode=self)
