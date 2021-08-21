@@ -607,6 +607,24 @@ class RDHLang5Visitor(langVisitor):
             )
         )
 
+    def visitToMap(self, ctx):
+        composite = ctx.expression()
+        composite = self.visit(composite)
+
+        code_block = ctx.codeBlock()
+        code_block = self.visit(code_block)
+
+        code_block = CodeBlockBuilder(
+            argument_type_expression=inferred_type()
+        ).chain(code_block, get_debug_info(ctx))
+
+        return map_op(
+            composite,
+            prepare_function_lit(
+                code_block.create("second-class-function", get_debug_info(ctx))
+            )
+        )
+
     def visitObjectTemplate(self, ctx):
         result = {}
         for pair in ctx.objectPropertyPair():

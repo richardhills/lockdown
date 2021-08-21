@@ -335,6 +335,11 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#toMap.
+    def visitToMap(self, ctx):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#continueStatement.
     def visitContinueStatement(self, ctx):
         return self.visitChildren(ctx)

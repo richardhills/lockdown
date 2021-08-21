@@ -404,6 +404,36 @@ class TestPipeline(TestCase):
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEqual(result.value, 12)
 
+class TestMapPipeline(TestCase):
+    def test_map_pipeline(self):
+        code = parse("""
+            function() {
+                return [ 4, 6, 2 ] ||> { continue argument[2] + 1; };
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEquals(result.value._to_list(), [ 5, 7, 3 ])
+
+    def test_index_pipeline(self):
+        code = parse("""
+            function() {
+                return [ 4, 6, 2 ] ||> { continue argument[0]; };
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEquals(result.value._to_list(), [ 0, 1, 2 ])
+
+    def test_keys_pipeline(self):
+        code = parse("""
+            function() {
+                return { foo: 3, bar: 5 } ||> { continue argument[1]; };
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEquals(result.value._to_list(), [ "foo", "bar" ])
 
 class TestInferredTypes(TestCase):
     def test_inferred_locals(self):

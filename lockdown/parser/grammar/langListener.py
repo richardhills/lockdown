@@ -598,6 +598,15 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#toMap.
+    def enterToMap(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#toMap.
+    def exitToMap(self, ctx):
+        pass
+
+
     # Enter a parse tree produced by langParser#continueStatement.
     def enterContinueStatement(self, ctx):
         pass

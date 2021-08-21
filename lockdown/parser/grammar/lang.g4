@@ -153,7 +153,6 @@ expression
    | expression '[' expression ']' '=' expression # dynamicAssignment
    | expression '[' expression ']' '<<' expression # dynamicInsertion
    | expression '?' expression ':' expression #ternary
-   | 'return' expression    # returnStatement
    | 'continue' expression  # continueStatement
    | 'break'			    # breakStatement
    | ifStatement			# toIfStatement
@@ -161,6 +160,7 @@ expression
    | whileLoop				# toWhileLoop
    | forGeneratorLoop		# toForGeneratorLoop
    | forListLoop			# toForListLoop
+   | expression '||>' '{' codeBlock '}' # toMap
    | objectType				# toObjectType
    | listType				# toListType
    | dictionaryType			# toDictionaryType
@@ -168,6 +168,7 @@ expression
    | functionType			# toFunctionType
    | function				# toFunctionExpression
    | 'print' expression     # toPrintStatement  
+   | 'return' expression    # returnStatement  
    ;
 
 objectTemplate
