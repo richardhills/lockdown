@@ -929,19 +929,19 @@ class TestEuler(TestCase):
         _, result = bootstrap_function(code)
         self.assertEquals(result.value, 233168)
 
-#     def test_1a(self):
-#         code = parse("""
-#             function() {
-#                 return sum(for(var i from range(1, 1000)) {
-#                     if(i % 3 == 0 || i % 5 == 0) {
-#                         continue i;
-#                     };
-#                 });
-#             };
-#         """, debug=True)
-# 
-#         _, result = bootstrap_function(code)
-#         self.assertEquals(result.value, 233168)
+    def test_1a(self):
+        code = parse("""
+            function() {
+                return sum(for(var i from range(1, 1000)) {
+                    if(i % 3 == 0 || i % 5 == 0) {
+                        continue i;
+                    };
+                });
+            }
+        """, debug=True)
+ 
+        _, result = bootstrap_function(code)
+        self.assertEquals(result.value, 233168)
 
     def test_2(self):
         code = parse("""
