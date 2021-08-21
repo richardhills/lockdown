@@ -103,7 +103,8 @@ def infer_all():
             object_template_op({
                 "out": inferred_type(),
                 "in": inferred_type()
-            }) ])
+            })
+        ])
     }
 
 

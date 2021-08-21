@@ -13,7 +13,8 @@ from lockdown.executor.raw_code_factories import function_lit, list_type, \
     literal_op, addition_op, transform_op, list_template_op, inferred_type, \
     invoke_op, local_function, transform, reset_op, nop, map_op, \
     object_template_op, function_type, length_op, composite_type, \
-    build_break_types, any_type, bottom_type, iter_micro_op
+    build_break_types, any_type, bottom_type, iter_micro_op, close_op, \
+    prepare_op, context_op
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.universal_type import PythonObject, \
     DEFAULT_READONLY_COMPOSITE_TYPE, IterMicroOpType
@@ -136,12 +137,35 @@ def get_default_global_context():
                 ),
                 NO_VALUE, FrameManager()
             ).close(NO_VALUE),
+            "valuesG": prepare(
+                function_lit(
+                    any_type(),
+                    close_op(prepare_op(literal_op(function_lit(
+                        list_type([
+                            composite_type([ iter_micro_op(any_type(), dereference("prepare.argument.0")) ])
+                        ], None),
+                        build_break_types(
+                            value_type=composite_type([ iter_micro_op(int_type(), dereference("prepare.argument.0")) ])
+                        ),
+                        map_op(
+                            dereference("argument.0"),
+                            prepared_function(
+                                inferred_type(),
+                                transform_op("value", "continue", dereference("argument.2"))
+                            )
+                        )
+                    ))), context_op())
+                ),
+                NO_VALUE, FrameManager()
+            ).close(NO_VALUE),
             "values": prepare(
                 function_lit(
                     list_type([
                         composite_type([ iter_micro_op(any_type(), any_type()) ])
                     ], None),
-#                    build_break_types(value_type=list_type([], any_type())),
+                    build_break_types(
+                        value_type=composite_type([ iter_micro_op(int_type(), any_type()) ])
+                    ),
                     map_op(
                         dereference("argument.0"),
                         prepared_function(
@@ -177,6 +201,34 @@ def get_default_global_context():
                                         dereference("argument.2")
                                     ),
                                     nop()
+                                )
+                            )
+                        ),
+                        dereference("local")
+                    )
+                ),
+                NO_VALUE, FrameManager()
+            ).close(NO_VALUE),
+            "sum": prepare(
+                function_lit(
+                    list_type([
+                        composite_type([ iter_micro_op(any_type(), int_type()) ])
+                    ], None),
+                    infer_all(),
+                    int_type(),
+                    literal_op(0),
+                    comma_op(
+                        map_op(
+                            dereference("argument.0"),
+                            prepared_function(
+                                inferred_type(),
+                                assignment_op(
+                                    dereference("outer"),
+                                    literal_op("local"),
+                                    addition_op(
+                                        dereference("outer.local"),
+                                        dereference("argument.2")
+                                    )
                                 )
                             )
                         ),

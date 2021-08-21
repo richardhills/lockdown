@@ -125,6 +125,7 @@ expression
    | objectTemplate			# toObjectTemplate
    | listTemplate			# toListTemplate
    | expression '(' expression (',' expression)* ')' # invocation
+   | expression '<' expression (',' expression)* '>' # staticInvocation
    | expression '(|' expression '|)'     # singleParameterInvocation
    | expression '(' ')'     # noParameterInvocation
    | expression '|>' expression # pipeline

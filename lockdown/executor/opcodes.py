@@ -860,6 +860,7 @@ class MapOp(Opcode):
         if self.iter_micro_op is not None and isinstance(mapper_type, ClosedFunctionType):
             mapper_break_types = dict(mapper_type.break_types)
 
+            # TODO: remove break, you can achieve the same with a wrapped transform op
             break_value_type = mapper_break_types.pop("break", MISSING)
             if break_value_type is not MISSING:
                 break_types.add("value", break_value_type)

@@ -352,6 +352,16 @@ class TestBuiltIns(TestCase):
         self.assertIn("bar", result.value._to_list())
         self.assertIn(4, result.value._to_list())
 
+    def test_sums(self):
+        code = parse("""
+            function() {
+                return sum([ 4, 6, 2 ]);
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEquals(12, result.value)
+
 class TestPipeline(TestCase):
     def test_value_pipeline(self):
         code = parse("""
@@ -384,17 +394,15 @@ class TestPipeline(TestCase):
         self.assertEquals(result.caught_break_mode, "value")
         self.assertEqual(result.value, 3)
 
-
     def test_max_pipeline_chain(self):
-        return # does not work because the max function needs a list of ints, but values returns a list of any
         code = parse("""
             function() {
-                return { foo: 3, bar: 4, baz: 5 } |> values |> max;
+                return { foo: 3, bar: 4, baz: 5 } |> valuesG<int> |> sum;
             }
         """, debug=True)
         _, result = bootstrap_function(code)
         self.assertEquals(result.caught_break_mode, "value")
-        self.assertEqual(result.value, 5)
+        self.assertEqual(result.value, 12)
 
 
 class TestInferredTypes(TestCase):

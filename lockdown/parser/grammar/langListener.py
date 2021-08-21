@@ -184,6 +184,15 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#staticInvocation.
+    def enterStaticInvocation(self, ctx):
+        pass
+
+    # Exit a parse tree produced by langParser#staticInvocation.
+    def exitStaticInvocation(self, ctx):
+        pass
+
+
     # Enter a parse tree produced by langParser#numberExpression.
     def enterNumberExpression(self, ctx):
         pass

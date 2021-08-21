@@ -302,6 +302,11 @@ class RDHLang5Visitor(langVisitor):
         arguments = [self.visit(a) for a in ctx.expression()[1:]]
         return invoke_op(function, list_template_op(arguments), **get_debug_info(ctx))
 
+    def visitStaticInvocation(self, ctx):
+        function = self.visit(ctx.expression()[0])
+        arguments = [self.visit(a) for a in ctx.expression()[1:]]
+        return static_op(invoke_op(function, list_template_op(arguments), **get_debug_info(ctx)))
+
     def visitSingleParameterInvocation(self, ctx):
         function, argument = ctx.expression()
         function = self.visit(function)
