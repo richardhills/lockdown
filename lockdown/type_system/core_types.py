@@ -50,6 +50,12 @@ class BottomType(Type):
     def __repr__(self):
         return "BottomType"
     
+class ValueType(Type):
+    def is_copyable_from(self, other, reasoner):
+        if isinstance(other, OneOfType):
+            return other.is_copyable_to(self, reasoner)
+        return not isinstance(other, NoValueType)
+
 
 class NoValueType(Type):
     """
@@ -74,7 +80,7 @@ class NoValueType(Type):
         if isinstance(other, BottomType):
             return True
         if isinstance(other, OneOfType):
-            return other.is_copyable_to(self)
+            return other.is_copyable_to(self, reasoner)
         if not isinstance(other, NoValueType):
             reasoner.push_not_copyable_type(self, other)
             return False
@@ -206,7 +212,7 @@ def merge_types(types, mode):
     else:
         return OneOfType(types)
 
-class OneOfType(Type):
+class OneOfType(ValueType):
     """
     A UnionType: https://en.wikipedia.org/wiki/Tagged_union
 

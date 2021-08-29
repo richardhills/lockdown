@@ -1203,9 +1203,6 @@ class IterMicroOpType(MicroOpType):
     def __init__(self, key_type, value_type):
         self.key_type = key_type
         self.value_type = value_type
-        if isinstance(self.value_type, AnyType):
-            pass
-        pass
 
     def invoke(self, target_manager, *args, **kwargs):
         try:

@@ -9,12 +9,16 @@ from lockdown.executor.ast_utils import compile_expression, compile_statement, \
 from lockdown.executor.exceptions import PreparationException
 from lockdown.executor.flow_control import BreakTypesFactory, BreakException
 from lockdown.executor.function_type import OpenFunctionType, ClosedFunctionType
+from lockdown.executor.operands import OpcodeOperandMixin, Operand, BoundOperand
 from lockdown.executor.type_factories import enrich_type
+from lockdown.executor.utils import evaluate, TypeErrorFactory, \
+    get_expression_break_types, flatten_out_types, MicroOpBinder, \
+    each_reference, get_best_micro_op, get_operand_type
 from lockdown.type_system.composites import CompositeType, scoped_bind, \
     does_value_fit_through_type, is_type_bindable_to_value, Composite
 from lockdown.type_system.core_types import AnyType, Type, merge_types, Const, \
     UnitType, NoValueType, PermittedValuesDoesNotExist, unwrap_types, IntegerType, \
-    BooleanType, remove_type, OneOfType, StringType, BottomType
+    BooleanType, remove_type, OneOfType, StringType, BottomType, ValueType
 from lockdown.type_system.exceptions import FatalError, InvalidDereferenceType, \
     InvalidDereferenceKey, InvalidAssignmentType, InvalidAssignmentKey
 from lockdown.type_system.managers import get_type_of_value, get_manager
@@ -26,7 +30,7 @@ from lockdown.type_system.universal_type import UniversalObjectType, \
     InsertStartMicroOpType, InsertEndMicroOpType, DeletterWildcardMicroOpType, \
     IterMicroOpType, RemoverWildcardMicroOpType, InserterWildcardMicroOpType, \
     UniversalTupleType, Universal, SPARSE_ELEMENT
-from lockdown.utils.utils import MISSING, NO_VALUE, InternalMarker, get_environment,\
+from lockdown.utils.utils import MISSING, NO_VALUE, InternalMarker, get_environment, \
     spread_dict
 
 
@@ -86,144 +90,6 @@ class Opcode(object):
         )
 
 
-def evaluate(expression, context, frame_manager, immediate_context=None):
-    if get_environment().return_value_optimization:
-        # Optimized version that avoids creating a Capturer object, but only works for values
-        try:
-            mode, value, opcode, restart_type = expression.jump(context, frame_manager, immediate_context=immediate_context)
-        except BreakException as b:
-            if b.mode == "value":
-                return b.value
-            raise
-        if mode == "value":
-            return value
-        raise BreakException(mode, value, opcode, restart_type)
-    else:
-        with frame_manager.capture("value") as result:
-            result.attempt_capture_or_raise(*expression.jump(context, frame_manager, immediate_context=immediate_context))
-        return result.value
-
-
-def get_expression_break_types(expression, context, frame_manager, immediate_context=None, target_break_mode="value"):
-    other_break_types = dict(expression.get_break_types(context, frame_manager, immediate_context))
-
-    if get_environment().validate_flow_control:
-        if not isinstance(other_break_types, dict):
-            raise FatalError()
-        for mode, break_types in other_break_types.items():
-            if not isinstance(mode, basestring):
-                raise FatalError()
-            if not isinstance(break_types, (list, tuple)):
-                raise FatalError()
-            for break_type in break_types:
-                if not isinstance(break_type, (dict, PythonDict)):
-                    raise FatalError()
-                if "out" not in break_type:
-                    raise FatalError()
-                if not isinstance(break_type["out"], Type):
-                    raise FatalError()
-                if "in" in break_type and not isinstance(break_type["in"], Type):
-                    raise FatalError()
-
-    target_break_types = other_break_types.pop(target_break_mode, MISSING)
-    return target_break_types, other_break_types
-
-
-def flatten_out_types(break_types):
-    if get_environment().opcode_bindings:
-        if not isinstance(break_types, list):
-            raise FatalError()
-        for b in break_types:
-            if not isinstance(b, (dict, PythonDict)):
-                raise FatalError()
-            if "out" not in b:
-                raise FatalError()
-
-    return merge_types([b["out"] for b in break_types], "super")
-
-
-class TypeErrorFactory(object):
-    def __init__(self, message):
-        self.message = message
-
-    def __call__(self, message=None, **kwargs):
-        data = {
-            "type": "TypeError",
-            "message": message or self.message,
-            "kwargs": PythonDict(kwargs)
-        }
-        return PythonObject(data, bind=self.get_type(message), debug_reason="type-error")
-
-    def get_type(self, message=None):
-        properties = {
-            "type": Const(UnitType("TypeError")),
-            "message": Const(UnitType(message or self.message)),
-            "kwargs": Const(UniversalDictType(StringType(), AnyType()))
-        }
-        return UniversalObjectType(properties, wildcard_type=AnyType(), name="TypeError")
-
-def get_operand_type(expression, context, frame_manager, break_types, immediate_context=None):
-    value_type, other_break_types = get_expression_break_types(
-        expression, context, frame_manager, immediate_context=immediate_context
-    )
-    break_types.merge(other_break_types)
-    if value_type is not MISSING:
-        value_type = flatten_out_types(value_type)
-
-    return value_type
-
-def each_reference(reference_types, of_types):
-    if reference_types is MISSING or of_types is MISSING:
-        return
-
-    for reference_type in unwrap_types(reference_types):
-        try:
-            possible_references = reference_type.get_all_permitted_values()
-        except PermittedValuesDoesNotExist:
-            possible_references = None
-
-        for of_type in unwrap_types(of_types):
-            if possible_references is None:
-                yield [ MISSING, of_type ]
-                continue
-            for possible_reference in possible_references:
-                yield [ possible_reference, of_type ]
-
-def get_best_micro_op(tags, type):
-    for tag in tags:
-        micro_op = type.get_micro_op_type(tag)
-        if micro_op:
-            return ( tag, micro_op )
-
-    return ( None, None )
-
-class MicroOpBinder(object):
-    def __init__(self):
-        self.bound = {}
-
-    def bind(self, key, tags, type):
-        if not isinstance(type, CompositeType):
-            return
-
-        tag, micro_op = get_best_micro_op(tags, type)
-        if micro_op:
-            self.bound[key] = ( tag, micro_op )
-
-        return micro_op
-
-    def get(self, keys):
-        for key in keys:
-            if key in self.bound:
-                return self.bound[key]
-
-        return ( None, None ) 
-
-    def simple_bind(self):
-        if len(self.bound) == 1:
-            return self.bound.values()[0]
-
-        return (None, None)
-
 class Nop(Opcode):
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
@@ -263,67 +129,65 @@ class LiteralOp(Opcode):
         return "LiteralOp<{}>".format(self.value)
 
 
-class TemplateOp(Opcode):
+class TemplateOp(OpcodeOperandMixin, Opcode):
     NO_VALUE_ASSIGNMENT = TypeErrorFactory("TemplateOp: no_value_assignment")
 
     def __init__(self, data, visitor):
         super(TemplateOp, self).__init__(data, visitor)
         if not isinstance(data.opcodes, PythonList):
             raise FatalError()
+
         for e in data.opcodes:
             if not isinstance(e, tuple) and len(e) != 2:
                 raise FatalError()
-        self.opcodes = [
-            (enrich_opcode(key, visitor), enrich_opcode(opcode, visitor))
-            for key, opcode in data.opcodes
+
+        self.operands = [(
+                BoundOperand(
+                    "{}-key".format(index),
+                    self,
+                    enrich_opcode(key, visitor),
+                    ValueType(),
+                    self.NO_VALUE_ASSIGNMENT
+                ),
+                BoundOperand(
+                    "{}-value".format(index),
+                    self,
+                    enrich_opcode(opcode, visitor),
+                    ValueType(),
+                    self.NO_VALUE_ASSIGNMENT
+                )
+            )
+            for index, (key, opcode) in enumerate(data.opcodes)
         ]
+
+    def get_bound_operands(self):
+        return [ item for sublist in self.operands for item in sublist ]
 
     @abstractmethod
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
+        self.prepare_operands(break_types, context, frame_manager, immediate_context)
 
-        micro_ops = {}
+        can_run = self.are_all_operands_safe()
 
-        all_key_types = []
-        all_value_types = []
+        if can_run:
+            micro_ops = {}
+            all_key_types = []
+            all_value_types = []
 
-        can_break_with_value_type = True
+            for key_operand, value_operand in self.operands:
+                try:
+                    allowed_keys = key_operand.value_type.get_all_permitted_values()
+                    if len(allowed_keys) == 1:
+                        key = allowed_keys[0]
+                except PermittedValuesDoesNotExist:
+                    pass
 
-        for key_opcode, value_opcode in self.opcodes:
-            key_type, other_key_break_types = get_expression_break_types(key_opcode, context, frame_manager, immediate_context=immediate_context)
-            break_types.merge(other_key_break_types)
-            value_type, other_value_break_types = get_expression_break_types(value_opcode, context, frame_manager, immediate_context=immediate_context)
-            break_types.merge(other_value_break_types)
-
-            if key_type is MISSING:
-                can_break_with_value_type = False
-                continue
-
-            key_type = flatten_out_types(key_type)
-            key = None
-
-            try:
-                allowed_keys = key_type.get_all_permitted_values()
-                if len(allowed_keys) == 1:
-                    key = allowed_keys[0]
-            except PermittedValuesDoesNotExist:
-                pass
-
-            if value_type is MISSING:
-                can_break_with_value_type = False
-                continue
-
-            value_type = flatten_out_types(value_type)
-
-            if isinstance(value_type, NoValueType):
-                break_types.add("exception", self.NO_VALUE_ASSIGNMENT.get_type())
-            else:
-                all_value_types.extend(unwrap_types(value_type))
-                all_key_types.extend(unwrap_types(key_type))
-                micro_ops[("get", key)] = GetterMicroOpType(key, value_type)
+                all_key_types.extend(unwrap_types(key_operand.value_type))
+                all_value_types.extend(unwrap_types(value_operand.value_type))
+                micro_ops[("get", key)] = GetterMicroOpType(key, value_operand.value_type)
                 micro_ops[("set", key)] = SetterMicroOpType(key, AnyType())
 
-        if can_break_with_value_type:
             combined_key_types = merge_types([ BottomType() ] + all_key_types, "exact")
             combined_value_types = merge_types([ BottomType() ] + all_value_types, "exact")
             have_default_factory = False
@@ -350,15 +214,18 @@ class TemplateOp(Opcode):
 
             initial_length = 0
 
-            for index, (key_opcode, value_opcode) in enumerate(self.opcodes):
-                key = frame.step("key-{}".format(index), lambda: evaluate(key_opcode, context, frame_manager))
-                result[key] = frame.step("value-{}".format(index), lambda: evaluate(value_opcode, context, frame_manager))
-                if result[key] is NO_VALUE:
-                    frame.exception(self.NO_VALUE_ASSIGNMENT())
+            for key_operand, value_operand in self.operands:
+                key = key_operand.get(context, frame)
+                new_value = value_operand.get(context, frame)
+
+                if new_value is NO_VALUE:
+                    return frame.exception(self.NO_VALUE_ASSIGNMENT())
 
                 if isinstance(key, int):
                     required_length_for_key = key + 1
                     initial_length = max([ required_length_for_key, initial_length ])
+
+                result[key] = new_value
 
             return frame.value(
                 Universal(
@@ -373,17 +240,18 @@ class TemplateOp(Opcode):
         parameters = {}
         parameters.update({
             "key_ast{}".format(id(key)): key.to_ast(context_name, dependency_builder)
-            for key, opcode in self.opcodes
+            for key, opcode in self.operands
         })
         parameters.update({
             "value_ast{}".format(id(opcode)): opcode.to_ast(context_name, dependency_builder)
-            for key, opcode in self.opcodes
+            for key, opcode in self.operands
         })
-        parameter_template = ",".join("{{key_ast{}}}: {{value_ast{}}}".format(id(key), id(opcode)) for key, opcode in self.opcodes)
+        parameter_template = ",".join("{{key_ast{}}}: {{value_ast{}}}".format(id(key), id(opcode)) for key, opcode in self.operands)
         return compile_expression(
             "Universal(True, initial_wrapped={{ " + parameter_template + " }}, initial_length=CALCULATE_INITIAL_LENGTH)",
             context_name, dependency_builder, **parameters
         )
+
  
 def get_context_type(context):
     if context is None:
@@ -425,6 +293,7 @@ class ContextOp(Opcode):
     def __str__(self):
         return "Context"
 
+
 class DereferenceOp(Opcode):
     INVALID_DEREFERENCE = TypeErrorFactory("DereferenceOp: invalid_dereference")
 
@@ -455,13 +324,13 @@ class DereferenceOp(Opcode):
                 # We don't know what the reference is at verification time - it might be
                 # dynamic like an index into an array. Use wildcard microop and check for errors
                 micro_op = self.binder.bind(None, [
-                    ("get-wildcard", )
+                    ("get-wildcard",)
                 ], of_type)                    
             else:
                 # We know what the reference might be at verification time - attempt static
                 # binding and fallback on wildcard microop, again checking for errors
                 micro_op = self.binder.bind(reference, [
-                    ("get", reference), ("get-wildcard", )
+                    ("get", reference), ("get-wildcard",)
                 ], of_type)
 
             if micro_op:
@@ -510,7 +379,7 @@ class DereferenceOp(Opcode):
                     # the target would be a CompositeType). No harm though - we get the
                     # microop at runtime instead.
                     tag, micro_op = get_best_micro_op([
-                        ( "get", reference ), ( "get-wildcard", )
+                        ("get", reference), ("get-wildcard",)
                     ], manager.get_effective_composite_type())
 
                 direct = tag and tag[0] != "get-wildcard"
@@ -624,11 +493,11 @@ class AssignmentOp(Opcode):
         for reference, of_type in each_reference(reference_types, of_types):
             if reference is MISSING:
                 micro_op = self.binder.bind(None, [
-                    ("set-wildcard", )
+                    ("set-wildcard",)
                 ], of_type)                    
             else:
                 micro_op = self.binder.bind(reference, [
-                    ("set", reference), ("set-wildcard", )
+                    ("set", reference), ("set-wildcard",)
                 ], of_type)
 
             if micro_op:
@@ -709,7 +578,9 @@ class AssignmentOp(Opcode):
             *args
         )
 
+
 WILDCARD = InternalMarker("WILDCARD")
+
 
 class InsertOp(Opcode):
     INVALID_LVALUE = TypeErrorFactory("InsertOp: invalid_lvalue")
@@ -834,7 +705,7 @@ class MapOp(Opcode):
         )
 
         if composite_type and isinstance(composite_type, CompositeType):
-            self.iter_micro_op = composite_type.get_micro_op_type(("iter", ))
+            self.iter_micro_op = composite_type.get_micro_op_type(("iter",))
 
         if self.iter_micro_op:
             immediate_context = immediate_context or {}
@@ -928,88 +799,57 @@ class MapOp(Opcode):
 
             raise FatalError()
 
-class LengthOp(Opcode):
-    INVALID_COMPOSITE_TYPE = TypeErrorFactory("{}: invalid_composite_type")
 
-    def __init__(self, data, visitor):
-        super(LengthOp, self).__init__(data, visitor)
-        self.composite = enrich_opcode(data.composite, visitor)
+class LengthOp(OpcodeOperandMixin, Opcode):
+    INVALID_COMPOSITE_TYPE = TypeErrorFactory("{}: invalid_composite_type")
+    composite = Operand(CompositeType({}, "LengthOp"), INVALID_COMPOSITE_TYPE)
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
+        can_run = self.prepare_operands(break_types, context, frame_manager, immediate_context)
 
-        composite_type = get_operand_type(self.composite, context, frame_manager, break_types)
-
-        if composite_type is not MISSING:
+        if can_run:
             break_types.add("value", IntegerType(), opcode=self)
-        if not isinstance(composite_type, CompositeType):
-            break_types.add("exception", self.INVALID_COMPOSITE_TYPE.get_type(), opcode=self)
 
         return break_types.build()
 
     @abstractmethod
     def jump(self, context, frame_manager, immediate_context=None):
         with frame_manager.get_next_frame(self) as frame:
-            composite = frame.step("composite", lambda: evaluate(self.composite, context, frame_manager))
-
-            if not isinstance(composite, Composite):
-                frame.exception(self.INVALID_COMPOSITE_TYPE())
-
-            return frame.value(composite._length)
+            return frame.value(
+                self.composite.get(context, frame)._length
+            )
 
 
-def BinaryOp(name, symbol, func, argument_type, result_type, number_op=None, cmp_op=None):
-    class _BinaryOp(Opcode):
-        MISSING_OPERANDS = TypeErrorFactory("{}: missing_integers".format(name))
+def BinaryOp(name, func, argument_type, result_type, number_op=None, cmp_op=None):
+    MISSING_OPERANDS = TypeErrorFactory("{}: missing_operands".format(name))
 
-        def __init__(self, data, visitor):
-            super(_BinaryOp, self).__init__(data, visitor)
-            self.lvalue = enrich_opcode(self.data.lvalue, visitor)
-            self.rvalue = enrich_opcode(self.data.rvalue, visitor)
-            self.missing_operands_exception = True
+    class _BinaryOp(OpcodeOperandMixin, Opcode):
+        lvalue = Operand(argument_type, MISSING_OPERANDS)
+        rvalue = Operand(argument_type, MISSING_OPERANDS)
 
         def get_break_types(self, context, frame_manager, immediate_context=None):
             break_types = BreakTypesFactory(self)
+            can_run = self.prepare_operands(break_types, context, frame_manager, immediate_context)
 
-            lvalue_type, lvalue_break_types = get_expression_break_types(self.lvalue, context, frame_manager)
-            if lvalue_type is not MISSING:
-                lvalue_type = flatten_out_types(lvalue_type)
-            break_types.merge(lvalue_break_types)
-
-            rvalue_type, rvalue_break_types = get_expression_break_types(self.rvalue, context, frame_manager)
-            if rvalue_type is not MISSING:
-                rvalue_type = flatten_out_types(rvalue_type)
-            break_types.merge(rvalue_break_types)
-
-            if lvalue_type is not MISSING and rvalue_type is not MISSING:
+            if can_run:
                 break_types.add("value", result_type)
-            self.missing_operands_exception = False
-            if not argument_type.is_copyable_from(lvalue_type, DUMMY_REASONER) or not argument_type.is_copyable_from(rvalue_type, DUMMY_REASONER):
-                self.missing_operands_exception = True
-                break_types.add("exception", self.MISSING_OPERANDS.get_type())
 
             return break_types.build()
 
         def jump(self, context, frame_manager, immediate_context=None):
             with frame_manager.get_next_frame(self) as frame:
-                def get_lvalue():
-                    lvalue = frame.step("lvalue", lambda: evaluate(self.lvalue, context, frame_manager))
-                    if self.missing_operands_exception and not argument_type.is_copyable_from(get_type_of_value(lvalue), DUMMY_REASONER):
-                        raise BreakException(*frame.exception(self.MISSING_OPERANDS()))
-                    return lvalue
-    
-                def get_rvalue():
-                    rvalue = frame.step("rvalue", lambda: evaluate(self.rvalue, context, frame_manager))
-                    if self.missing_operands_exception and not argument_type.is_copyable_from(get_type_of_value(rvalue), DUMMY_REASONER):
-                        raise BreakException(*frame.exception(self.MISSING_OPERANDS()))
-                    return rvalue
-
-#                print "{} {} {}".format(get_lvalue(), symbol, get_rvalue())
-
-                return frame.value(func(get_lvalue, get_rvalue))
+                return frame.value(
+                    func(
+                        self.lvalue.get,
+                        self.rvalue.get,
+                        context,
+                        frame
+                    )
+                )
 
         def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
-            if not self.missing_operands_exception:
+            if self.are_all_operands_safe():
                 if number_op:
                     lvalue_ast = self.lvalue.to_ast(context_name, dependency_builder)
                     rvalue_ast = self.rvalue.to_ast(context_name, dependency_builder)
@@ -1340,7 +1180,7 @@ class LoopOp(Opcode):
         self.code = enrich_opcode(data.code, visitor)
         self.has_continues = True
         self.has_ends = True
-        self.has_breaks = True # TODO remove - this can be achieved with a outer TransformOp
+        self.has_breaks = True  # TODO remove - this can be achieved with a outer TransformOp
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
@@ -1459,7 +1299,7 @@ class ConditionalOp(Opcode):
             elif condition is False:
                 result = frame.step("false_result", lambda: evaluate(self.when_false, context, frame_manager))
             else:
-                frame.exception(self.INVALID_CONDITIONAL())
+                return frame.exception(self.INVALID_CONDITIONAL())
 
             return frame.value(result)
 
@@ -1501,7 +1341,7 @@ class PrepareOp(Opcode):
 
         if function_value_type is not MISSING:
             break_types.add(
-                "value", AnyType() #OpenFunctionType(BottomType(), get_context_type(context), {})
+                "value", AnyType()  # OpenFunctionType(BottomType(), get_context_type(context), {})
             )
 
         break_types.add("exception", self.PREPARATION_ERROR.get_type(), opcode=self)
@@ -1785,6 +1625,7 @@ class MatchOp(Opcode):
 
         raise FatalError()
 
+
 class PrintOp(Opcode):
     def __init__(self, data, visitor):
         super(PrintOp, self).__init__(data, visitor)
@@ -1800,6 +1641,7 @@ class PrintOp(Opcode):
             print evaluate(self.expression, context, frame_manager)
             return frame.value(NO_VALUE)
 
+
 FLOW_CONTROL_OPCODES = {
     "nop": Nop,
     "transform": TransformOp,
@@ -1812,49 +1654,58 @@ FLOW_CONTROL_OPCODES = {
 }
 
 MATH_AND_LOGIC_OPCODES = {
-        "multiplication": BinaryOp(
-        "Multiplication", "*",
-        lambda lvalue, rvalue: lvalue() * rvalue(), IntegerType(), IntegerType(), number_op=ast.Mult()
+    "multiplication": BinaryOp(
+        "Multiplication",
+        lambda lvalue, rvalue, *args: lvalue(*args) * rvalue(*args), IntegerType(), IntegerType(), number_op=ast.Mult()
     ),
     "division": BinaryOp(
-        "Division", "/",
-        lambda lvalue, rvalue: lvalue() / rvalue(), IntegerType(), IntegerType(), number_op=ast.Div()
+        "Division",
+        lambda lvalue, rvalue, *args: lvalue(*args) / rvalue(*args), IntegerType(), IntegerType(), number_op=ast.Div()
     ),
     "addition": BinaryOp(
-        "Addition", "+",
-        lambda lvalue, rvalue: lvalue() + rvalue(), IntegerType(), IntegerType(), number_op=ast.Add()
+        "Addition",
+        lambda lvalue, rvalue, *args: lvalue(*args) + rvalue(*args), IntegerType(), IntegerType(), number_op=ast.Add()
     ),
     "subtraction": BinaryOp(
-        "Subtraction", "-",
-        lambda lvalue, rvalue: lvalue() - rvalue(), IntegerType(), IntegerType(), number_op=ast.Sub()
+        "Subtraction",
+        lambda lvalue, rvalue, *args: lvalue(*args) - rvalue(*args), IntegerType(), IntegerType(), number_op=ast.Sub()
     ),
-    "mod": BinaryOp("Modulus", "%", lambda lvalue, rvalue: lvalue() % rvalue(), IntegerType(), IntegerType()),
+    "mod": BinaryOp(
+        "Modulus",
+        lambda lvalue, rvalue, *args: lvalue(*args) % rvalue(*args), IntegerType(), IntegerType()
+    ),
     "lt": BinaryOp(
-        "LessThan", "<",
-        lambda lvalue, rvalue: lvalue() < rvalue(), IntegerType(), BooleanType(), cmp_op=ast.Lt()
+        "LessThan",
+        lambda lvalue, rvalue, *args: lvalue(*args) < rvalue(*args), IntegerType(), BooleanType(), cmp_op=ast.Lt()
     ),
     "lte": BinaryOp(
-        "LessThanOrEqual", "<=",
-        lambda lvalue, rvalue: lvalue() <= rvalue(), IntegerType(), BooleanType(), cmp_op=ast.LtE()
+        "LessThanOrEqual",
+        lambda lvalue, rvalue, *args: lvalue(*args) <= rvalue(*args), IntegerType(), BooleanType(), cmp_op=ast.LtE()
     ),
     "gt": BinaryOp(
-        "GreaterThan", ">",
-        lambda lvalue, rvalue: lvalue() > rvalue(), IntegerType(), BooleanType(), cmp_op=ast.Gt()
+        "GreaterThan",
+        lambda lvalue, rvalue, *args: lvalue(*args) > rvalue(*args), IntegerType(), BooleanType(), cmp_op=ast.Gt()
     ),
     "gte": BinaryOp(
-        "GreaterThanOrEqual", ">=",
-        lambda lvalue, rvalue: lvalue() >= rvalue(), IntegerType(), BooleanType(), cmp_op=ast.GtE()
+        "GreaterThanOrEqual",
+        lambda lvalue, rvalue, *args: lvalue(*args) >= rvalue(*args), IntegerType(), BooleanType(), cmp_op=ast.GtE()
     ),
     "eq": BinaryOp(
-        "Equality", "==",
-        lambda lvalue, rvalue: lvalue() == rvalue(), IntegerType(), BooleanType(), cmp_op=ast.Eq()
+        "Equality",
+        lambda lvalue, rvalue, *args: lvalue(*args) == rvalue(*args), IntegerType(), BooleanType(), cmp_op=ast.Eq()
     ),
     "neq": BinaryOp(
-        "Inequality", "!=",
-        lambda lvalue, rvalue: lvalue() != rvalue(), IntegerType(), BooleanType(), cmp_op=ast.NotEq()
+        "Inequality",
+        lambda lvalue, rvalue, *args: lvalue(*args) != rvalue(*args), IntegerType(), BooleanType(), cmp_op=ast.NotEq()
     ),
-    "or": BinaryOp("Or", "||", lambda lvalue, rvalue: lvalue() or rvalue(), BooleanType(), BooleanType()),
-    "and": BinaryOp("And", "&&", lambda lvalue, rvalue: lvalue() and rvalue(), BooleanType(), BooleanType()),
+    "or": BinaryOp(
+        "Or",
+        lambda lvalue, rvalue, *args: lvalue(*args) or rvalue(*args), BooleanType(), BooleanType()
+    ),
+    "and": BinaryOp(
+        "And",
+        lambda lvalue, rvalue, *args: lvalue(*args) and rvalue(*args), BooleanType(), BooleanType()
+    ),
 }
 
 DATA_OPCODES = {

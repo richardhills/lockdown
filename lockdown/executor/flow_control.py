@@ -138,17 +138,18 @@ class FrameManager(object):
     The Frame returned by get_next_frame should be used in a context with: block, so that it can
     verify the break mode and type when debugging the executor itself.
     """
-    __slots__ = [ "frames", "index", "mode" ]
+    __slots__ = [ "frames", "index", "mode", "pass_through_frame" ]
 
     def __init__(self):
         self.frames = []
         self.index = 0
         self.mode = "wind"
+        self.pass_through_frame = PassThroughFrame(self)
 
     def get_next_frame(self, thing):
         if self.fully_wound():
             if get_environment().frame_shortcut and not is_restartable(thing):
-                return PASS_THROUGH_FRAME
+                return self.pass_through_frame
 
             if self.mode != "wind":
                 raise FatalError()
@@ -195,11 +196,14 @@ class PassThroughFrame(object):
     An optimized version of Frame where we *know* we will never restart, so we are safe reusing the
     same PassThroughFrame every time for performance.
     """
+    def __init__(self, manager):
+        self.manager = manager
+
     def step(self, name, func):
         return func()
 
     def unwind(self, mode, value, opcode, restart_type):
-        if get_environment().return_value_optimization and restart_type is None:
+        if get_environment().return_value_optimization and mode == "value" and restart_type is None:
             return mode, value, opcode, None
         raise BreakException(mode, value, opcode, restart_type)
 
@@ -217,8 +221,6 @@ class PassThroughFrame(object):
 
     def __exit__(self, exc_type, exc_value, traceback):
         pass
-
-PASS_THROUGH_FRAME = PassThroughFrame()
 
 class Frame(object):
     __slots__ = [ "manager", "target", "locals", "restart_value" ]

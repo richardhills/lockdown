@@ -7,14 +7,14 @@ import threading
 import weakref
 
 from lockdown.type_system.core_types import Type, unwrap_types, OneOfType, \
-    AnyType, merge_types, BottomType
+    AnyType, merge_types, BottomType, ValueType
 from lockdown.type_system.exceptions import FatalError, IsNotCompositeType, \
     CompositeTypeIncompatibleWithTarget, CompositeTypeIsInconsistent, \
     DanglingInferredType
 from lockdown.type_system.managers import get_manager, get_type_of_value
 from lockdown.type_system.micro_ops import merge_composite_types
 from lockdown.type_system.reasoner import Reasoner, DUMMY_REASONER
-from lockdown.utils.utils import MISSING, WeakIdentityKeyDictionary,\
+from lockdown.utils.utils import MISSING, WeakIdentityKeyDictionary, \
     get_environment
 
 
@@ -624,7 +624,7 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
         if not isinstance(sub_type, CompositeType) and target_is_composite:
             child_reasoner.push_target_should_not_be_composite(sub_type, target)
 
-        if isinstance(sub_type, AnyType):
+        if isinstance(sub_type, (AnyType, ValueType)):
             atleast_one_sub_type_worked = True
 
         if not isinstance(sub_type, CompositeType) and not target_is_composite:
