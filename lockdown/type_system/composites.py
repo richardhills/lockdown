@@ -446,7 +446,7 @@ def resolve_micro_op_conflicts(type, results):
             value_type=wildcard_getter.value_type
         ))
 
-    for tag, micro_op in finished_type.get_micro_op_types().items():
+    for tag, micro_op in list(finished_type.get_micro_op_types().items()):
         if tag[0] in ("get", "get-wildcard") and not micro_op.key_error:
             finished_type.remove_micro_op_type(( "insert-start", ))
             finished_type.remove_micro_op_type(( "insert-wildcard", ))

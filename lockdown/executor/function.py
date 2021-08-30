@@ -31,7 +31,6 @@ from lockdown.type_system.universal_type import PythonObject, \
     Universal
 from lockdown.utils.utils import MISSING, raise_from, \
     spread_dict, get_environment
-from types import ObjectType
 
 
 def prepare_piece_of_context(declared_type, suggested_type):
@@ -298,7 +297,7 @@ class UnboundDereferenceBinder(object):
         from lockdown.executor.raw_code_factories import dereference_op, assignment_op, \
             literal_op, dereference, context_op
 
-        if not isinstance(reference, basestring):
+        if not isinstance(reference, str):
             raise FatalError()
 
         if reference in ("prepare", "local", "argument", "outer", "static"):
@@ -452,7 +451,7 @@ class OpenFunction(object):
     def to_ast(self, dependency_builder):
         if is_restartable(self):
             return None
-        context_name = b"context_{}".format(id(self))
+        context_name = "context_{}".format(id(self))
 
         local_initializer_ast = self.local_initializer.to_ast(context_name, dependency_builder)
 
@@ -518,7 +517,7 @@ class {open_function_id}(object):
     def to_inline_ast(self, dependency_builder, outer_context_ast, argument_ast):
         if is_restartable(self):
             return None
-        context_name = b"context_{}".format(id(self))
+        context_name = "context_{}".format(id(self))
 
         local_initializer_ast = self.local_initializer.to_ast(context_name, dependency_builder)
 

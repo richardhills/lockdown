@@ -99,7 +99,7 @@ class TestBasicObject(TestCase):
             ("set", "foo"): SetterMicroOpType("foo", StringType())
         }, name="test"))
 
-        self.assertEquals(obj.foo, "hello")
+        self.assertEqual(obj.foo, "hello")
 
     def test_composite_object_broad_dereference(self):
         obj = PythonObject({ "foo": "hello" })
@@ -109,7 +109,7 @@ class TestBasicObject(TestCase):
             ("set", "foo"): SetterMicroOpType("foo", AnyType())
         }, name="test"))
 
-        self.assertEquals(obj.foo, "hello")
+        self.assertEqual(obj.foo, "hello")
 
     def test_composite_object_assignment(self):
         obj = PythonObject({ "foo": "hello" })
@@ -140,9 +140,9 @@ class TestBasicObject(TestCase):
             ("set", "foo"): SetterMicroOpType("foo", AnyType())
         }, name="test"))
 
-        self.assertEquals(obj.foo, "hello")
+        self.assertEqual(obj.foo, "hello")
         obj.foo = "what"
-        self.assertEquals(obj.foo, "what")
+        self.assertEqual(obj.foo, "what")
 
     def test_java_like_object(self):
         obj = PythonObject({ "foo": "hello" })
@@ -152,9 +152,9 @@ class TestBasicObject(TestCase):
             ("set", "foo"): SetterMicroOpType("foo", StringType())
         }, name="test"))
 
-        self.assertEquals(obj.foo, "hello")
+        self.assertEqual(obj.foo, "hello")
         obj.foo = "what"
-        self.assertEquals(obj.foo, "what")
+        self.assertEqual(obj.foo, "what")
 
         with self.assertRaises(Exception):
             obj.bar = "hello"
@@ -166,7 +166,7 @@ class TestBasicObject(TestCase):
             ("get", "foo"): GetterMicroOpType("foo", StringType())
         }, name="test"))
 
-        self.assertEquals(obj.foo, "hello")
+        self.assertEqual(obj.foo, "hello")
         with self.assertRaises(Exception):
             obj.foo = "what"
 
@@ -434,7 +434,7 @@ class TestUnitTypes(TestCase):
         get_manager(foo).add_composite_type(UniversalObjectType({
             "bar": UnitType(42)
         }))
-        self.assertEquals(foo.bar, 42)
+        self.assertEqual(foo.bar, 42)
 
     def test_broadening_blocked(self):
         foo = PythonObject({
@@ -493,7 +493,7 @@ class TestNestedUniversalObjectTypes(TestCase):
 
         foo.bar = PythonObject({ "baz": 42 }, bind=Bar)
 
-        self.assertEquals(foo.bar.baz, 42)
+        self.assertEqual(foo.bar.baz, 42)
 
     def test_blocked_basic_assignment(self):
         foo = PythonObject({
@@ -550,7 +550,7 @@ class TestNestedUniversalObjectTypes(TestCase):
 
         foo.bar = PythonObject({ "baz": "hello" }, bind=Bar)
 
-        self.assertEquals(foo.bar.baz, "hello")
+        self.assertEqual(foo.bar.baz, "hello")
 
     def test_double_deep_assignment(self):
         foo = PythonObject({
@@ -575,11 +575,11 @@ class TestNestedUniversalObjectTypes(TestCase):
             })
         )
 
-        self.assertEquals(foo.bar.baz.bam, 10)
+        self.assertEqual(foo.bar.baz.bam, 10)
 
         foo.bar = PythonObject({ "baz": PythonObject({ "bam": 42 }) }, bind=Bar)
 
-        self.assertEquals(foo.bar.baz.bam, 42)
+        self.assertEqual(foo.bar.baz.bam, 42)
 
     def test_conflicting_types(self):
         foo = PythonObject({
@@ -629,7 +629,7 @@ class TestNestedUniversalObjectTypes(TestCase):
         )
 
         foo.bar = "hello"
-        self.assertEquals(foo.bar, "hello")
+        self.assertEqual(foo.bar, "hello")
 
 
 class TestNestedPythonTypes(TestCase):
@@ -645,7 +645,7 @@ class TestNestedPythonTypes(TestCase):
         foo.bar.baz = 22
 
         foo.bar = "hello"
-        self.assertEquals(foo.bar, "hello")
+        self.assertEqual(foo.bar, "hello")
 
     def test_python_object_with_reference_can_be_modified(self):
         bar = PythonObject({
@@ -709,8 +709,8 @@ class TestNestedPythonTypes(TestCase):
 
         self.assertIs(foo.bar, bar)
 
-        self.assertEquals(len(get_manager(foo).attached_types), 1)
-        self.assertEquals(len(get_manager(foo.bar).attached_types), 1)
+        self.assertEqual(len(get_manager(foo).attached_types), 1)
+        self.assertEqual(len(get_manager(foo.bar).attached_types), 1)
 
         # ... but when bar is replaced with a new object without constraints, the PythonObjectType
         # spreads to the new object
@@ -720,7 +720,7 @@ class TestNestedPythonTypes(TestCase):
 
         self.assertIsNot(foo.bar, bar)
 
-        self.assertEquals(len(get_manager(foo.bar).attached_types), 1)
+        self.assertEqual(len(get_manager(foo.bar).attached_types), 1)
 
         # Now that the new object has the PythonObjectType constraint, we can't bind a stronger
         # constraint
@@ -750,7 +750,7 @@ class TestNestedPythonTypes(TestCase):
 
         foo.bar = PythonObject({ "baz": 123 })
 
-        self.assertEquals(foo.bar.baz, 123)
+        self.assertEqual(foo.bar.baz, 123)
 
     def test_python_random_read_fails_nicely(self):
         foo = PythonObject({
@@ -780,8 +780,8 @@ class TestDefaultDict(TestCase):
 
         get_manager(foo).add_composite_type(UniversalDefaultDictType(StringType(), StringType(), name="test"))
 
-        self.assertEquals(foo.bar, "forty-two")
-        self.assertEquals(foo.bam, "bam-123")
+        self.assertEqual(foo.bar, "forty-two")
+        self.assertEqual(foo.bam, "bam-123")
 
 class TestListObjects(TestCase):
     def test_basic_list_of_ints(self):
@@ -1200,14 +1200,14 @@ class TestRuntime(TestCase):
         })
 
         get_manager(A).add_composite_type(At)
-        self.assertEquals(len(get_manager(A).attached_types), 1)
-        self.assertEquals(get_manager(A).attached_type_counts[id(At)], 1)
+        self.assertEqual(len(get_manager(A).attached_types), 1)
+        self.assertEqual(get_manager(A).attached_type_counts[id(At)], 1)
         get_manager(B).add_composite_type(Bt)
-        self.assertEquals(len(get_manager(A).attached_types), 1)
-        self.assertEquals(get_manager(A).attached_type_counts[id(At)], 2)
+        self.assertEqual(len(get_manager(A).attached_types), 1)
+        self.assertEqual(get_manager(A).attached_type_counts[id(At)], 2)
         get_manager(B).remove_composite_type(Bt)
-        self.assertEquals(len(get_manager(A).attached_types), 1)
-        self.assertEquals(get_manager(A).attached_type_counts[id(At)], 1)
+        self.assertEqual(len(get_manager(A).attached_types), 1)
+        self.assertEqual(get_manager(A).attached_type_counts[id(At)], 1)
 
 
     def test_modifying(self):
@@ -1226,15 +1226,15 @@ class TestRuntime(TestCase):
             "bar": A
         }, bind=Bt)
 
-        self.assertEquals(len(get_manager(A).attached_types), 1)
-        self.assertEquals(get_manager(A).attached_type_counts[id(At)], 1)
+        self.assertEqual(len(get_manager(A).attached_types), 1)
+        self.assertEqual(get_manager(A).attached_type_counts[id(At)], 1)
 
         B.bar = PythonObject({
             "foo": 42
         }, bind=At)
         
-        self.assertEquals(len(get_manager(A).attached_types), 0)
-        self.assertEquals(get_manager(A).attached_type_counts[id(At)], 0)
+        self.assertEqual(len(get_manager(A).attached_types), 0)
+        self.assertEqual(get_manager(A).attached_type_counts[id(At)], 0)
 
 class TestRDHInstances(TestCase):
     def test_object_set_and_get(self):

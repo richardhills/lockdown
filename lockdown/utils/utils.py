@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-from UserDict import DictMixin
+from six import reraise
 import cProfile
 from collections import OrderedDict
 from contextlib import contextmanager
@@ -11,6 +11,7 @@ import weakref
 
 from lockdown.type_system.core_types import Type
 from lockdown.type_system.exceptions import FatalError
+from _collections_abc import MutableMapping
 
 
 class InternalMarker(object):
@@ -45,7 +46,7 @@ def default(value, *args):
     return value
 
 def raise_from(T, e):
-    raise T, T(e), sys.exc_info()[2]
+    reraise(T, T(e), sys.exc_info()[2])
 
 def capture_raise(T, e):
     return T, T(e), sys.exc_info()[2]
@@ -72,7 +73,7 @@ def print_code(ast):
                 items = sorted(items, key=sort_dict_output)
                 return OrderedDict(items)
             return o
-    print RDHObjectEncoder().encode(ast)
+    print(RDHObjectEncoder().encode(ast))
 
 @contextmanager
 def profile(output_file):
@@ -186,7 +187,7 @@ def environment(
     finally:
         environment_stack.pop()
 
-class WeakIdentityKeyDictionary(DictMixin, object):
+class WeakIdentityKeyDictionary(MutableMapping):
     def __init__(self, dict={}):
         self.weak_refs_by_id = {}
         self.weak_ref_ids_by_key_id = {}
@@ -195,6 +196,13 @@ class WeakIdentityKeyDictionary(DictMixin, object):
 
         for k, v in dict.items():
             self[k] = v
+
+    def __len__(self):
+        return len(self.keys())
+
+    def __iter__(self):
+        for i in self.values_by_key_id:
+            yield i
 
     def __setitem__(self, key, value):
         if id(key) in self.weak_ref_ids_by_key_id:

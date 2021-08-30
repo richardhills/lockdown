@@ -35,7 +35,7 @@ def get_expression_break_types(expression, context, frame_manager, immediate_con
         if not isinstance(other_break_types, dict):
             raise FatalError()
         for mode, break_types in other_break_types.items():
-            if not isinstance(mode, basestring):
+            if not isinstance(mode, str):
                 raise FatalError()
             if not isinstance(break_types, (list, tuple)):
                 raise FatalError()
@@ -144,6 +144,6 @@ class MicroOpBinder(object):
 
     def simple_bind(self):
         if len(self.bound) == 1:
-            return self.bound.values()[0]
+            return list(self.bound.values())[0]
 
         return (None, None)

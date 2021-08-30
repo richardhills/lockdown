@@ -113,7 +113,7 @@ class UnitType(Type):
         return [ self.value ]
 
     def __repr__(self):
-        if isinstance(self.value, basestring):
+        if isinstance(self.value, str):
             return "U<\"{}\">".format(self.value)
         else:
             return "U<{}>".format(self.value)
@@ -127,7 +127,7 @@ class StringType(Type):
             return True
         if isinstance(other, OneOfType):
             return other.is_copyable_to(self, reasoner)
-        if not (isinstance(other, StringType) or (isinstance(other, UnitType) and isinstance(other.value, basestring))):
+        if not (isinstance(other, StringType) or (isinstance(other, UnitType) and isinstance(other.value, str))):
             reasoner.push_not_copyable_type(self, other)
             return False
         return True

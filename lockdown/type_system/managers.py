@@ -5,8 +5,11 @@ import weakref
 
 from lockdown.type_system.core_types import Type, UnitType, NoValueType
 from lockdown.type_system.exceptions import FatalError, InvalidData
-from lockdown.type_system.runtime import replace_all_refs
+#from lockdown.type_system.runtime import replace_all_refs
 from lockdown.utils.utils import InternalMarker, NO_VALUE, get_environment
+
+def replace_all_refs(*args, **kwargs):
+    raise FatalError("TODO: implement replace_all_refs in python 3")
 
 managers_by_object_id = {}
 
@@ -98,7 +101,7 @@ def obj_cleared_callback(obj_id):
 
 
 def get_type_of_value(value):
-    if isinstance(value, (basestring, int)):
+    if isinstance(value, (str, int)):
         return UnitType(value)
     if value is None:
         return NoValueType()

@@ -74,56 +74,56 @@ class TestBasicFunction(TestCase):
             function() { return 42; }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
     def test_returns_string(self):
         code = parse("""
             function() { return "hello"; }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, "hello")
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, "hello")
 
     def test_addition(self):
         code = parse("""
             function() { return 12 + 30; }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
     def test_precidence(self):
         code = parse("""
             function() { return (1 + 1) * 23 - 2 * 1 + 2; }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
     def test_return_argument(self):
         code = parse("""
             function(|int|) { return argument; }
         """)
         _, result = bootstrap_function(code, argument=42)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
     def test_dereference_argument_parameter(self):
         code = parse("""
             function(|Object { foo: int }|) { return foo; }
         """)
         _, result = bootstrap_function(code, argument=PythonObject({ "foo": 42 }))
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
     def test_initialize_and_return_local(self):
         code = parse("""
             function() { int foo = 40; return foo + 2; }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
     def test_initialize_and_return_local_object(self):
         code = parse("""
@@ -133,8 +133,8 @@ class TestBasicFunction(TestCase):
             }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
     def test_some_const_locals(self):
         code = parse("""
@@ -145,8 +145,8 @@ class TestBasicFunction(TestCase):
             }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
     def test_many_const_locals(self):
         code = parse("""
@@ -158,8 +158,8 @@ class TestBasicFunction(TestCase):
             }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
     def test_mutate_locals(self):
         code = parse("""
@@ -172,8 +172,8 @@ class TestBasicFunction(TestCase):
             }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
     def test_mix_of_initialization_and_mutation(self):
         code = parse("""
@@ -186,8 +186,8 @@ class TestBasicFunction(TestCase):
             }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
     def test_mix_of_initialization_and_mutation_on_object(self):
         code = parse("""
@@ -200,8 +200,8 @@ class TestBasicFunction(TestCase):
             }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
     def test_list(self):
         code = parse("""
@@ -211,8 +211,8 @@ class TestBasicFunction(TestCase):
             }
         """)
         _, result = bootstrap_function(code, check_safe_exit=False)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 6)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 6)
 
     def test_list_of_objects(self):
         code = parse("""
@@ -222,8 +222,8 @@ class TestBasicFunction(TestCase):
             }
         """)
         _, result = bootstrap_function(code, check_safe_exit=False)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 6)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 6)
 
     def test_object_with_lists(self):
         code = parse("""
@@ -233,8 +233,8 @@ class TestBasicFunction(TestCase):
             }
         """)
         _, result = bootstrap_function(code, check_safe_exit=False)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 6)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 6)
 
     def test_mutate_list_of_objects(self):
         code = parse("""
@@ -245,8 +245,8 @@ class TestBasicFunction(TestCase):
             }
         """)
         _, result = bootstrap_function(code, check_safe_exit=False)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 12)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 12)
 
     def test_mutate_object_in_list(self):
         code = parse("""
@@ -257,8 +257,8 @@ class TestBasicFunction(TestCase):
             }
         """)
         _, result = bootstrap_function(code, check_safe_exit=False)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 12)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 12)
 
     def test_duplicate_object_in_list(self):
         code = parse("""
@@ -269,8 +269,8 @@ class TestBasicFunction(TestCase):
             }
         """)
         _, result = bootstrap_function(code, check_safe_exit=False)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 9)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 9)
 
     def test_insert_into_list(self):
         code = parse("""
@@ -281,8 +281,8 @@ class TestBasicFunction(TestCase):
             }
         """)
         _, result = bootstrap_function(code, check_safe_exit=False)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 4)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 4)
 
     def test_insert_object_into_list(self):
         code = parse("""
@@ -293,8 +293,8 @@ class TestBasicFunction(TestCase):
             }
         """)
         _, result = bootstrap_function(code, check_safe_exit=False)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 6)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 6)
 
 
 class TestBuiltIns(TestCase):
@@ -305,11 +305,11 @@ class TestBuiltIns(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEqual(result.caught_break_mode, "value")
         self.assertIsInstance(result.value, PythonList)
         get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
-        self.assertEquals(len(result.value), 4)
-        self.assertEquals(list(result.value), [ 1, 2, 3, 4 ])
+        self.assertEqual(len(result.value), 4)
+        self.assertEqual(list(result.value), [ 1, 2, 3, 4 ])
 
     def test_array_length(self):
         code = parse("""
@@ -318,8 +318,8 @@ class TestBuiltIns(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 3)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 3)
 
     def test_object_length(self):
         code = parse("""
@@ -328,8 +328,8 @@ class TestBuiltIns(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 0)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 0)
 
     def test_keys(self):
         code = parse("""
@@ -338,8 +338,8 @@ class TestBuiltIns(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(sorted(result.value._to_list()), [ "baz", "foo" ])
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(sorted(result.value._to_list()), [ "baz", "foo" ])
 
     def test_values(self):
         code = parse("""
@@ -348,7 +348,7 @@ class TestBuiltIns(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEqual(result.caught_break_mode, "value")
         self.assertIn("bar", result.value._to_list())
         self.assertIn(4, result.value._to_list())
 
@@ -359,8 +359,8 @@ class TestBuiltIns(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(12, result.value)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(12, result.value)
 
 class TestPipeline(TestCase):
     def test_value_pipeline(self):
@@ -370,7 +370,7 @@ class TestPipeline(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEqual(result.caught_break_mode, "value")
         self.assertIn("bar", result.value._to_list())
         self.assertIn(4, result.value._to_list())
 
@@ -381,7 +381,7 @@ class TestPipeline(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 5)
 
     def test_length_pipeline_chain(self):
@@ -391,7 +391,7 @@ class TestPipeline(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 3)
 
     def test_max_pipeline_chain(self):
@@ -401,7 +401,7 @@ class TestPipeline(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
+        self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 12)
 
 class TestMapPipeline(TestCase):
@@ -412,8 +412,8 @@ class TestMapPipeline(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value._to_list(), [ 5, 7, 3 ])
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._to_list(), [ 5, 7, 3 ])
 
     def test_index_pipeline(self):
         code = parse("""
@@ -422,8 +422,8 @@ class TestMapPipeline(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value._to_list(), [ 0, 1, 2 ])
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._to_list(), [ 0, 1, 2 ])
 
     def test_keys_pipeline(self):
         code = parse("""
@@ -432,8 +432,8 @@ class TestMapPipeline(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value._to_list(), [ "foo", "bar" ])
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._to_list(), [ "foo", "bar" ])
 
 class TestInferredTypes(TestCase):
     def test_inferred_locals(self):
@@ -446,8 +446,8 @@ class TestInferredTypes(TestCase):
             }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
 
 class TestFunctionDeclaration(TestCase):
@@ -461,8 +461,8 @@ class TestFunctionDeclaration(TestCase):
             }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
     def test_access_outer_context(self):
         code = parse("""
@@ -475,8 +475,8 @@ class TestFunctionDeclaration(TestCase):
             }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 12)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 12)
 
     def test_mutate_outer_context(self):
         code = parse("""
@@ -495,8 +495,8 @@ class TestFunctionDeclaration(TestCase):
             }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 32)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 32)
 
     def test_mutate_outer_context_loop(self):
         code = parse("""
@@ -518,8 +518,8 @@ class TestFunctionDeclaration(TestCase):
             }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 2 ** (3 * 3))
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 2 ** (3 * 3))
 
 
 class TestObjectDestructuring(TestCase):
@@ -531,8 +531,8 @@ class TestObjectDestructuring(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
     def test_double_initialization_destructure(self):
         code = parse("""
@@ -542,8 +542,8 @@ class TestObjectDestructuring(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
     def test_single_assignment_destructure(self):
         code = parse("""
@@ -554,8 +554,8 @@ class TestObjectDestructuring(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 12)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 12)
 
     def test_double_assignment_destructure(self):
         code = parse("""
@@ -566,8 +566,8 @@ class TestObjectDestructuring(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
     def test_mixed_destructure(self):
         code = parse("""
@@ -578,8 +578,8 @@ class TestObjectDestructuring(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
     def test_inferred_types_in_destructure(self):
         code = parse("""
@@ -590,8 +590,8 @@ class TestObjectDestructuring(TestCase):
             }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
 
 class TestListDestructuring(TestCase):
@@ -603,8 +603,8 @@ class TestListDestructuring(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
     def test_double_initialization_destructure(self):
         code = parse("""
@@ -614,8 +614,8 @@ class TestListDestructuring(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
     def test_single_assignment_destructure(self):
         code = parse("""
@@ -626,8 +626,8 @@ class TestListDestructuring(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 12)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 12)
 
     def test_double_assignment_destructure(self):
         code = parse("""
@@ -638,8 +638,8 @@ class TestListDestructuring(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
     def test_mixed_destructure(self):
         code = parse("""
@@ -650,8 +650,8 @@ class TestListDestructuring(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
     def test_inferred_types_in_destructure(self):
         code = parse("""
@@ -662,8 +662,8 @@ class TestListDestructuring(TestCase):
             }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
 
 
 class TestLoops(TestCase):
@@ -678,8 +678,8 @@ class TestLoops(TestCase):
             }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 10)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 10)
 
     def test_for_range(self):
         code = parse("""
@@ -692,8 +692,8 @@ class TestLoops(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 1 + 2 + 3 + 4)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 1 + 2 + 3 + 4)
 
 class TestMatch(TestCase):
     def test_basic_is(self):
@@ -707,8 +707,8 @@ class TestMatch(TestCase):
             }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 5)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 5)
 
     def test_basic_is2(self):
         code = parse("""
@@ -721,8 +721,8 @@ class TestMatch(TestCase):
             }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 10)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 10)
 
     def test_basic_is3(self):
         code = parse("""
@@ -735,8 +735,8 @@ class TestMatch(TestCase):
             }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 5)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 5)
 
     def test_basic_is4(self):
         code = parse("""
@@ -749,8 +749,8 @@ class TestMatch(TestCase):
             }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 9)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 9)
 
 class TestDictionary(TestCase):
     def test_basic_dictionary(self):
@@ -764,8 +764,8 @@ class TestDictionary(TestCase):
         if hasattr(func, "break_types"):
             self.assertIn("exception", func.break_types)
             self.assertTrue(func.break_types["exception"][0]["out"].get_micro_op_type(("get", "type")).value_type.value == "TypeError")
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 55)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 55)
 
 
     def test_basic_dictionary2(self):
@@ -779,8 +779,8 @@ class TestDictionary(TestCase):
         if hasattr(func, "break_types"):
             self.assertNotIn("exception", func.break_types)
             self.assertTrue(func.break_types["value"][1]["out"].get_micro_op_type(("get", "type")).value_type.value == "TypeError")
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 55)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 55)
 
 
     def test_basic_dictionary3(self):
@@ -791,8 +791,8 @@ class TestDictionary(TestCase):
             }
         """)
         _, result = bootstrap_function(code, check_safe_exit=False)
-        self.assertEquals(result.caught_break_mode, "exception")
-        self.assertEquals(result.value._to_dict()["message"], "DereferenceOp: invalid_dereference")
+        self.assertEqual(result.caught_break_mode, "exception")
+        self.assertEqual(result.value._to_dict()["message"], "DereferenceOp: invalid_dereference")
 
 
     def test_basic_dictionary4(self):
@@ -805,8 +805,8 @@ class TestDictionary(TestCase):
         func, result = bootstrap_function(code)
         if hasattr(func, "break_types"):
             self.assertNotIn("exception", func.break_types)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 55)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 55)
 
     def test_basic_dictionary5(self):
         code = parse("""
@@ -820,8 +820,8 @@ class TestDictionary(TestCase):
         func, result = bootstrap_function(code, check_safe_exit=False)
         if hasattr(func, "break_types"):
             self.assertNotIn("exception", func.break_types)
-        self.assertEquals(result.caught_break_mode, "value")
-        self.assertEquals(result.value, 55)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 55)
 
 class TestParserMisc(TestCase):
     def test_invalid_list_assignment(self):
@@ -856,7 +856,7 @@ class TestSpeed(TestCase):
         """, debug=True)
         with environment(transpile=True, return_value_optimization=True):
             _, result = bootstrap_function(code)
-        self.assertEquals(result.value, 20 * 20)
+        self.assertEqual(result.value, 20 * 20)
         end = time()
         #self.assertLess(end - start, 20)
 
@@ -880,7 +880,7 @@ class TestSpeed(TestCase):
         """, debug=True)
         with environment(**fastest):
             _, result = bootstrap_function(code)
-        self.assertEquals(result.value, 100 * 100)
+        self.assertEqual(result.value, 100 * 100)
         end = time()
         self.assertLess(end - start, 25)
 
@@ -957,7 +957,7 @@ class TestEuler(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.value, 233168)
+        self.assertEqual(result.value, 233168)
 
     def test_1a(self):
         code = parse("""
@@ -971,7 +971,7 @@ class TestEuler(TestCase):
         """, debug=True)
  
         _, result = bootstrap_function(code)
-        self.assertEquals(result.value, 233168)
+        self.assertEqual(result.value, 233168)
 
     def test_2(self):
         code = parse("""
@@ -987,7 +987,7 @@ class TestEuler(TestCase):
             }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.value, 4613732)
+        self.assertEqual(result.value, 4613732)
 
     def test_3(self):
         code = parse("""
@@ -1004,7 +1004,7 @@ class TestEuler(TestCase):
             }
         """)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.value, 6857)
+        self.assertEqual(result.value, 6857)
 
     def test_4(self):
         code = parse("""
@@ -1033,7 +1033,7 @@ class TestEuler(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.value, 906609)
+        self.assertEqual(result.value, 906609)
 
     def test_6(self):
         code = parse("""
@@ -1047,7 +1047,7 @@ class TestEuler(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.value, 25164150)
+        self.assertEqual(result.value, 25164150)
 
     def test_7_slow(self):
         code = parse("""
@@ -1074,7 +1074,7 @@ class TestEuler(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.value, 71)
+        self.assertEqual(result.value, 71)
 
     def test_7_fast(self):
         code = parse("""
@@ -1102,7 +1102,7 @@ class TestEuler(TestCase):
         """, debug=True)
         with environment(**fastest):
             _, result = bootstrap_function(code)
-        self.assertEquals(result.value, 541)
+        self.assertEqual(result.value, 541)
 
     def test_9(self):
         code = parse("""
@@ -1128,7 +1128,7 @@ class TestEuler(TestCase):
 
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.value, 31875000)
+        self.assertEqual(result.value, 31875000)
 
     def test_12(self):
         # The original test goes to 500, but I can only do 10 atm...
@@ -1153,7 +1153,7 @@ class TestEuler(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.value, 120)
+        self.assertEqual(result.value, 120)
 
 
 
@@ -1183,7 +1183,7 @@ class TestEuler(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.value, 20)
+        self.assertEqual(result.value, 20)
 
 
     def test_28(self):
@@ -1198,7 +1198,7 @@ class TestEuler(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
-        self.assertEquals(result.value, 669171001)
+        self.assertEqual(result.value, 669171001)
 
     def test_31(self):
         return
@@ -1217,7 +1217,7 @@ class TestEuler(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code, check_safe_exit=False)
-        self.assertEquals(result.value, 73682)
+        self.assertEqual(result.value, 73682)
 
 
 class TestTranspilation(TestCase):
@@ -1229,7 +1229,7 @@ class TestTranspilation(TestCase):
         """)
         with environment(transpile=True, return_value_optimization=True):
             _, result = bootstrap_function(code)
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.value, 42)
 
     def test_multiplication(self):
         code = parse("""
@@ -1239,7 +1239,7 @@ class TestTranspilation(TestCase):
         """)
         with environment(transpile=True, return_value_optimization=True):
             _, result = bootstrap_function(code)
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.value, 42)
 
     def test_comma_op(self):
         code = parse("""
@@ -1250,7 +1250,7 @@ class TestTranspilation(TestCase):
         """)
         with environment(transpile=True, return_value_optimization=True):
             _, result = bootstrap_function(code)
-        self.assertEquals(result.value, 42)
+        self.assertEqual(result.value, 42)
 
     def test_loops(self):
         code = parse("""
@@ -1264,5 +1264,5 @@ class TestTranspilation(TestCase):
         """)
         with environment(transpile=True, return_value_optimization=True):
             _, result = bootstrap_function(code)
-        self.assertEquals(result.value, 4950)
+        self.assertEqual(result.value, 4950)
 

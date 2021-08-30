@@ -174,7 +174,7 @@ def object_template_op(values, debug_reason="code", **kwargs):
 
     for k, v in values.items():
         check_is_opcode(v)
-        if isinstance(k, basestring):
+        if isinstance(k, str):
             k = literal_op(k)
 
         check_is_opcode(k)
@@ -263,9 +263,9 @@ def transform_op(*args, **kwargs):
         raise FatalError()
     if code:
         check_is_opcode(code)
-    if input and not isinstance(input, basestring):
+    if input and not isinstance(input, str):
         raise FatalError()
-    if not isinstance(output, basestring):
+    if not isinstance(output, str):
         raise FatalError()
     op = {
         "opcode": "transform",
@@ -389,7 +389,7 @@ def dereference_op(of, reference, safe, **kwargs):
 
 
 def dynamic_dereference_op(reference, **kwargs):
-    if not isinstance(reference, basestring):
+    if not isinstance(reference, str):
         raise FatalError()
     return PythonObject(spread_dict({
         "opcode": "dynamic_dereference",
@@ -560,7 +560,7 @@ def const_string_type():
 
 
 def unbound_dereference(name, **kwargs):
-    if not isinstance(name, basestring):
+    if not isinstance(name, str):
         raise FatalError()
     return PythonObject(spread_dict({
         "opcode": "unbound_dereference",
@@ -569,7 +569,7 @@ def unbound_dereference(name, **kwargs):
 
 
 def unbound_assignment(name, rvalue):
-    if not isinstance(name, basestring):
+    if not isinstance(name, str):
         raise FatalError()
     check_is_opcode(rvalue)
     return PythonObject({
@@ -608,7 +608,7 @@ def dereference(*vars, **kwargs):
     result = context_op()
 
     for var in vars:
-        if isinstance(var, basestring):
+        if isinstance(var, str):
             for v in var.split("."):
                 result = dereference_op(result, literal_op(munge_ints(v)), True, **kwargs)
         elif isinstance(var, int):

@@ -156,7 +156,7 @@ def replace_all_refs(old_obj, new_obj):
         # OTHER (IN DEBUG, SEE WHAT IS NOT SUPPORTED). 
         else:
             # debug: 
-            print type(referrer)
+            print(type(referrer))
             pass
             
     if hit is False:

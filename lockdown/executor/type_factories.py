@@ -25,7 +25,7 @@ def build_closed_function_type(data):
     if not isinstance(data._get("break_types"), Universal):
         raise FatalError()
     for mode, break_types in data._get("break_types")._items():
-        if not isinstance(mode, basestring):
+        if not isinstance(mode, str):
             raise FatalError()
         if not isinstance(break_types, Universal):
             raise FatalError()

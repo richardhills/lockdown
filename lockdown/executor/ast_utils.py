@@ -33,7 +33,7 @@ def compile_module(code, context_name, dependency_builder, **subs):
     subs["context_name"] = context_name
 
     for key, value in subs.items():
-        if isinstance(value, (basestring, int)):
+        if isinstance(value, (str, int)):
             string_subs[key] = value
         elif isinstance(value, ast.FunctionDef):
             string_subs[key] = dependency_builder.add(value)
@@ -171,7 +171,7 @@ def get_dependency_key(dependency):
     if isinstance(dependency, FunctionType):
         return "{}_{}_{}".format(dependency.__name__, id(dependency))
     elif isinstance(dependency, MethodType):
-        return "{}{}{}".format(dependency.im_class.__name__, dependency.__name__, id(dependency))
+        return "{}{}".format(dependency.__name__, id(dependency))
     else:
         return "{}{}".format(type(dependency).__name__, id(dependency))
 

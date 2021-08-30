@@ -118,9 +118,11 @@ class LiteralOp(Opcode):
             return frame.value(self.value)
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
+        if isinstance(self.value, bool):
+            return ast.NameConstant(self.value)
         if isinstance(self.value, int):
             return ast.Num(n=self.value)
-        if isinstance(self.value, basestring):
+        if isinstance(self.value, str):
             return ast.Str(s=self.value)
         raise FatalError()
 
@@ -1635,7 +1637,7 @@ class PrintOp(Opcode):
 
     def jump(self, context, frame_manager, immediate_context=None):
         with frame_manager.get_next_frame(self) as frame:
-            print evaluate(self.expression, context, frame_manager)
+            print(evaluate(self.expression, context, frame_manager))
             return frame.value(NO_VALUE)
 
 
@@ -1657,7 +1659,7 @@ MATH_AND_LOGIC_OPCODES = {
     ),
     "division": BinaryOp(
         "Division",
-        lambda lvalue, rvalue, *args: lvalue(*args) / rvalue(*args), IntegerType(), IntegerType(), number_op=ast.Div()
+        lambda lvalue, rvalue, *args: lvalue(*args) // rvalue(*args), IntegerType(), IntegerType(), number_op=ast.FloorDiv()
     ),
     "addition": BinaryOp(
         "Addition",

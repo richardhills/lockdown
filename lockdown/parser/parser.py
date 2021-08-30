@@ -150,7 +150,7 @@ class RDHLang5Visitor(langVisitor):
         if code_block:
             code_block = self.visit(code_block)
 
-        assignments = [n for n in lvalues if isinstance(n, basestring)]
+        assignments = [n for n in lvalues if isinstance(n, str)]
         initializers = [n for n in lvalues if isinstance(n, tuple)]
 
         local_variable_types = {}
@@ -185,7 +185,7 @@ class RDHLang5Visitor(langVisitor):
         if code_block:
             code_block = self.visit(code_block)
 
-        assignments = [(i, n) for i, n in enumerate(lvalues) if isinstance(n, basestring)]
+        assignments = [(i, n) for i, n in enumerate(lvalues) if isinstance(n, str)]
         initializers = [(i, n) for i, n in enumerate(lvalues) if isinstance(n, tuple)]
 
         local_variable_types = {}
@@ -502,7 +502,7 @@ class RDHLang5Visitor(langVisitor):
         else:
             other_branch = code_blocks[-1]
 
-        for condition, when_true in reversed(zip(expressions, code_blocks)):
+        for condition, when_true in reversed(list(zip(expressions, code_blocks))):
             other_branch = condition_op(condition, when_true, other_branch)
 
         return other_branch

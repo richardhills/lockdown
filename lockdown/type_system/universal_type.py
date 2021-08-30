@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-from UserDict import DictMixin
-from _abcoll import MutableSequence
+from collections.abc import MutableSequence, MutableMapping
 
 from lockdown.executor.ast_utils import compile_statement, compile_expression, \
     compile_module
@@ -347,7 +346,7 @@ class PythonList(Universal, MutableSequence):
         return self._length
 
 
-class PythonDict(Universal, DictMixin, object):
+class PythonDict(Universal, MutableMapping, object):
     def __init__(self, initial_data, **kwargs):
         initial_wrapped = {}
         for key, value in initial_data.items():
@@ -356,6 +355,13 @@ class PythonDict(Universal, DictMixin, object):
             initial_wrapped[key] = value
 
         super(PythonDict, self).__init__(True, initial_wrapped=initial_wrapped, **kwargs)
+
+    def __len__(self):
+        return len(self._wrapped)
+
+    def __iter__(self):
+        for v in self._wrapped:
+            yield v
 
     def keys(self):
         return self._keys()
@@ -499,7 +505,7 @@ class GetterMicroOpType(MicroOpType):
     def to_ast(self, dependency_builder, target, *args):
         # Doesn't support default factories...
         key = self.key
-        if isinstance(self.key, basestring):
+        if isinstance(self.key, str):
             key = "\"{}\"".format(key)
 
         return compile_expression(
@@ -583,7 +589,7 @@ class SetterMicroOpType(MicroOpType):
     def to_ast(self, dependency_builder, target, new_value):
         # Doesn't support default factories...
         key = self.key
-        if isinstance(key, basestring):
+        if isinstance(key, str):
             key = "\"{}\"".format(key)
         return compile_module(
             """
@@ -1300,7 +1306,7 @@ def UniversalObjectType(properties, wildcard_type=None, has_default_factory=Fals
             const = True
             type = type.wrapped
 
-        if not isinstance(name, basestring):
+        if not isinstance(name, str):
             raise FatalError()
         if not isinstance(type, Type):
             raise FatalError(name, type)

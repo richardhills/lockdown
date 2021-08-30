@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-from __builtin__ import True
 from _collections import defaultdict
 
 from lockdown.type_system.composites import is_type_bindable_to_value, \
