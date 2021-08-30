@@ -99,7 +99,7 @@ def build_break_types(return_type=None, exception_type=None, yield_types=None, v
 
 def infer_all():
     return {
-        literal_op("wildcard"): list_template_op([
+        literal_op("infer-all"): list_template_op([
             object_template_op({
                 "out": inferred_type(),
                 "in": inferred_type()

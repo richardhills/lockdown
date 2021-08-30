@@ -22,25 +22,11 @@ class OpcodeOperandMixin(object):
     def get_unbound_operands(self):
         return [ (k, v) for k, v in type(self).__dict__.items() if isinstance(v, Operand) ]
 
-    def get_bound_operands(self):
-        return [ v for v in self.__dict__.values() if isinstance(v, BoundOperand) ]
-
-    def prepare_operands(self, break_types, context, frame_manager, immediate_context=None):
-        for operand in self.get_bound_operands():
-            status = operand.prepare(break_types, context, frame_manager, immediate_context=None)
-            if status == "missing":
-                return False
-
-        return True
-
-    def are_all_operands_safe(self):
-        return all(o.safe for o in self.get_bound_operands())
-
 class Operand(object):
     def __init__(self, required_type, invalid_type_exception_factory):
         if not isinstance(required_type, Type):
             raise FatalError()
-        if not isinstance(invalid_type_exception_factory, TypeErrorFactory):
+        if invalid_type_exception_factory and not isinstance(invalid_type_exception_factory, TypeErrorFactory):
             raise FatalError()
         self.required_type = required_type
         self.invalid_type_exception_factory = invalid_type_exception_factory
@@ -94,12 +80,11 @@ class BoundOperand(object):
 
             if not self.required_type.is_copyable_from(self.value_type, DUMMY_REASONER):
                 break_types.add("exception", self.invalid_type_exception_factory.get_type(), opcode=self.opcode)
-                return "can-error"
             else:
                 self.safe = True
-                return "safe"
+            return True
 
-        return "missing"
+        return False
 
     def get(self, context, frame):
         value = frame.step(self.name, lambda: evaluate(self.expression, context, frame.manager))

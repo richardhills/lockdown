@@ -11,7 +11,7 @@ from lockdown.executor.flow_control import BreakTypesFactory, FrameManager, \
 from lockdown.executor.function_type import enrich_break_type, OpenFunctionType, \
     ClosedFunctionType
 from lockdown.executor.opcodes import enrich_opcode, get_context_type, evaluate, \
-    get_expression_break_types, flatten_out_types, TransformOp
+    get_expression_break_types, flatten_out_types
 from lockdown.executor.raw_code_factories import dynamic_dereference_op, \
     static_op, match_op, prepared_function, inferred_type, invoke_op, \
     object_template_op, object_type, dereference
@@ -199,7 +199,7 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
 
     for mode, actual_break_types in actual_break_types_factory.build().items():
         for actual_break_type in actual_break_types:
-            declared_break_types_for_mode = declared_break_types.get(mode, declared_break_types.get("wildcard", []))
+            declared_break_types_for_mode = declared_break_types.get(mode, declared_break_types.get("infer-all", []))
             for declared_break_type_for_mode in declared_break_types_for_mode:
                 # Check if this declared_break_type_for_mode is enough to capture the actual_break_types
                 declared_out = declared_break_type_for_mode["out"]

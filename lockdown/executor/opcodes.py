@@ -7,7 +7,7 @@ import ast
 from lockdown.executor.ast_utils import compile_expression, compile_statement, \
     unwrap_modules, wrap_as_statement
 from lockdown.executor.exceptions import PreparationException
-from lockdown.executor.flow_control import BreakTypesFactory, BreakException
+from lockdown.executor.flow_control import BreakTypesFactory
 from lockdown.executor.function_type import OpenFunctionType, ClosedFunctionType
 from lockdown.executor.operands import OpcodeOperandMixin, Operand, BoundOperand
 from lockdown.executor.type_factories import enrich_type
@@ -16,9 +16,9 @@ from lockdown.executor.utils import evaluate, TypeErrorFactory, \
     each_reference, get_best_micro_op, get_operand_type
 from lockdown.type_system.composites import CompositeType, scoped_bind, \
     does_value_fit_through_type, is_type_bindable_to_value, Composite
-from lockdown.type_system.core_types import AnyType, Type, merge_types, Const, \
+from lockdown.type_system.core_types import AnyType, merge_types, Const, \
     UnitType, NoValueType, PermittedValuesDoesNotExist, unwrap_types, IntegerType, \
-    BooleanType, remove_type, OneOfType, StringType, BottomType, ValueType
+    BooleanType, remove_type, BottomType, ValueType
 from lockdown.type_system.exceptions import FatalError, InvalidDereferenceType, \
     InvalidDereferenceKey, InvalidAssignmentType, InvalidAssignmentKey
 from lockdown.type_system.managers import get_type_of_value, get_manager
@@ -26,8 +26,7 @@ from lockdown.type_system.reasoner import DUMMY_REASONER, Reasoner
 from lockdown.type_system.universal_type import UniversalObjectType, \
     DEFAULT_READONLY_COMPOSITE_TYPE, PythonList, UniversalListType, PythonObject, \
     GetterMicroOpType, SetterMicroOpType, GetterWildcardMicroOpType, \
-    SetterWildcardMicroOpType, PythonDict, UniversalDictType, \
-    InsertStartMicroOpType, InsertEndMicroOpType, DeletterWildcardMicroOpType, \
+    SetterWildcardMicroOpType, InsertStartMicroOpType, InsertEndMicroOpType, DeletterWildcardMicroOpType, \
     IterMicroOpType, RemoverWildcardMicroOpType, InserterWildcardMicroOpType, \
     UniversalTupleType, Universal, SPARSE_ELEMENT
 from lockdown.utils.utils import MISSING, NO_VALUE, InternalMarker, get_environment, \
@@ -160,15 +159,13 @@ class TemplateOp(OpcodeOperandMixin, Opcode):
             for index, (key, opcode) in enumerate(data.opcodes)
         ]
 
-    def get_bound_operands(self):
-        return [ item for sublist in self.operands for item in sublist ]
-
-    @abstractmethod
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
-        self.prepare_operands(break_types, context, frame_manager, immediate_context)
 
-        can_run = self.are_all_operands_safe()
+        can_run = True
+        for key_operand, value_operand in self.operands:
+            can_run = can_run and key_operand.prepare(break_types, context, frame_manager, immediate_context)
+            can_run = can_run and value_operand.prepare(break_types, context, frame_manager, immediate_context)
 
         if can_run:
             micro_ops = {}
@@ -294,13 +291,15 @@ class ContextOp(Opcode):
         return "Context"
 
 
-class DereferenceOp(Opcode):
+class DereferenceOp(OpcodeOperandMixin, Opcode):
+    INVALID_OF = TypeErrorFactory("DereferenceOp: invalid_of")
     INVALID_DEREFERENCE = TypeErrorFactory("DereferenceOp: invalid_dereference")
+
+    of = Operand(CompositeType({}, "DereferenceOp"), INVALID_OF)
+    reference = Operand(AnyType(), None)
 
     def __init__(self, data, visitor):
         super(DereferenceOp, self).__init__(data, visitor)
-        self.of = enrich_opcode(data.of, visitor)
-        self.reference = enrich_opcode(data.reference, visitor)
         self.safe = data.safe
         self.binder = MicroOpBinder()
         self.generates_exceptions = True
@@ -308,18 +307,15 @@ class DereferenceOp(Opcode):
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
 
+        self.reference.prepare(break_types, context, frame_manager, immediate_context)
+        self.of.prepare(break_types, context, frame_manager, immediate_context)
+
         self.generates_exceptions = False
-
-        reference_types = get_operand_type(self.reference, context, frame_manager, break_types)
-        of_types = get_operand_type(self.of, context, frame_manager, break_types)
-
-        if reference_types is MISSING or of_types is MISSING:
-            return break_types.build()
 
         invalid_dereferences = set()
         invalid_unknown_dereference = False
 
-        for reference, of_type in each_reference(reference_types, of_types):
+        for reference, of_type in each_reference(self.reference.value_type, self.of.value_type):
             if reference is MISSING:
                 # We don't know what the reference is at verification time - it might be
                 # dynamic like an index into an array. Use wildcard microop and check for errors
@@ -358,8 +354,8 @@ class DereferenceOp(Opcode):
 
     def jump(self, context, frame_manager, immediate_context=None):
         with frame_manager.get_next_frame(self) as frame:
-            of = frame.step("of", lambda: evaluate(self.of, context, frame_manager))
-            reference = frame.step("reference", lambda: evaluate(self.reference, context, frame_manager))
+            of = self.of.get(context, frame)
+            reference = self.reference.get(context, frame)
 
             manager = get_manager(of)
 
@@ -686,26 +682,42 @@ class InsertOp(Opcode):
                 return frame.exception(self.INVALID_ASSIGNMENT())
 
 
-class MapOp(Opcode):
+TOP_CLOSED_FUNCTION_TYPE = ClosedFunctionType(
+    BottomType(), {
+        "*": [ {
+            "out": AnyType()
+        } ]
+    }
+)
+
+BOTTOM_CLOSED_FUNCTION_TYPE = ClosedFunctionType(
+    AnyType(), {
+        "*": [ {
+            "out": BottomType(),
+            "in": AnyType()
+        } ]
+    }
+)
+
+class MapOp(OpcodeOperandMixin, Opcode):
     MISSING_COMPOSITE_TYPE = TypeErrorFactory("{}: missing_composite_type")
-    MISSING_ITER = TypeErrorFactory("{}: missing_iter")
     MISSING_MAPPER_FUNCTION = TypeErrorFactory("{}: missing_mapper_function")
+    MISSING_ITER = TypeErrorFactory("{}: missing_iter")
+
+    composite = Operand(CompositeType({}, "MapOp"), MISSING_COMPOSITE_TYPE)
+    mapper = Operand(TOP_CLOSED_FUNCTION_TYPE, MISSING_MAPPER_FUNCTION)
 
     def __init__(self, data, visitor):
         super(MapOp, self).__init__(data, visitor)
-        self.composite = enrich_opcode(data.composite, visitor)
-        self.mapper = enrich_opcode(data.mapper, visitor)
         self.iter_micro_op = None
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
 
-        composite_type = get_operand_type(
-            self.composite, context, frame_manager, break_types
-        )
+        self.composite.prepare(break_types, context, frame_manager, immediate_context)
 
-        if composite_type and isinstance(composite_type, CompositeType):
-            self.iter_micro_op = composite_type.get_micro_op_type(("iter",))
+        if self.composite.safe:
+            self.iter_micro_op = self.composite.value_type.get_micro_op_type(("iter",))
 
         if self.iter_micro_op:
             immediate_context = immediate_context or {}
@@ -715,21 +727,14 @@ class MapOp(Opcode):
                 self.iter_micro_op.value_type
             ])
 
-        mapper_type = get_operand_type(
-            self.mapper, context, frame_manager, break_types,
-            immediate_context=immediate_context
-        )
+        self.mapper.prepare(break_types, context, frame_manager, immediate_context)
 
-        if not isinstance(composite_type, CompositeType):
-            break_types.add("exception", self.MISSING_COMPOSITE_TYPE.get_type(), opcode=self)
         if not self.iter_micro_op:
             break_types.add("exception", self.MISSING_ITER.get_type(), opcode=self)
-        if not isinstance(mapper_type, ClosedFunctionType):
-            break_types.add("exception", self.MISSING_MAPPER_FUNCTION.get_type(), opcode=self)
 
         # Be more liberal: mapper_type might be a OneOfType that includes ClosedFunctionType
-        if self.iter_micro_op is not None and isinstance(mapper_type, ClosedFunctionType):
-            mapper_break_types = dict(mapper_type.break_types)
+        if self.iter_micro_op is not None and self.mapper.safe:
+            mapper_break_types = dict(self.mapper.value_type.break_types)
 
             # TODO: remove break, you can achieve the same with a wrapped transform op
             break_value_type = mapper_break_types.pop("break", MISSING)
@@ -749,7 +754,7 @@ class MapOp(Opcode):
 
             micro_ops = {}
 
-            keys = [ getattr(micro_op, "key", None) for micro_op in composite_type.get_micro_op_types().values() ]
+            keys = [ getattr(micro_op, "key", None) for micro_op in self.composite.value_type.get_micro_op_types().values() ]
             integer_keys = [ k for k in keys if isinstance(k, int) ]
 
             if every_input_key_is_in_output:
@@ -775,8 +780,8 @@ class MapOp(Opcode):
 
     def jump(self, context, frame_manager, immediate_context=None):
         with frame_manager.get_next_frame(self) as frame:
-            composite = frame.step("composite", lambda: evaluate(self.composite, context, frame_manager))
-            mapper = frame.step("mapper", lambda: evaluate(self.mapper, context, frame_manager))
+            composite = self.composite.get(context, frame)
+            mapper = self.mapper.get(context, frame)
 
             with frame_manager.capture("break") as breaker:
                 results = frame.step("results", lambda: [])
@@ -806,7 +811,9 @@ class LengthOp(OpcodeOperandMixin, Opcode):
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
-        can_run = self.prepare_operands(break_types, context, frame_manager, immediate_context)
+
+        can_run = True
+        can_run = can_run and self.composite.prepare(break_types, context, frame_manager, immediate_context)
 
         if can_run:
             break_types.add("value", IntegerType(), opcode=self)
@@ -830,7 +837,10 @@ def BinaryOp(name, func, argument_type, result_type, number_op=None, cmp_op=None
 
         def get_break_types(self, context, frame_manager, immediate_context=None):
             break_types = BreakTypesFactory(self)
-            can_run = self.prepare_operands(break_types, context, frame_manager, immediate_context)
+
+            can_run = True
+            can_run = can_run and self.lvalue.prepare(break_types, context, frame_manager, immediate_context)
+            can_run = can_run and self.rvalue.prepare(break_types, context, frame_manager, immediate_context)
 
             if can_run:
                 break_types.add("value", result_type)
@@ -849,7 +859,7 @@ def BinaryOp(name, func, argument_type, result_type, number_op=None, cmp_op=None
                 )
 
         def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
-            if self.are_all_operands_safe():
+            if self.lvalue.safe and self.rvalue.safe:
                 if number_op:
                     lvalue_ast = self.lvalue.to_ast(context_name, dependency_builder)
                     rvalue_ast = self.rvalue.to_ast(context_name, dependency_builder)
@@ -1118,40 +1128,43 @@ class ResetOp(Opcode):
             return frame.yield_(result)
 
 
-class CommaOp(Opcode):
+class CommaOp(OpcodeOperandMixin, Opcode):
     def __init__(self, data, visitor):
         super(CommaOp, self).__init__(data, visitor)
-        self.opcodes = [ enrich_opcode(o, visitor) for o in data.opcodes ]
+        self.operands = [
+            BoundOperand(
+                i,
+                self,
+                enrich_opcode(o, visitor),
+                AnyType(),
+                None
+            ) for i, o in enumerate(data.opcodes)
+        ]
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
-        value_type = [{ "out": NoValueType() }]
 
-        for opcode in self.opcodes:
-            value_type, other_break_types = get_expression_break_types(opcode, context, frame_manager)
-            break_types.merge(other_break_types)
-            if value_type is MISSING:
-                break
+        can_run = True
+        for operand in self.operands:
+            can_run = can_run and operand.prepare(break_types, context, frame_manager, immediate_context)
 
-        if value_type is not MISSING:
-            break_types.merge({ "value": value_type })
+        if can_run:
+            break_types.add("value", self.operands[-1].value_type)
 
         return break_types.build()
 
     def jump(self, context, frame_manager, immediate_context=None):
         value = NO_VALUE
         with frame_manager.get_next_frame(self) as frame:
-            for index, opcode in enumerate(self.opcodes):
-                value = frame.step(index, lambda: evaluate(opcode, context, frame_manager))
-                if value is None:
-                    pass
+            for opcode in self.operands:
+                value = opcode.get(context, frame)
 
             return frame.value(value)
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         asts = [
-            e.to_ast(context_name, dependency_builder, will_ignore_return_value if i == len(self.opcodes) - 1 else True)
-            for i, e in enumerate(self.opcodes)
+            e.to_ast(context_name, dependency_builder, will_ignore_return_value if i == len(self.operands) - 1 else True)
+            for i, e in enumerate(self.operands)
         ]
         if will_ignore_return_value:
             asts = unwrap_modules(asts)
@@ -1184,6 +1197,7 @@ class LoopOp(Opcode):
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
+
         _, other_break_types = get_expression_break_types(self.code, context, frame_manager)
         continue_value_type = other_break_types.pop("continue", MISSING)
         end_break = other_break_types.pop("end", MISSING)
@@ -1196,11 +1210,13 @@ class LoopOp(Opcode):
         if end_break is not MISSING:
             # The loop might end gracefully
             if continue_value_type is not MISSING:
-                # The loop will generate continue values before ending
+                # The loop will generate continue values before ending, so we
+                # know it will return a list of elements
                 continue_value_type = flatten_out_types(continue_value_type)
                 break_types.add("value", UniversalListType(continue_value_type))
             else:
-                # The loop will not generate continue values before ending
+                # The loop will not generate continue values before ending,
+                # so it will generate an empty Tuple
                 break_types.add("value", UniversalTupleType([]))
 
         if mode_break_type is not MISSING:
@@ -1212,7 +1228,6 @@ class LoopOp(Opcode):
         return break_types.build()
 
     def jump(self, context, frame_manager, immediate_context=None):
-        code = self.code
         results = []
 
         with frame_manager.get_next_frame(self) as frame:
@@ -1220,7 +1235,7 @@ class LoopOp(Opcode):
                 while True:
                     with frame_manager.capture("end") as ender:
                         with frame_manager.capture("continue") as capturer:
-                            evaluate(code, context, frame_manager)
+                            evaluate(self.code, context, frame_manager)
                         if capturer.value is not MISSING:
                             results.append(capturer.value)
                     if ender.value is not MISSING:
@@ -1253,53 +1268,35 @@ except BreakException as e:
             )
 
 
-class ConditionalOp(Opcode):
+class ConditionalOp(OpcodeOperandMixin, Opcode):
     INVALID_CONDITIONAL = TypeErrorFactory("ConditionalOp: invalid_conditional")
-
-    def __init__(self, data, visitor):
-        super(ConditionalOp, self).__init__(data, visitor)
-        self.condition = enrich_opcode(data.condition, visitor)
-        self.when_true = enrich_opcode(data.when_true, visitor)
-        self.when_false = enrich_opcode(data.when_false, visitor)
+    condition = Operand(BooleanType(), INVALID_CONDITIONAL)
+    when_true = Operand(AnyType(), None)
+    when_false = Operand(AnyType(), None)
 
     def get_break_types(self, context, frame_manager, immediate_context=None):
         break_types = BreakTypesFactory(self)
 
-        condition_type, condition_break_types = get_expression_break_types(self.condition, context, frame_manager)
-        when_true_type, when_true_break_types = get_expression_break_types(self.when_true, context, frame_manager)
-        when_false_type, when_false_break_types = get_expression_break_types(self.when_false, context, frame_manager)
-
-        # TODO throw away one branch if condition_type can't be true or false
-        break_types.merge(condition_break_types)
-        break_types.merge(when_true_break_types)
-        break_types.merge(when_false_break_types)
-
-        if condition_type is not MISSING:
-            condition_type = flatten_out_types(condition_type)
-            if condition_type.is_copyable_from(UnitType(True), DUMMY_REASONER):
-                if when_true_type is not MISSING:
-                    when_true_type = flatten_out_types(when_true_type)
-                    break_types.add("value", when_true_type)
-            if condition_type.is_copyable_from(UnitType(False), DUMMY_REASONER):
-                if when_false_type is not MISSING:
-                    when_false_type = flatten_out_types(when_false_type)
-                    break_types.add("value", when_false_type)
-
-            if not condition_type.is_copyable_from(UnitType(True), DUMMY_REASONER) and not condition_type.is_copyable_from(UnitType(False), DUMMY_REASONER):
-                break_types.add("exception", self.INVALID_CONDITIONAL.get_type())
+        if self.condition.prepare(break_types, context, frame_manager, immediate_context):
+            if self.condition.value_type.is_copyable_from(UnitType(True), DUMMY_REASONER):
+                if self.when_true.prepare(break_types, context, frame_manager, immediate_context):
+                    break_types.add("value", self.when_true.value_type)
+            if self.condition.value_type.is_copyable_from(UnitType(False), DUMMY_REASONER):
+                if self.when_false.prepare(break_types, context, frame_manager, immediate_context):
+                    break_types.add("value", self.when_false.value_type)
 
         return break_types.build()
 
     def jump(self, context, frame_manager, immediate_context=None):
         with frame_manager.get_next_frame(self) as frame:
-            condition = frame.step("condition", lambda: evaluate(self.condition, context, frame_manager))
+            condition = self.condition.get(context, frame)
 
             if condition is True:
-                result = frame.step("true_result", lambda: evaluate(self.when_true, context, frame_manager))
+                result = self.when_true.get(context, frame)
             elif condition is False:
-                result = frame.step("false_result", lambda: evaluate(self.when_false, context, frame_manager))
+                result = self.when_false.get(context, frame)
             else:
-                return frame.exception(self.INVALID_CONDITIONAL())
+                raise FatalError()
 
             return frame.value(result)
 

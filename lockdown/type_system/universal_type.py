@@ -4,20 +4,20 @@ from __future__ import unicode_literals
 from UserDict import DictMixin
 from _abcoll import MutableSequence
 
-from lockdown.executor.ast_utils import compile_statement, compile_expression,\
+from lockdown.executor.ast_utils import compile_statement, compile_expression, \
     compile_module
 from lockdown.type_system.composites import Composite, CompositeType, \
     does_value_fit_through_type, unbind_key, bind_key, \
     can_add_composite_type_with_filter
 from lockdown.type_system.core_types import merge_types, Const, Type, StringType, \
-    IntegerType, OneOfType, AnyType
+    IntegerType, OneOfType, AnyType, BottomType
 from lockdown.type_system.exceptions import FatalError, MissingMicroOp, \
     InvalidAssignmentKey, InvalidAssignmentType, InvalidDereferenceKey, \
     raise_if_safe
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.micro_ops import MicroOpType
 from lockdown.type_system.reasoner import DUMMY_REASONER
-from lockdown.utils.utils import MISSING, default, micro_op_repr, InternalMarker,\
+from lockdown.utils.utils import MISSING, default, micro_op_repr, InternalMarker, \
     raise_from
 
 
@@ -1455,4 +1455,3 @@ NO_SETTER_ERROR_COMPOSITE_TYPE = CompositeType({}, "NoSetterError")
 NO_SETTER_ERROR_TYPE = OneOfType([ AnyType(), NO_SETTER_ERROR_COMPOSITE_TYPE ])
 NO_SETTER_ERROR_COMPOSITE_TYPE.set_micro_op_type(("get-wildcard",), GetterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), NO_SETTER_ERROR_TYPE, True))
 NO_SETTER_ERROR_COMPOSITE_TYPE.set_micro_op_type(("set-wildcard",), SetterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), NO_SETTER_ERROR_TYPE, False, False))
-

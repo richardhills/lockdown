@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-from lockdown.type_system.core_types import Type
+from lockdown.type_system.core_types import Type, BottomType, AnyType
 from lockdown.type_system.exceptions import FatalError
-from lockdown.type_system.universal_type import PythonDict, Universal
+from lockdown.type_system.universal_type import PythonDict, Universal, \
+    PythonList
 
 
 def enrich_break_type(data):
@@ -26,7 +27,7 @@ def are_break_types_a_subset(self, other, reasoner):
         raise FatalError
     for mode, other_break_types_for_mode in other.break_types.items():
         for other_break_type_for_mode in other_break_types_for_mode:
-            our_break_types_for_mode = self.break_types.get(mode, None)
+            our_break_types_for_mode = self.break_types.get(mode, self.break_types.get("*", None))
             if our_break_types_for_mode is None:
                 return False
 
@@ -86,3 +87,4 @@ class ClosedFunctionType(Type):
 
     def __repr__(self):
         return "ClosedFunctionType<{} => {}>".format(self.argument_type, self.break_types)
+

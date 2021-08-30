@@ -38,9 +38,12 @@ def get_manager(obj, trigger=None):
     if isinstance(obj, Type):
         return None
 
-    from lockdown.executor.function import LockdownFunction, OpenFunction
-    if isinstance(obj, (LockdownFunction, OpenFunction)):
-        return None
+    try:
+        from lockdown.executor.function import LockdownFunction, OpenFunction
+        if isinstance(obj, (LockdownFunction, OpenFunction)):
+            return None
+    except ImportError:
+        pass
 
     from lockdown.executor.opcodes import Opcode
     if isinstance(obj, Opcode):
