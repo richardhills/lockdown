@@ -61,7 +61,7 @@ def sort_dict_output(key_value):
     if key_value[0] == "opcode": return -1
     return 0
 
-def print_code(ast):
+def dump_code(ast):
     class RDHObjectEncoder(JSONEncoder):
         def default(self, o):
             from lockdown.type_system.universal_type import PythonList, Universal
@@ -69,11 +69,14 @@ def print_code(ast):
                 return o._to_list()
             if isinstance(o, Universal):
                 items = o._to_dict().items()
-                items = [ i for i in items if i[0] not in ("column", "line") ]
+                items = [ i for i in items if i[0] not in ("start_column", "start_line", "end_column", "end_line") ]
                 items = sorted(items, key=sort_dict_output)
                 return OrderedDict(items)
             return o
-    print(RDHObjectEncoder().encode(ast))
+    return RDHObjectEncoder().encode(ast)
+
+def print_code(ast):
+    print(dump_code(ast))
 
 @contextmanager
 def profile(output_file):
@@ -186,6 +189,8 @@ def environment(
         yield new_environment
     finally:
         environment_stack.pop()
+        if base:
+            environment_stack = None
 
 class WeakIdentityKeyDictionary(MutableMapping):
     def __init__(self, dict={}):

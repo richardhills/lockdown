@@ -480,8 +480,6 @@ def static_op(expression, **kwargs):
 
 
 def invoke_op(function_expression, argument_expression=None, **kwargs):
-    if "line" not in kwargs:
-        pass
     if argument_expression is None:
         argument_expression = nop()
     check_is_opcode(function_expression)

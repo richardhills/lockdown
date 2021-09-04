@@ -448,6 +448,12 @@ class OpenFunction(object):
 
         return ClosedFunction(self, outer_context)
 
+    def get_line_and_column(self):
+        return (
+            (getattr(self.data, "start_line", None), getattr(self.data, "start_column", None)),
+            (getattr(self.data, "end_line", None), getattr(self.data, "end_column", None))
+        )
+
     def to_ast(self, dependency_builder):
         if is_restartable(self):
             return None
@@ -595,6 +601,9 @@ class ClosedFunction(LockdownFunction):
     @property
     def break_types(self):
         return self.open_function.break_types
+
+    def get_line_and_column(self):
+        return self.open_function.get_line_and_column()
 
     def transpile(self):
         open_function_transpile = self.open_function.transpile()

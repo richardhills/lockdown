@@ -881,19 +881,23 @@ class CodeBlockBuilder(object):
 
 def get_debug_info(ctx):
     return {
-        "column": ctx.start.column,
-        "line": ctx.start.line
+        "start_column": ctx.start.column,
+        "start_line": ctx.start.line,
+        "end_column": ctx.stop.column,
+        "end_line": ctx.stop.line
     }
 
 
 class ParseError(Exception):
-    pass
-
+    def __init__(self, msg, line, column):
+        self.msg = msg
+        self.line = line
+        self.column = column
 
 class AlwaysFailErrorListener(ConsoleErrorListener):
     def syntaxError(self, recognizer, offendingSymbol, line, column, msg, e):
         super(AlwaysFailErrorListener, self).syntaxError(recognizer, offendingSymbol, line, column, msg, e)
-        raise ParseError()
+        raise ParseError(msg, line, column)
 
 
 def parse(code, debug=False, pre_chain_function=None, post_chain_function=None):
