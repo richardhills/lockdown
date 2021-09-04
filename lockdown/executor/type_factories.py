@@ -60,10 +60,9 @@ def build_object_type(data):
         if type._contains("const") and type._get("const"):
             properties[name] = Const(properties[name])
 
-    wildcard_type = data._contains("wildcard_type")
-
-    if wildcard_type:
-        wildcard_type = enrich_type(wildcard_type)
+    wildcard_type = None
+    if data._contains("wildcard_type"):
+        wildcard_type = enrich_type(data._get("wildcard_type"))
 
     return UniversalObjectType(
         properties,

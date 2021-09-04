@@ -15,14 +15,14 @@ from log import logger
 import readline
 
 def read_input():
-    value = raw_input(">> ")
+    value = input(">> ")
 
     if value == "--":
         multi_line_value = []
         value = None
 
         while True:
-            value = raw_input()
+            value = input()
             if value != "--":
                 multi_line_value.append(value)
             else:
@@ -75,9 +75,8 @@ def repl():
                 )
 
             while True:
+                raw_code = read_input()
                 try:
-                    raw_code = read_input()
-
                     code = build_executor(raw_code)
 
                     continuation = previous_capturer.value.continuation
@@ -86,6 +85,7 @@ def repl():
                         new_capturer.attempt_capture_or_raise(*continuation.invoke(code, frame_manager))
 
                     if new_capturer.caught_break_mode == "read":
+                        #print(new_capturer.value.value)
                         previous_capturer = new_capturer
                     else:
                         print("command broke out by {}: {}".format(

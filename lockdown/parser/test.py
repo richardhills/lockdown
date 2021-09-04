@@ -834,6 +834,17 @@ class TestParserMisc(TestCase):
         with self.assertRaises(PreparationException):
             bootstrap_function(code)
 
+    def test_dynamic_assignment(self):
+        code = parse("""
+            function() {
+                Object { bar: int } foo = { bar: 42 };
+                foo.bam = 54;
+                return foo.bam;
+            }
+        """)
+        _, result = bootstrap_function(code, check_safe_exit=False)
+        self.assertEqual(result.value, 54)
+
 
 class TestSpeed(TestCase):
     def test_loops(self):

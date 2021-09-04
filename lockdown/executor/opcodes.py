@@ -528,13 +528,14 @@ class AssignmentOp(Opcode):
 
             try:
                 tag, micro_op = self.binder.get([ reference, None ])
-                direct = tag[0] != "set-wildcard"
 
                 if not micro_op:
                     return frame.exception(self.INVALID_LVALUE())
 
                 if not is_type_bindable_to_value(rvalue, micro_op.value_type):
                     return frame.exception(self.INVALID_RVALUE())
+
+                direct = tag[0] != "set-wildcard"
 
                 if direct:
                     micro_op.invoke(manager, rvalue, shortcut_checks=True)

@@ -646,7 +646,7 @@ class RDHLang5Visitor(langVisitor):
         for pair in ctx.objectTypePropertyPair():
             name, type = self.visit(pair)
             result[name] = type
-        return object_type(result)
+        return object_type(result, any_type())
 
     def visitObjectTypePropertyPair(self, ctx):
         return [ ctx.SYMBOL().getText(), self.visit(ctx.expression()) ]
