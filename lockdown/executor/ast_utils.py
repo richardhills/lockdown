@@ -259,7 +259,7 @@ class ASTInliner(ast.NodeTransformer):
                 return self.replacement_ast
             else:
                 new_function = compile_statement("""
-def stmt_wrapper_{ast_id}({context_name}, _frame_manager):
+def stmt_wrapper_{ast_id}({context_name}, _frame_manager, _hooks):
     {ast}
     return ("value", NoValue, None, None)
                     """,
@@ -268,7 +268,7 @@ def stmt_wrapper_{ast_id}({context_name}, _frame_manager):
                     ast=self.replacement_ast
                 )
                 return compile_expression(
-                    "{new_function}({context_name}, _frame_manager)",
+                    "{new_function}({context_name}, _frame_manager, _hooks)",
                     self.context_name, self.dependency_builder,
                     new_function=new_function
                 )

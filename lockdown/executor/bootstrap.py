@@ -67,7 +67,7 @@ def get_default_global_context():
                         )
                     )
                 ),
-                NO_VALUE, FrameManager()
+                NO_VALUE, FrameManager(), None
             ).close(NO_VALUE),
             "list": prepare(
                 function_lit(
@@ -109,7 +109,7 @@ def get_default_global_context():
                         )
                     )
                 ),
-                NO_VALUE, FrameManager()
+                NO_VALUE, FrameManager(), None
             ).close(NO_VALUE),
             "length": prepare(
                 function_lit(
@@ -119,7 +119,7 @@ def get_default_global_context():
                         dereference("argument.0")
                     )
                 ),
-                NO_VALUE, FrameManager()
+                NO_VALUE, FrameManager(), None
             ).close(NO_VALUE),
             "keys": prepare(
                 function_lit(
@@ -135,7 +135,7 @@ def get_default_global_context():
                         )
                     )
                 ),
-                NO_VALUE, FrameManager()
+                NO_VALUE, FrameManager(), None
             ).close(NO_VALUE),
             "valuesG": prepare(
                 function_lit(
@@ -156,7 +156,7 @@ def get_default_global_context():
                         )
                     ))), context_op())
                 ),
-                NO_VALUE, FrameManager()
+                NO_VALUE, FrameManager(), None
             ).close(NO_VALUE),
             "values": prepare(
                 function_lit(
@@ -174,7 +174,7 @@ def get_default_global_context():
                         )
                     )
                 ),
-                NO_VALUE, FrameManager()
+                NO_VALUE, FrameManager(), None
             ).close(NO_VALUE),
             "max": prepare(
                 function_lit(
@@ -207,7 +207,7 @@ def get_default_global_context():
                         dereference("local")
                     )
                 ),
-                NO_VALUE, FrameManager()
+                NO_VALUE, FrameManager(), None
             ).close(NO_VALUE),
             "sum": prepare(
                 function_lit(
@@ -235,7 +235,7 @@ def get_default_global_context():
                         dereference("local")
                     )
                 ),
-                NO_VALUE, FrameManager()
+                NO_VALUE, FrameManager(), None
             ).close(NO_VALUE),
         }, debug_reason="default-global-context")
     }, bind=DEFAULT_READONLY_COMPOSITE_TYPE, debug_reason="default-global-context")
@@ -326,6 +326,7 @@ def bootstrap_function(data, argument=None, outer_context=None, check_safe_exit=
             data,
             outer_context,
             frame_manager,
+            None,
             immediate_context={
                 "suggested_outer_type": get_context_type(outer_context)
             }
@@ -343,6 +344,6 @@ def bootstrap_function(data, argument=None, outer_context=None, check_safe_exit=
         if get_environment().transpile:
             closed_function = closed_function.transpile()
 
-        capture_result.attempt_capture_or_raise(*closed_function.invoke(argument, frame_manager))
+        capture_result.attempt_capture_or_raise(*closed_function.invoke(argument, frame_manager, None))
 
     return closed_function, capture_result

@@ -34,31 +34,42 @@ def validate(ls, params):
 
             outer_context = get_default_global_context()
 
-            open_function = prepare(
+            hooks = PrepareHooks()
+
+            prepare(
                 code,
                 outer_context,
                 FrameManager(),
+                hooks,
                 immediate_context={
                     "suggested_outer_type": get_context_type(outer_context)
                 }
             )
 
-            closed_function = open_function.close(outer_context)
-            (start, end) = closed_function.get_line_and_column()
+            diagnostics = []
 
-            message = str(closed_function.break_types)
-            severity = DiagnosticSeverity.Warning if "exception" in closed_function.break_types else DiagnosticSeverity.Information
+            for function in hooks.functions:
+                (start, end) = function.get_line_and_column()
 
-            ls.publish_diagnostics(text_doc.uri, [
-                Diagnostic(
-                    range=Range(
-                        start=Position(line=start[0] - 1, character=start[1]),
-                        end=Position(line=end[0] - 1, character=end[1])
-                    ),
-                    message=message,
-                    severity=severity
+                if start[0] is None:
+                    continue
+
+                message = str(function.break_types)
+                severity = DiagnosticSeverity.Warning if "exception" in function.break_types else DiagnosticSeverity.Information
+
+                diagnostics.append(
+                    Diagnostic(
+                        range=Range(
+                            start=Position(line=start[0] - 1, character=start[1]),
+                            end=Position(line=start[0] - 1, character=start[1]),
+#                            end=Position(line=end[0] - 1, character=end[1])
+                        ),
+                        message=message,
+                        severity=severity
+                    )
                 )
-            ])
+
+            ls.publish_diagnostics(text_doc.uri, diagnostics)
         except ParseError as parse_error:
             ls.publish_diagnostics(text_doc.uri, [
                 Diagnostic(
@@ -92,6 +103,13 @@ def validate(ls, params):
                     severity=DiagnosticSeverity.Error
                 )
             ])
+
+class PrepareHooks(object):
+    def __init__(self):
+        self.functions = []
+
+    def register_new_function(self, open_function):
+        self.functions.append(open_function)
 
 @server.feature(COMPLETION, CompletionOptions(trigger_characters=['@']))
 def completions(params: CompletionParams):

@@ -69,9 +69,9 @@ class BoundOperand(object):
     def to_ast(self, *args, **kwargs):
         return self.expression.to_ast(*args, **kwargs)
 
-    def prepare(self, break_types, context, frame_manager, immediate_context):
+    def prepare(self, break_types, context, frame_manager, hooks, immediate_context):
         self.value_type, other_break_types = get_expression_break_types(
-            self.expression, context, frame_manager, immediate_context=immediate_context
+            self.expression, context, frame_manager, hooks, immediate_context=immediate_context
         )
         break_types.merge(other_break_types)
 
@@ -86,8 +86,8 @@ class BoundOperand(object):
 
         return False
 
-    def get(self, context, frame):
-        value = frame.step(self.name, lambda: evaluate(self.expression, context, frame.manager))
+    def get(self, context, frame, hooks):
+        value = frame.step(self.name, lambda: evaluate(self.expression, context, frame.manager, hooks))
 
         if not is_type_bindable_to_value(value, self.required_type):
             is_type_bindable_to_value(value, self.required_type)

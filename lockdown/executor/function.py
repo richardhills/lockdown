@@ -49,7 +49,7 @@ def prepare_piece_of_context(declared_type, suggested_type):
     return final_type
 
 
-def prepare(data, outer_context, frame_manager, immediate_context=None):
+def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
     if not isinstance(data, Composite):
         raise FatalError()
     get_manager(data).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
@@ -68,7 +68,7 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
             data.static,
             combine(type_conditional_converter, UnboundDereferenceBinder(context))
         ),
-        context, frame_manager
+        context, frame_manager, hooks
     )
 
     get_manager(static).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
@@ -130,7 +130,8 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
     actual_local_type, local_other_break_types = get_expression_break_types(
         local_initializer,
         context,
-        frame_manager
+        frame_manager,
+        hooks
     )
 
     get_manager(context).remove_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
@@ -188,7 +189,7 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
         combine(type_conditional_converter, UnboundDereferenceBinder(context))
     )
 
-    code_break_types = code.get_break_types(context, frame_manager)
+    code_break_types = code.get_break_types(context, frame_manager, hooks)
 
     get_manager(context).remove_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
 
@@ -229,8 +230,12 @@ def prepare(data, outer_context, frame_manager, immediate_context=None):
                     mode, actual_break_type, declared_break_types, local_other_break_types, code_break_types
                 ))
 
-    return OpenFunction(data, code, outer_context, static, argument_type, outer_type, local_type, local_initializer, final_declared_break_types.build())
+    new_function = OpenFunction(data, code, outer_context, static, argument_type, outer_type, local_type, local_initializer, final_declared_break_types.build())
 
+    if hooks:
+        hooks.register_new_function(new_function)
+
+    return new_function
 
 def get_debug_info_from_opcode(opcode):
     return {
@@ -478,7 +483,7 @@ class OpenFunction(object):
         return compile_statement("""
 class {open_function_id}(object):
     @classmethod
-    def invoke(cls, {context_name}_argument, {context_name}_outer_context, _frame_manager):
+    def invoke(cls, {context_name}_argument, {context_name}_outer_context, _frame_manager, _hooks):
         {context_name} = Universal(True, initial_wrapped={{
             "prepare": {prepare_context},
             "outer": {context_name}_outer_context,
@@ -504,8 +509,8 @@ class {open_function_id}(object):
             self.open_function = open_function
             self.outer_context = outer_context
 
-        def invoke(self, argument, frame_manager):
-            return self.open_function.invoke(argument, self.outer_context, frame_manager)
+        def invoke(self, argument, frame_manager, hooks):
+            return self.open_function.invoke(argument, self.outer_context, frame_manager, hooks)
 
     @classmethod
     def close(cls, outer_context):
@@ -610,7 +615,7 @@ class ClosedFunction(LockdownFunction):
 
         return open_function_transpile.close(self.outer_context)
 
-    def invoke(self, argument, frame_manager):
+    def invoke(self, argument, frame_manager, hooks):
         if get_environment().opcode_bindings:
             bindable_reasoner = Reasoner()
             bindable = is_type_bindable_to_value(argument, self.open_function.argument_type, bindable_reasoner)
@@ -636,7 +641,7 @@ class ClosedFunction(LockdownFunction):
                 bind=get_environment().rtti
             ):
                 get_manager(new_context)._context_type = self.open_function.local_initialization_context_type
-                local = frame.step("local", lambda: evaluate(self.open_function.local_initializer, new_context, frame_manager))
+                local = frame.step("local", lambda: evaluate(self.open_function.local_initializer, new_context, frame_manager, hooks))
 
             if get_environment().opcode_bindings and not is_type_bindable_to_value(local, self.open_function.local_type):
                 raise FatalError()
@@ -662,7 +667,7 @@ class ClosedFunction(LockdownFunction):
                     reasoner=code_context_binding_reasoner
                 ):
                     get_manager(new_context)._context_type = self.open_function.execution_context_type
-                    result = frame.step("code", lambda: evaluate(self.open_function.code, new_context, frame_manager))
+                    result = frame.step("code", lambda: evaluate(self.open_function.code, new_context, frame_manager, hooks))
                     return frame.value(result)
             except CompositeTypeIncompatibleWithTarget:
                 raise FatalError(code_context_binding_reasoner.to_message())
@@ -691,7 +696,7 @@ class Continuation(LockdownFunction):
     def get_type(self):
         return ClosedFunctionType(self.restart_type, self.break_types)
 
-    def invoke(self, restart_value, frame_manager):
+    def invoke(self, restart_value, frame_manager, hooks):
         if not self.restart_type.is_copyable_from(get_type_of_value(restart_value), DUMMY_REASONER):
             raise FatalError()
         self.restarted = True

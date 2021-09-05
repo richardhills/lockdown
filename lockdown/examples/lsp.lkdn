@@ -1,13 +1,22 @@
-function() {
-    var countDivisors = function(int number) {
-        int count = 1;
-        for(var test from range(1, number)) {
-            if(number % test == 0) {
-                count = count + 1;
-            };
-        };
-        return count;
+function() => int {
+    Dictionary<int : int> cachedResults = { 1: 1 };
+
+    Function<int => int> testNumber = function(int number) => int {
+        return 0;
     };
-    var foo = countDivisors(40);
-    return foo;
+
+    testNumber = function(int number) => int {
+        var cachedResult = cachedResults[number]?;
+
+        if(cachedResult is int) {
+            return cachedResult;
+        };
+
+        int calcedResult = testNumber(number % 2 == 0 ? number / 2 : number * 3 + 1) + 1;
+        cachedResults[number] = calcedResult;
+        return calcedResult;
+    };
+
+    Tuple<int...> results = for(var test in <list(range(1, 10))>) { continue testNumber(test); };
+    return max(results);
 }

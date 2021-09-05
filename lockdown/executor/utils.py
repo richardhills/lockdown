@@ -10,11 +10,11 @@ from lockdown.utils.utils import get_environment, MISSING
 from lockdown.type_system.reasoner import DUMMY_REASONER
 
 
-def evaluate(expression, context, frame_manager, immediate_context=None):
+def evaluate(expression, context, frame_manager, hooks, immediate_context=None):
     if get_environment().return_value_optimization:
         # Optimized version that avoids creating a Capturer object, but only works for values
         try:
-            mode, value, opcode, restart_type = expression.jump(context, frame_manager, immediate_context=immediate_context)
+            mode, value, opcode, restart_type = expression.jump(context, frame_manager, hooks, immediate_context=immediate_context)
         except BreakException as b:
             if b.mode == "value":
                 return b.value
@@ -24,12 +24,12 @@ def evaluate(expression, context, frame_manager, immediate_context=None):
         raise BreakException(mode, value, opcode, restart_type)
     else:
         with frame_manager.capture("value") as result:
-            result.attempt_capture_or_raise(*expression.jump(context, frame_manager, immediate_context=immediate_context))
+            result.attempt_capture_or_raise(*expression.jump(context, frame_manager, hooks, immediate_context=immediate_context))
         return result.value
 
 
-def get_expression_break_types(expression, context, frame_manager, immediate_context=None):
-    other_break_types = dict(expression.get_break_types(context, frame_manager, immediate_context))
+def get_expression_break_types(expression, context, frame_manager, hooks, immediate_context=None):
+    other_break_types = dict(expression.get_break_types(context, frame_manager, hooks, immediate_context))
 
     if get_environment().validate_flow_control:
         if not isinstance(other_break_types, dict):
@@ -86,9 +86,9 @@ class TypeErrorFactory(object):
         }
         return UniversalObjectType(properties, wildcard_type=AnyType(), name="TypeError")
 
-def get_operand_type(expression, context, frame_manager, break_types, immediate_context=None):
+def get_operand_type(expression, context, frame_manager, hooks, break_types, immediate_context=None):
     value_type, other_break_types = get_expression_break_types(
-        expression, context, frame_manager, immediate_context=immediate_context
+        expression, context, frame_manager, hooks, immediate_context=immediate_context
     )
     break_types.merge(other_break_types)
     if value_type is not MISSING:

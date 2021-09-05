@@ -162,11 +162,11 @@ class TestComma(TestCase):
                     shift_op(literal_op("second"), int_type())
                 ))
             ),
-            context, frame_manager
+            context, frame_manager, None
         ).close(None)
 
         def first():
-            func.invoke(NO_VALUE, frame_manager)
+            func.invoke(NO_VALUE, frame_manager, None)
 
         with frame_manager.capture("yield") as first_yielder:
             first()
@@ -174,7 +174,7 @@ class TestComma(TestCase):
 
         def second():
             first_yield_restart_continuation = first_yielder.create_continuation(first, func.get_type().break_types)
-            first_yield_restart_continuation.invoke(4, frame_manager)
+            first_yield_restart_continuation.invoke(4, frame_manager, None)
 
         with frame_manager.capture("yield") as second_yielder:
             second()
@@ -183,7 +183,7 @@ class TestComma(TestCase):
 
         def third():
             second_yield_restart_continuation = second_yielder.create_continuation(second, func.get_type().break_types)
-            second_yield_restart_continuation.invoke(42, frame_manager)
+            second_yield_restart_continuation.invoke(42, frame_manager, None)
 
         with frame_manager.capture("return") as returner:
             third()
@@ -364,11 +364,11 @@ class TestLocals(TestCase):
                 int_type(), shift_op(literal_op("hello"), int_type()),
                 return_op(dereference_op(context_op(), literal_op("local"), True))
             ),
-            context, frame_manager
+            context, frame_manager, None
         ).close(None)
 
         def start():
-            func.invoke(NO_VALUE, frame_manager)
+            func.invoke(NO_VALUE, frame_manager, None)
 
         with frame_manager.capture("yield") as yielder:
             start()
@@ -377,7 +377,7 @@ class TestLocals(TestCase):
 
         def restart():
             yielder_restart_continuation = yielder.create_continuation(start, func.get_type().break_types)
-            yielder_restart_continuation.invoke(32, frame_manager)
+            yielder_restart_continuation.invoke(32, frame_manager, None)
 
         with frame_manager.capture("return") as returner:
             restart()
@@ -394,11 +394,11 @@ class TestLocals(TestCase):
                 int_type(), shift_op(literal_op("first"), int_type()),
                 return_op(addition_op(dereference_op(context_op(), literal_op("local"), True), shift_op(literal_op("second"), int_type())))
             ),
-            context, frame_manager
+            context, frame_manager, None
         ).close(None)
 
         def first():
-            func.invoke(NO_VALUE, frame_manager)
+            func.invoke(NO_VALUE, frame_manager, None)
 
         with frame_manager.capture("yield") as first_yielder:
             first()
@@ -406,7 +406,7 @@ class TestLocals(TestCase):
 
         def second():
             first_restart_continuation = first_yielder.create_continuation(first, func.get_type().break_types)
-            first_restart_continuation.invoke(40, frame_manager)
+            first_restart_continuation.invoke(40, frame_manager, None)
 
         with frame_manager.capture("yield") as second_yielder:
             second()
@@ -414,7 +414,7 @@ class TestLocals(TestCase):
 
         with frame_manager.capture("return") as returner:
             second_restart_continuation = second_yielder.create_continuation(first, func.get_type().break_types)
-            second_restart_continuation.invoke(2, frame_manager)
+            second_restart_continuation.invoke(2, frame_manager, None)
 
         self.assertEqual(returner.value, 42)
 
@@ -953,18 +953,18 @@ class TestContinuations(TestCase):
                 no_value_type(), build_break_types(any_type(), yield_types={ "out": any_type(), "in": int_type() }),
                 return_op(addition_op(shift_op(literal_op("hello"), int_type()), literal_op(40)))
             ),
-            context, frame_manager
+            context, frame_manager, None
         ).close(None)
 
         def first():
-            func.invoke(NO_VALUE, frame_manager)
+            func.invoke(NO_VALUE, frame_manager, None)
         with frame_manager.capture("yield") as yielder:
             first()
 
         self.assertEqual(yielder.value, "hello")
 
         def second():
-            yielder.create_continuation(first, {}).invoke(2, frame_manager)
+            yielder.create_continuation(first, {}).invoke(2, frame_manager, None)
         with frame_manager.capture("return") as returner:
             second()
 
@@ -979,11 +979,11 @@ class TestContinuations(TestCase):
                 no_value_type(), build_break_types(int_type(), yield_types={ "out": any_type(), "in": int_type() }),
                 return_op(addition_op(shift_op(literal_op("first"), int_type()), shift_op(literal_op("second"), int_type())))
             ),
-            context, frame_manager
+            context, frame_manager, None
         ).close(None)
 
         def first():
-            func.invoke(NO_VALUE, frame_manager)
+            func.invoke(NO_VALUE, frame_manager, None)
         with frame_manager.capture("yield") as first_yielder:
             first()
 
@@ -991,7 +991,7 @@ class TestContinuations(TestCase):
 
         def second():
             first_yielder_continuation = first_yielder.create_continuation(first, {})
-            first_yielder_continuation.invoke(39, frame_manager)
+            first_yielder_continuation.invoke(39, frame_manager, None)
         with frame_manager.capture("yield") as second_yielder:
             second()
 
@@ -999,7 +999,7 @@ class TestContinuations(TestCase):
 
         def third():
             second_yielder_continuation = second_yielder.create_continuation(second, {})
-            second_yielder_continuation.invoke(3, frame_manager)
+            second_yielder_continuation.invoke(3, frame_manager, None)
 
         with frame_manager.capture() as returner:
             third()
@@ -1015,23 +1015,23 @@ class TestContinuations(TestCase):
                 no_value_type(), build_break_types(int_type(), yield_types={ "out": any_type(), "in": int_type() }),
                 return_op(addition_op(shift_op(literal_op("first"), int_type()), shift_op(literal_op("second"), int_type())))
             ),
-            context, frame_manager
+            context, frame_manager, None
         ).close(None)
 
         with frame_manager.capture("return") as return_capturer:
             def first():
-                func.invoke(NO_VALUE, frame_manager)
+                func.invoke(NO_VALUE, frame_manager, None)
             with frame_manager.capture("yield") as first_yielder:
                 first()
             self.assertEqual(first_yielder.value, "first")
 
             def second():
-                first_yielder.create_continuation(first, {}).invoke(39, frame_manager)
+                first_yielder.create_continuation(first, {}).invoke(39, frame_manager, None)
             with frame_manager.capture("yield") as second_yielder:
                 second()
             self.assertEqual(second_yielder.value, "second")
 
-            second_yielder.create_continuation(second, {}).invoke(3, frame_manager)
+            second_yielder.create_continuation(second, {}).invoke(3, frame_manager, None)
 
         self.assertEqual(return_capturer.value, 42)
 
@@ -1045,21 +1045,21 @@ class TestContinuations(TestCase):
                 build_break_types(return_type=any_type(), yield_types={ "out": any_type(), "in": int_type() }),
                 return_op(addition_op(shift_op(literal_op(30), int_type()), shift_op(literal_op(10), int_type())))
             ),
-            context, frame_manager
+            context, frame_manager, None
         ).close(None)
 
         def first():
-            func.invoke(NO_VALUE, frame_manager)
+            func.invoke(NO_VALUE, frame_manager, None)
         with frame_manager.capture("yield") as first_yielder:
             first()
 
         def second():
-            first_yielder.create_continuation(first, {}).invoke(first_yielder.value + 1, frame_manager)
+            first_yielder.create_continuation(first, {}).invoke(first_yielder.value + 1, frame_manager, None)
         with frame_manager.capture("yield") as second_yielder:
             second()
 
         def third():
-            second_yielder.create_continuation(second, {}).invoke(second_yielder.value + 1, frame_manager)
+            second_yielder.create_continuation(second, {}).invoke(second_yielder.value + 1, frame_manager, None)
         with frame_manager.capture("return") as returner:
             third()
 
