@@ -1,9 +1,13 @@
 function() {
-	Function<any => int> foobar = function(any i) => int {
-	    if(i is int) {
-	        return i;
-	    };
-	    return 0;
-	};
-	return foobar("hello");
+    var countDivisors = function(int number) {
+        int count = 1;
+        for(var test from range(1, number)) {
+            if(number % test == 0) {
+                count = count + 1;
+            };
+        };
+        return count;
+    };
+    var foo = countDivisors(40);
+    return foo;
 }

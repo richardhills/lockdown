@@ -17,6 +17,7 @@ from lockdown.executor.flow_control import FrameManager
 from lockdown.executor.function import prepare
 from lockdown.executor.opcodes import get_context_type
 from lockdown.parser.parser import parse, ParseError
+from lockdown.type_system.exceptions import FatalError
 from lockdown.utils.utils import environment, dump_code
 
 
@@ -62,10 +63,21 @@ def validate(ls, params):
             ls.publish_diagnostics(text_doc.uri, [
                 Diagnostic(
                     range=Range(
-                        start=Position(line=parse_error.line - 1, character=parse_error.column),
-                        end=Position(line=parse_error.line - 1, character=parse_error.column)
+                        start=Position(line=parse_error.line - 1, character=parse_error.column - 1),
+                        end=Position(line=parse_error.line - 1, character=parse_error.column - 1)
                     ),
                     message=parse_error.msg,
+                    severity=DiagnosticSeverity.Error
+                )
+            ])
+        except FatalError as e:
+            ls.publish_diagnostics(text_doc.uri, [
+                Diagnostic(
+                    range=Range(
+                        start=Position(line=0, character=0),
+                        end=Position(line=0, character=0)
+                    ),
+                    message="FatalError:{}".format(str(e.args)),
                     severity=DiagnosticSeverity.Error
                 )
             ])
