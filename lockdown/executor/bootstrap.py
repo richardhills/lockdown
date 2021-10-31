@@ -14,11 +14,12 @@ from lockdown.executor.raw_code_factories import function_lit, list_type, \
     invoke_op, local_function, transform, reset_op, nop, map_op, \
     object_template_op, function_type, length_op, composite_type, \
     build_break_types, any_type, bottom_type, iter_micro_op, close_op, \
-    prepare_op, context_op
+    prepare_op, context_op, bool_type
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.universal_type import PythonObject, \
     DEFAULT_READONLY_COMPOSITE_TYPE, IterMicroOpType
 from lockdown.utils.utils import NO_VALUE, print_code, MISSING, get_environment
+from lockdown.type_system.core_types import NoValueType
 
 
 class ObjectDictWrapper(object):
@@ -63,6 +64,75 @@ def get_default_global_context():
                                     assignment_op(dereference("outer"), literal_op("local"), addition_op(dereference("outer.local"), literal_op(1)))
                                 ),
                                 transform_op("break")
+                            )
+                        )
+                    )
+                ),
+                NO_VALUE, FrameManager(), None
+            ).close(NO_VALUE),
+            "irange": prepare(
+                function_lit(
+                    no_value_type(),
+                    infer_all(), int_type(), literal_op(0),
+                    prepared_function(
+                        loop_op(
+                            comma_op(
+                                shift_op(dereference("outer.local"), no_value_type()),
+                                assignment_op(dereference("outer"), literal_op("local"), addition_op(dereference("outer.local"), literal_op(1)))
+                            ),
+                        )
+                    )
+                ),
+                NO_VALUE, FrameManager(), None
+            ).close(NO_VALUE),
+            "find": prepare(
+                function_lit(
+                    list_type([
+                        function_type(no_value_type(), {
+                            "yield": list_template_op([ object_template_op({
+                                "in": no_value_type(),
+                                "out": int_type()
+                            })]),
+                            "value": list_template_op([ object_template_op({
+                                "out": no_value_type()
+                            })]),
+                        }),
+                        function_type(list_type([ int_type() ], None), {
+                            "value": list_template_op([ object_template_op({
+                                "out": bool_type()
+                            })])
+                        })
+                    ], None),
+                    infer_all(),
+                    inferred_type(),
+                    dereference("argument.0"),
+                    loop_op(
+                        invoke_op(
+                            local_function(
+                                transform(
+                                    ("yield", "value"),
+                                    ("value", "end"),
+                                    reset_op(dereference("outer.local"), nop())
+                                ),
+                                comma_op(
+                                    assignment_op(
+                                        dereference("outer"),
+                                        literal_op("local"),
+                                        dereference("local.continuation")
+                                    ),
+                                    condition_op(
+                                        invoke_op(
+                                            dereference("outer.argument.1"),
+                                            list_template_op([ dereference("local.value") ])
+                                        ),
+                                        transform_op(
+                                            "value",
+                                            "break",
+                                            dereference("local.value")
+                                        ),
+                                        nop()
+                                    )
+                                )
                             )
                         )
                     )
@@ -250,19 +320,19 @@ def format_unhandled_break_type(break_type, raw_code):
     if not opcode:
         return str(break_type) + " (break_type has no from_opcode)"
 
-    line, column = opcode.get_line_and_column()
+    start, _ = opcode.get_start_and_end()
 
-    if line is None or column is None:
+    if start is None:
         return str(break_type) + " (no line and column)"
 
     lines = raw_code.split("\n")
 
-    padding = " " * column
+    padding = " " * start["column"]
 
     return """
 {}
 {}^
-{}| {}""".format(lines[line - 1], padding, padding, str(out_break_type))
+{}| {}""".format(lines[start["line"] - 1], padding, padding, str(out_break_type))
 
 def raise_unhandled_break_types(open_function, data):
     function_break_types = open_function.get_type().break_types
@@ -292,19 +362,19 @@ def format_unhandled_break(mode, value, caused_by, opcode, data):
     if not opcode:
         return break_str + " (break_exception has no from_opcode)"
 
-    line, column = opcode.get_line_and_column()
+    start, _ = opcode.get_start_and_end()
 
-    if line is None or column is None:
+    if start:
         return break_str + " (no line and column)"
 
     lines = raw_code.split("\n")
 
-    padding = " " * column
+    padding = " " * start["column"]
 
     return """
 {}
 {}^
-{}| {}""".format(lines[line - 1], padding, padding, break_str)
+{}| {}""".format(lines[start["line"] - 1], padding, padding, break_str)
 
 def raise_unhandled_break(mode, value, caused_by, opcode, data):
     raise BootstrapException(format_unhandled_break(mode, value, caused_by, opcode, data))

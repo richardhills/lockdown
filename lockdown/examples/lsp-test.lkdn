@@ -1,0 +1,7 @@
+function() {
+    int foo = 1;
+    foo = foo + 30;
+    foo = foo * 2;
+    foo = foo - 20;
+    return foo;
+}

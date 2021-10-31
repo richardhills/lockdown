@@ -76,11 +76,8 @@ class Opcode(object):
         """
         raise NotImplementedError()
 
-    def get_line_and_column(self):
-        return (
-            (getattr(self.data, "start_line", None), getattr(self.data, "start_column", None)),
-            (getattr(self.data, "end_line", None), getattr(self.data, "end_column", None))
-        )
+    def get_start_and_end(self):
+        return (getattr(self.data, "start", None), getattr(self.data, "end", None))
 
     def return_value_jump(self, context, frame_manager, immediate_context=None):
         return evaluate(self, context, frame_manager, None, immediate_context)
@@ -1655,7 +1652,6 @@ FLOW_CONTROL_OPCODES = {
     "comma": CommaOp,
     "loop": LoopOp,
     "conditional": ConditionalOp,
-
 }
 
 MATH_AND_LOGIC_OPCODES = {

@@ -1,9 +1,10 @@
 import json
+import traceback
 
 from pygls.capabilities import COMPLETION
 from pygls.lsp import CompletionItem, CompletionList, CompletionOptions, CompletionParams
 from pygls.lsp.methods import HOVER, TEXT_DOCUMENT_DID_OPEN, \
-    TEXT_DOCUMENT_DID_CHANGE, TEXT_DOCUMENT_DID_SAVE
+    TEXT_DOCUMENT_DID_CHANGE, TEXT_DOCUMENT_DID_SAVE, TEXT_DOCUMENT_WILL_SAVE
 from pygls.lsp.types.basic_structures import Diagnostic, Range, Position, \
     DiagnosticSeverity
 from pygls.lsp.types.language_features.hover import HoverParams, Hover
@@ -26,6 +27,7 @@ server = LanguageServer()
 
 def validate(ls, params):
     with environment(base=True):
+        print("validate")
         text_doc = ls.workspace.get_document(params.text_document.uri)
 
         try:
@@ -49,9 +51,9 @@ def validate(ls, params):
             diagnostics = []
 
             for function in hooks.functions:
-                (start, end) = function.get_line_and_column()
+                function_symbol = function.get_function_symbol_start_and_end()
 
-                if start[0] is None:
+                if function_symbol is None:
                     continue
 
                 message = str(function.break_types)
@@ -60,9 +62,8 @@ def validate(ls, params):
                 diagnostics.append(
                     Diagnostic(
                         range=Range(
-                            start=Position(line=start[0] - 1, character=start[1]),
-                            end=Position(line=start[0] - 1, character=start[1]),
-#                            end=Position(line=end[0] - 1, character=end[1])
+                            start=Position(line=function_symbol["line"] - 1, character=function_symbol["column"]),
+                            end=Position(line=function_symbol["line"] - 1, character=function_symbol["column"] + len(function_symbol["text"])),
                         ),
                         message=message,
                         severity=severity
@@ -88,7 +89,7 @@ def validate(ls, params):
                         start=Position(line=0, character=0),
                         end=Position(line=0, character=0)
                     ),
-                    message="FatalError:{}".format(str(e.args)),
+                    message="FatalError:{}\n{}".format(str(e.args), traceback.format_exc()),
                     severity=DiagnosticSeverity.Error
                 )
             ])
@@ -99,7 +100,7 @@ def validate(ls, params):
                         start=Position(line=0, character=0),
                         end=Position(line=0, character=0)
                     ),
-                    message=str(e),
+                    message=traceback.format_exc(),
                     severity=DiagnosticSeverity.Error
                 )
             ])
@@ -126,11 +127,14 @@ def completions(params: CompletionParams):
     )
 
 # @server.feature(HOVER)
-# def hover(ls, params: HoverParams):
-#     """generates a hoverover effect"""
-#     validate(ls, params)
-#     return Hover(contents="hello world")
+def hover(ls, params: HoverParams):
+    """generates a hoverover effect"""
+#    validate(ls, params)
+    return Hover(contents="hello world")
 
+@server.feature(TEXT_DOCUMENT_WILL_SAVE)
+async def will_save(ls, params: DidOpenTextDocumentParams):
+    validate(ls, params)
 
 @server.feature(TEXT_DOCUMENT_DID_OPEN)
 async def did_open(ls, params: DidOpenTextDocumentParams):

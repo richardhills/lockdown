@@ -17,14 +17,14 @@ from lockdown.executor.raw_code_factories import function_lit, nop, comma_op, \
     local_function, reset_op, inferred_type, prepare_function_lit, transform, \
     continue_op, check_is_opcode, is_op, function_type, \
     composite_type, static_op, map_op, insert_op, prepared_function, int_type, \
-    any_type, print_op
+    any_type, print_op, shift_op
 from lockdown.parser.grammar.langLexer import langLexer
 from lockdown.parser.grammar.langParser import langParser
 from lockdown.parser.grammar.langVisitor import langVisitor
 from lockdown.type_system.exceptions import FatalError
 from lockdown.type_system.universal_type import DEFAULT_READONLY_COMPOSITE_TYPE, \
-    PythonObject
-from lockdown.utils.utils import MISSING, default
+    PythonObject, PythonDict
+from lockdown.utils.utils import MISSING, default, spread_dict
 
 
 class RDHLang5Visitor(langVisitor):
@@ -73,11 +73,11 @@ class RDHLang5Visitor(langVisitor):
 
         if argument_destructuring:
             argument_destructuring = self.visit(argument_destructuring)
-            function_builder = argument_destructuring.chain(code_block, get_debug_info(ctx))
+            function_builder = argument_destructuring.chain(code_block)
         elif ctx.raw_argument:
             function_builder = CodeBlockBuilder(
                 argument_type_expression=self.visit(ctx.raw_argument)
-            ).chain(code_block, get_debug_info(ctx))
+            ).chain(code_block)
         else:
             function_builder = code_block
 
@@ -92,18 +92,25 @@ class RDHLang5Visitor(langVisitor):
         if function_name_symbol:
             function_name = function_name_symbol.getText()
 
-        return function_name, function_builder.create("first-class-function", get_debug_info(ctx))
+        return function_name, function_builder.create(
+            "first-class-function",
+            spread_dict(
+                get_context_debug_info(ctx), {
+                    "function_symbol": get_token_debug_info(ctx.children[0].symbol)
+                }
+            )
+        )
 
     def visitCodeBlockAsFunction(self, ctx):
         function_builder = self.visit(ctx.codeBlock())
 
         if self.pre_chain_function:
-            function_builder = self.pre_chain_function.chain(function_builder, {})
+            function_builder = self.pre_chain_function.chain(function_builder)
 
         if self.post_chain_function:
-            function_builder = function_builder.chain(self.post_chain_function, {})
+            function_builder = function_builder.chain(self.post_chain_function)
 
-        return function_builder.create("first-class-function", get_debug_info(ctx))
+        return function_builder.create("first-class-function", get_context_debug_info(ctx))
 
     def visitArgumentDestructurings(self, ctx):
         initializers = [self.visit(l) for l in ctx.argumentDestructuring()]
@@ -163,7 +170,7 @@ class RDHLang5Visitor(langVisitor):
         code_block = CodeBlockBuilder(
             local_variable_type=object_type(local_variable_types),
             local_initializer=object_template_op(local_variable_initializers)
-        ).chain(code_block, get_debug_info(ctx))
+        ).chain(code_block)
 
         code_block = CodeBlockBuilder(
             local_variable_type=inferred_type(),
@@ -173,7 +180,7 @@ class RDHLang5Visitor(langVisitor):
             code_expressions=[
                 unbound_assignment(name, dereference("local._temp", name)) for name in assignments
             ]
-        ).chain(code_block, get_debug_info(ctx))
+        ).chain(code_block)
 
         return code_block
 
@@ -198,7 +205,7 @@ class RDHLang5Visitor(langVisitor):
         code_block = CodeBlockBuilder(
             local_variable_type=object_type(local_variable_types),
             local_initializer=object_template_op(local_variable_initializers)
-        ).chain(code_block, get_debug_info(ctx))
+        ).chain(code_block)
 
         code_block = CodeBlockBuilder(
             local_variable_type=object_type({
@@ -212,7 +219,7 @@ class RDHLang5Visitor(langVisitor):
             code_expressions=[
                 unbound_assignment(name, dereference("local._temp", index)) for index, name in assignments
             ]
-        ).chain(code_block, get_debug_info(ctx))
+        ).chain(code_block)
 
         return code_block
 
@@ -231,7 +238,7 @@ class RDHLang5Visitor(langVisitor):
                 local_initializer=object_template_op({ name: initial_value })
             )
             if remaining_code:
-                new_code_block = new_code_block.chain(remaining_code, get_debug_info(ctx))
+                new_code_block = new_code_block.chain(remaining_code)
             remaining_code = new_code_block
 
         return new_code_block
@@ -243,7 +250,7 @@ class RDHLang5Visitor(langVisitor):
 
         return CodeBlockBuilder(
             extra_statics={ literal_op(name): value }
-        ).chain(remaining_code, get_debug_info(ctx))
+        ).chain(remaining_code)
 
     def visitTypedef(self, ctx):
         remaining_code = self.visit(ctx.codeBlock())
@@ -253,7 +260,7 @@ class RDHLang5Visitor(langVisitor):
 
         return CodeBlockBuilder(
             extra_statics={ literal_op(name): value },
-        ).chain(remaining_code, get_debug_info(ctx))
+        ).chain(remaining_code)
 
     def visitToFunctionStatement(self, ctx):
         remaining_code = self.visit(ctx.codeBlock())
@@ -264,7 +271,7 @@ class RDHLang5Visitor(langVisitor):
 #            local_variable_type=object_type({ name: prepared_function }),
 #            local_initializer=object_template_op({ name: prepared_function })
             extra_statics={ literal_op(name): prepared_function }
-        ).chain(remaining_code, get_debug_info(ctx))
+        ).chain(remaining_code)
 
     def visitToPrintStatement(self, ctx):
         expr = self.visit(ctx.expression())
@@ -281,7 +288,7 @@ class RDHLang5Visitor(langVisitor):
         remaining_code = ctx.codeBlock()
         if remaining_code:
             remaining_code = self.visit(remaining_code)
-            new_function = new_function.chain(remaining_code, get_debug_info(ctx))
+            new_function = new_function.chain(remaining_code)
 
         return new_function
 
@@ -300,27 +307,27 @@ class RDHLang5Visitor(langVisitor):
     def visitInvocation(self, ctx):
         function = self.visit(ctx.expression()[0])
         arguments = [self.visit(a) for a in ctx.expression()[1:]]
-        return invoke_op(function, list_template_op(arguments), **get_debug_info(ctx))
+        return invoke_op(function, list_template_op(arguments), **get_context_debug_info(ctx))
 
     def visitStaticInvocation(self, ctx):
         function = self.visit(ctx.expression()[0])
         arguments = [self.visit(a) for a in ctx.expression()[1:]]
-        return static_op(invoke_op(function, list_template_op(arguments), **get_debug_info(ctx)))
+        return static_op(invoke_op(function, list_template_op(arguments), **get_context_debug_info(ctx)))
 
     def visitSingleParameterInvocation(self, ctx):
         function, argument = ctx.expression()
         function = self.visit(function)
         argument = self.visit(argument)
-        return invoke_op(function, argument, **get_debug_info(ctx))
+        return invoke_op(function, argument, **get_context_debug_info(ctx))
 
     def visitNoParameterInvocation(self, ctx):
-        return invoke_op(self.visit(ctx.expression()), **get_debug_info(ctx))
+        return invoke_op(self.visit(ctx.expression()), **get_context_debug_info(ctx))
 
     def visitPipeline(self, ctx):
         argument, function = ctx.expression()
         argument = self.visit(argument)
         function = self.visit(function)
-        return invoke_op(function, list_template_op([ argument ]), **get_debug_info(ctx))
+        return invoke_op(function, list_template_op([ argument ]), **get_context_debug_info(ctx))
 
     def visitParenthesis(self, ctx):
         return self.visit(ctx.expression())
@@ -337,7 +344,7 @@ class RDHLang5Visitor(langVisitor):
         )
 
     def visitImmediateDereference(self, ctx):
-        return unbound_dereference(ctx.SYMBOL().getText(), **get_debug_info(ctx))
+        return unbound_dereference(ctx.SYMBOL().getText(), **get_context_debug_info(ctx))
 
     def visitStaticDereference(self, ctx):
         return dereference_op(
@@ -487,6 +494,10 @@ class RDHLang5Visitor(langVisitor):
             "value", "return", expression
         )
 
+    def visitYieldStatement(self, ctx):
+        expression = self.visit(ctx.expression())
+        return shift_op(expression, no_value_type())
+
     def visitContinueStatement(self, ctx):
         return continue_op(self.visit(ctx.expression()))
 
@@ -495,7 +506,7 @@ class RDHLang5Visitor(langVisitor):
 
     def visitIfStatement(self, ctx):
         expressions = [self.visit(e) for e in ctx.expression()]
-        code_blocks = [self.visit(c).create("expression", get_debug_info(ctx)) for c in ctx.codeBlock()]
+        code_blocks = [self.visit(c).create("expression") for c in ctx.codeBlock()]
 
         if len(expressions) == len(code_blocks):
             other_branch = nop()
@@ -512,7 +523,7 @@ class RDHLang5Visitor(langVisitor):
 
     def visitLoop(self, ctx):
         loop_code = self.visit(ctx.codeBlock())
-        return loop_op(loop_code.create("expression", get_debug_info(ctx)))
+        return loop_op(loop_code.create("expression"))
 
     def visitWhileLoop(self, ctx):
         continue_expression = self.visit(ctx.expression())
@@ -522,7 +533,7 @@ class RDHLang5Visitor(langVisitor):
             "break", "value",
             loop_op(comma_op(
                 condition_op(continue_expression, nop(), transform_op("break")),
-                loop_code.create("expression", get_debug_info(ctx))
+                loop_code.create("expression")
             ))
         )
 
@@ -535,9 +546,9 @@ class RDHLang5Visitor(langVisitor):
             argument_type_expression=object_type({
                 iterator_name: inferred_type()
             })
-        ).chain(loop_code, get_debug_info(ctx))
+        ).chain(loop_code)
 
-        loop_code = loop_code.create("second-class-function", get_debug_info(ctx))
+        loop_code = loop_code.create("second-class-function")
 #        get_manager(loop_code).add_composite_type(READONLY_DEFAULT_OBJECT_TYPE)
 
         return transform_op(
@@ -552,30 +563,24 @@ class RDHLang5Visitor(langVisitor):
                             ("yield", "value"),
                             ("value", "end"),
                             reset_op(
-                                dereference("outer.local.callback", **get_debug_info(ctx)), nop(),
-                                **get_debug_info(ctx)
-                            ),
-                            **get_debug_info(ctx)
+                                dereference("outer.local.callback", **get_context_debug_info(ctx)), nop()
+                            )
                         ),
                         comma_op(
                             assignment_op(
                                 dereference("outer.local"),
                                 literal_op("callback"),
-                                dereference("local.continuation"),
-                                **get_debug_info(ctx)
+                                dereference("local.continuation")
                             ),
                             invoke_op(
                                 prepare_function_lit(loop_code),
                                 object_template_op({
                                     iterator_name: dereference("local.value")
-                                }, **get_debug_info(ctx)),
-                                **get_debug_info(ctx)
+                                }),
                             )
-                        ), **get_debug_info(ctx)
-                    ), **get_debug_info(ctx)),
-                    **get_debug_info(ctx)
+                        )
+                    )),
                 ),
-                **get_debug_info(ctx)
             ))
         )
 
@@ -588,22 +593,22 @@ class RDHLang5Visitor(langVisitor):
             argument_type_expression=object_type({
                 iterator_name: inferred_type()
             })
-        ).chain(loop_code, get_debug_info(ctx))
+        ).chain(loop_code)
 
-        loop_code = loop_code.create("second-class-function", get_debug_info(ctx))
+        loop_code = loop_code.create("second-class-function")
 
         return map_op(
             composite_expression,
             prepared_function(
                 inferred_type(),
                 invoke_op(
-                    prepare_function_lit(loop_code, **get_debug_info(ctx)),
+                    prepare_function_lit(loop_code, **get_context_debug_info(ctx)),
                     object_template_op({
-                        iterator_name: dereference("argument.2", **get_debug_info(ctx))
-                    }, **get_debug_info(ctx)),
-                    **get_debug_info(ctx)
+                        iterator_name: dereference("argument.2", **get_context_debug_info(ctx))
+                    }, **get_context_debug_info(ctx)),
+                    **get_context_debug_info(ctx)
                 ),
-                **get_debug_info(ctx)
+                **get_context_debug_info(ctx)
             )
         )
 
@@ -616,12 +621,12 @@ class RDHLang5Visitor(langVisitor):
 
         code_block = CodeBlockBuilder(
             argument_type_expression=inferred_type()
-        ).chain(code_block, get_debug_info(ctx))
+        ).chain(code_block)
 
         return map_op(
             composite,
             prepare_function_lit(
-                code_block.create("second-class-function", get_debug_info(ctx))
+                code_block.create("second-class-function")
             )
         )
 
@@ -738,7 +743,7 @@ class RDHLang5Visitor(langVisitor):
 
     def visitToFunctionExpression(self, ctx):
         _, function = self.visit(ctx.function())
-        return prepare_function_lit(function, **get_debug_info(ctx))
+        return prepare_function_lit(function, **get_context_debug_info(ctx))
 
 
 class CodeBlockBuilder(object):
@@ -763,7 +768,7 @@ class CodeBlockBuilder(object):
     def set_breaks_types(self, breaks_types):
         self.breaks_types = breaks_types
 
-    def chain(self, other, debug_info):
+    def chain(self, other):
         can_merge_code_blocks = True
 
         if other is None:
@@ -799,7 +804,7 @@ class CodeBlockBuilder(object):
             local_initializer = default(self.local_initializer, MISSING, other.local_initializer)
             extra_statics = default(self.extra_statics, MISSING, other.extra_statics)
         else:
-            new_code_expressions = our_code_expressions + [ other.create("expression", debug_info) ]
+            new_code_expressions = our_code_expressions + [ other.create("expression") ]
             local_variable_type = self.local_variable_type
             local_initializer = self.local_initializer
             extra_statics = self.extra_statics
@@ -821,7 +826,7 @@ class CodeBlockBuilder(object):
             or self.breaks_types is not MISSING
         )
 
-    def create(self, output_mode, debug_info):
+    def create(self, output_mode, function_debug_info={}):
         if output_mode not in ("first-class-function", "second-class-function", "expression"):
             raise FatalError()
 
@@ -862,31 +867,40 @@ class CodeBlockBuilder(object):
         if output_mode == "first-class-function":
             # A function created by the user, which mangles returns as expected
             code = transform_op(
-                "return", "value", combine_opcodes(code_expressions), **debug_info
+                "return", "value", combine_opcodes(code_expressions)
             )
             return function_lit(
-                extra_statics, argument_type, break_types, local_type, local_initializer, code, **debug_info
+                extra_statics, argument_type, break_types, local_type, local_initializer, code, **function_debug_info
             )
         if output_mode == "second-class-function":
             # A function created by the environment, which leaves returns unmangled
             code = combine_opcodes(code_expressions)
             return function_lit(
-                extra_statics, argument_type, break_types, local_type, local_initializer, code, **debug_info
+                extra_statics, argument_type, break_types, local_type, local_initializer, code, **function_debug_info
             )
         elif output_mode == "expression":
             return invoke_op(prepare_function_lit(function_lit(
-                extra_statics, argument_type, break_types, local_type, local_initializer, combine_opcodes(code_expressions), **debug_info
-            ), **debug_info), **debug_info)
+                extra_statics, argument_type, break_types, local_type, local_initializer, combine_opcodes(code_expressions), **function_debug_info
+            )))
 
+def get_token_debug_info(common_token):
+    return PythonDict({
+        "column": common_token.column,
+        "line": common_token.line,
+        "text": common_token.text
+    })
 
-def get_debug_info(ctx):
+def get_context_debug_info(ctx):
     return {
-        "start_column": ctx.start.column,
-        "start_line": ctx.start.line,
-        "end_column": ctx.stop.column,
-        "end_line": ctx.stop.line
+        "start": PythonDict({
+            "column": ctx.start.column,
+            "line": ctx.start.line
+        }),
+        "end": PythonDict({
+            "column": ctx.stop.column,
+            "line": ctx.stop.line
+        })
     }
-
 
 class ParseError(Exception):
     def __init__(self, msg, line, column):

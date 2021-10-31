@@ -184,6 +184,11 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#yieldStatement.
+    def visitYieldStatement(self, ctx:langParser.YieldStatementContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#addition.
     def visitAddition(self, ctx:langParser.AdditionContext):
         return self.visitChildren(ctx)

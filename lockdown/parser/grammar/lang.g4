@@ -169,6 +169,7 @@ expression
    | function				# toFunctionExpression
    | 'print' expression     # toPrintStatement  
    | 'return' expression    # returnStatement  
+   | 'yield' expression     # yieldStatement  
    ;
 
 objectTemplate

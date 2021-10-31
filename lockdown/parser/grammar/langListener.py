@@ -323,6 +323,15 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#yieldStatement.
+    def enterYieldStatement(self, ctx:langParser.YieldStatementContext):
+        pass
+
+    # Exit a parse tree produced by langParser#yieldStatement.
+    def exitYieldStatement(self, ctx:langParser.YieldStatementContext):
+        pass
+
+
     # Enter a parse tree produced by langParser#addition.
     def enterAddition(self, ctx:langParser.AdditionContext):
         pass

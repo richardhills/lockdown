@@ -311,6 +311,35 @@ class TestBuiltIns(TestCase):
         self.assertEqual(len(result.value), 4)
         self.assertEqual(list(result.value), [ 1, 2, 3, 4 ])
 
+    def test_irange(self):
+        code = parse("""
+            function() {
+                for(var i from irange()) {
+                    if(i == 10) {
+                        return i;
+                    };
+                };
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 10)
+
+    def test_find(self):
+        code = parse("""
+            function() {
+                var squareGenerator = function() {
+                    for(var i from irange()) {
+                        yield i * i;
+                    };
+                };
+                return find(squareGenerator, function(int i) { return i > 50; } );
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 64)
+
     def test_array_length(self):
         code = parse("""
             function() {
@@ -1166,6 +1195,34 @@ class TestEuler(TestCase):
         _, result = bootstrap_function(code)
         self.assertEqual(result.value, 120)
 
+    def test_12a(self):
+        code = parse("""
+            function() {
+                var countDivisors = function(int number) {
+                    return length(
+                        for(var test from range(1, number)) {
+                            if(number % test == 0) {
+                                continue test;
+                            };
+                        }
+                    );
+                };
+            
+                var triangleNumberGenerator = function() {
+                    int i = 0;
+                    for(var step from irange()) {
+                        yield i;
+                        i = i + step;
+                    };
+                };
+
+                return find(triangleNumberGenerator, function(int number) {
+                    return countDivisors(number) > 10;
+                });
+            }             
+        """)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.value, 120)
 
 
     def test_14(self):

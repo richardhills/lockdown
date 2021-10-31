@@ -1,0 +1,24 @@
+function() {
+    var countDivisors = function(int number) {
+    	return length(
+			for(var test from range(1, number)) {
+                if(number % test == 0) {
+                    continue test;
+			    };
+			}
+    	);
+    };
+
+    var triangleNumberGenerator = function() {
+        int i = 0;
+        for(var step from irange()) {
+        	yield i;
+        	i = i + step;
+        };
+    };
+
+    return find(triangleNumberGenerator, function(int number) {
+    	return countDivisors(number) > 10;
+    });
+}
+ 
