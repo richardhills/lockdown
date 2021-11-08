@@ -44,6 +44,11 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#lockdownJsonExpression.
+    def visitLockdownJsonExpression(self, ctx:langParser.LockdownJsonExpressionContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#argumentDestructurings.
     def visitArgumentDestructurings(self, ctx:langParser.ArgumentDestructuringsContext):
         return self.visitChildren(ctx)
@@ -116,6 +121,11 @@ class langVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by langParser#numberExpression.
     def visitNumberExpression(self, ctx:langParser.NumberExpressionContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#toBreakTypes.
+    def visitToBreakTypes(self, ctx:langParser.ToBreakTypesContext):
         return self.visitChildren(ctx)
 
 
@@ -224,6 +234,11 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#exportStatement.
+    def visitExportStatement(self, ctx:langParser.ExportStatementContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#invocation.
     def visitInvocation(self, ctx:langParser.InvocationContext):
         return self.visitChildren(ctx)
@@ -231,6 +246,11 @@ class langVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by langParser#immediateAssignment.
     def visitImmediateAssignment(self, ctx:langParser.ImmediateAssignmentContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#toJsonExpression.
+    def visitToJsonExpression(self, ctx:langParser.ToJsonExpressionContext):
         return self.visitChildren(ctx)
 
 
@@ -361,6 +381,16 @@ class langVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by langParser#ternary.
     def visitTernary(self, ctx:langParser.TernaryContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#breakTypes.
+    def visitBreakTypes(self, ctx:langParser.BreakTypesContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#breakType.
+    def visitBreakType(self, ctx:langParser.BreakTypeContext):
         return self.visitChildren(ctx)
 
 

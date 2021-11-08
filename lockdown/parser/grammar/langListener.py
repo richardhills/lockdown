@@ -71,6 +71,15 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#lockdownJsonExpression.
+    def enterLockdownJsonExpression(self, ctx:langParser.LockdownJsonExpressionContext):
+        pass
+
+    # Exit a parse tree produced by langParser#lockdownJsonExpression.
+    def exitLockdownJsonExpression(self, ctx:langParser.LockdownJsonExpressionContext):
+        pass
+
+
     # Enter a parse tree produced by langParser#argumentDestructurings.
     def enterArgumentDestructurings(self, ctx:langParser.ArgumentDestructuringsContext):
         pass
@@ -203,6 +212,15 @@ class langListener(ParseTreeListener):
 
     # Exit a parse tree produced by langParser#numberExpression.
     def exitNumberExpression(self, ctx:langParser.NumberExpressionContext):
+        pass
+
+
+    # Enter a parse tree produced by langParser#toBreakTypes.
+    def enterToBreakTypes(self, ctx:langParser.ToBreakTypesContext):
+        pass
+
+    # Exit a parse tree produced by langParser#toBreakTypes.
+    def exitToBreakTypes(self, ctx:langParser.ToBreakTypesContext):
         pass
 
 
@@ -395,6 +413,15 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#exportStatement.
+    def enterExportStatement(self, ctx:langParser.ExportStatementContext):
+        pass
+
+    # Exit a parse tree produced by langParser#exportStatement.
+    def exitExportStatement(self, ctx:langParser.ExportStatementContext):
+        pass
+
+
     # Enter a parse tree produced by langParser#invocation.
     def enterInvocation(self, ctx:langParser.InvocationContext):
         pass
@@ -410,6 +437,15 @@ class langListener(ParseTreeListener):
 
     # Exit a parse tree produced by langParser#immediateAssignment.
     def exitImmediateAssignment(self, ctx:langParser.ImmediateAssignmentContext):
+        pass
+
+
+    # Enter a parse tree produced by langParser#toJsonExpression.
+    def enterToJsonExpression(self, ctx:langParser.ToJsonExpressionContext):
+        pass
+
+    # Exit a parse tree produced by langParser#toJsonExpression.
+    def exitToJsonExpression(self, ctx:langParser.ToJsonExpressionContext):
         pass
 
 
@@ -644,6 +680,24 @@ class langListener(ParseTreeListener):
 
     # Exit a parse tree produced by langParser#ternary.
     def exitTernary(self, ctx:langParser.TernaryContext):
+        pass
+
+
+    # Enter a parse tree produced by langParser#breakTypes.
+    def enterBreakTypes(self, ctx:langParser.BreakTypesContext):
+        pass
+
+    # Exit a parse tree produced by langParser#breakTypes.
+    def exitBreakTypes(self, ctx:langParser.BreakTypesContext):
+        pass
+
+
+    # Enter a parse tree produced by langParser#breakType.
+    def enterBreakType(self, ctx:langParser.BreakTypeContext):
+        pass
+
+    # Exit a parse tree produced by langParser#breakType.
+    def exitBreakType(self, ctx:langParser.BreakTypeContext):
         pass
 
 

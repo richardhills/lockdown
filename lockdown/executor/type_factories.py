@@ -29,9 +29,15 @@ def build_closed_function_type(data):
             raise FatalError()
         if not isinstance(break_types, Universal):
             raise FatalError()
+        for break_mode in break_types._keys():
+            if not isinstance(break_mode, (str, int)):
+                raise FatalError(break_mode)
         for break_type in break_types._values():
             if not isinstance(break_type, Universal):
                 raise FatalError(break_type)
+            out = break_type._get("out")
+            if not out._contains("type"):
+                raise FatalError()
 
     return ClosedFunctionType(
         enrich_type(data._get("argument")),

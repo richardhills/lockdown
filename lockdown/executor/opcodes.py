@@ -231,7 +231,7 @@ class TemplateOp(OpcodeOperandMixin, Opcode):
                     True,
                     initial_wrapped=result,
                     initial_length=initial_length,
-                    debug_reason="object-template"
+                    debug_reason="template"
                 )
             )
 

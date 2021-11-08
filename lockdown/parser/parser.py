@@ -17,7 +17,7 @@ from lockdown.executor.raw_code_factories import function_lit, nop, comma_op, \
     local_function, reset_op, inferred_type, prepare_function_lit, transform, \
     continue_op, check_is_opcode, is_op, function_type, \
     composite_type, static_op, map_op, insert_op, prepared_function, int_type, \
-    any_type, print_op, shift_op
+    any_type, print_op, shift_op, function_type_with_break_types_expression
 from lockdown.parser.grammar.langLexer import langLexer
 from lockdown.parser.grammar.langParser import langParser
 from lockdown.parser.grammar.langVisitor import langVisitor
@@ -65,6 +65,8 @@ class RDHLang5Visitor(langVisitor):
             return self.visit(ctx.function())[1]
         if ctx.codeBlockAsFunction():
             return self.visit(ctx.codeBlockAsFunction())
+        if ctx.lockdownJsonExpression():
+            return self.visit(ctx.lockdownJsonExpression())
 
     def visitFunction(self, ctx):
         argument_destructuring = ctx.argumentDestructurings()
@@ -81,11 +83,9 @@ class RDHLang5Visitor(langVisitor):
         else:
             function_builder = code_block
 
-        if ctx.return_type:
-            return_type = self.visit(ctx.return_type)
-            function_builder.set_breaks_types({
-                "value": list_template_op([object_template_op({ "out": return_type })])
-            })
+        if ctx.functionBreakTypes:
+            break_types = self.visit(ctx.functionBreakTypes)
+            function_builder.set_breaks_types(break_types)
 
         function_name = None
         function_name_symbol = ctx.SYMBOL()
@@ -111,6 +111,9 @@ class RDHLang5Visitor(langVisitor):
             function_builder = function_builder.chain(self.post_chain_function)
 
         return function_builder.create("first-class-function", get_context_debug_info(ctx))
+
+    def visitLockdownJsonExpression(self, ctx):
+        return self.visit(ctx.expression())
 
     def visitArgumentDestructurings(self, ctx):
         initializers = [self.visit(l) for l in ctx.argumentDestructuring()]
@@ -263,15 +266,22 @@ class RDHLang5Visitor(langVisitor):
         ).chain(remaining_code)
 
     def visitToFunctionStatement(self, ctx):
-        remaining_code = self.visit(ctx.codeBlock())
+        remaining_code = ctx.codeBlock()
+        if remaining_code:
+            remaining_code = self.visit(remaining_code)
 
         name, function = self.visit(ctx.function())
         prepared_function = prepare_function_lit(function)
-        return CodeBlockBuilder(
+        builder = CodeBlockBuilder(
 #            local_variable_type=object_type({ name: prepared_function }),
 #            local_initializer=object_template_op({ name: prepared_function })
             extra_statics={ literal_op(name): prepared_function }
-        ).chain(remaining_code)
+        )
+        
+        if remaining_code:
+            builder = builder.chain(remaining_code)
+
+        return builder
 
     def visitToPrintStatement(self, ctx):
         expr = self.visit(ctx.expression())
@@ -498,6 +508,15 @@ class RDHLang5Visitor(langVisitor):
         expression = self.visit(ctx.expression())
         return shift_op(expression, no_value_type())
 
+    def visitExportStatement(self, ctx):
+        expression = self.visit(ctx.expression())
+        return transform_op(
+            "value", "export", expression
+        )
+
+    def visitToJsonExpression(self, ctx):
+        return self.visit(ctx.json())      
+
     def visitContinueStatement(self, ctx):
         return continue_op(self.visit(ctx.expression()))
 
@@ -630,6 +649,39 @@ class RDHLang5Visitor(langVisitor):
             )
         )
 
+    def visitBreakTypes(self, ctx):
+        value_type = self.visit(ctx.valueType)
+        break_types = [self.visit(b) for b in ctx.breakType()]
+
+        check_is_opcode(value_type)
+
+        result = object_template_op({
+            break_mode: types for break_mode, types in [
+                ("value", list_template_op([ object_template_op({ "out": value_type }) ])),
+                *break_types
+            ]
+        })
+
+        return result
+
+    def visitBreakType(self, ctx):
+        break_mode = str(ctx.SYMBOL())
+
+        if break_mode[-1] == "s":
+            break_mode = break_mode[:-1]
+
+        types = {}
+        output_type = self.visit(ctx.output_type)
+        check_is_opcode(output_type)
+        types["out"] = output_type
+        input_type = ctx.input_type
+        if input_type:
+            input_type = self.visit(input_type)
+            check_is_opcode(output_type)
+            types["in"] = input_type
+
+        return (break_mode, list_template_op([ object_template_op(types) ]))
+
     def visitObjectTemplate(self, ctx):
         result = {}
         for pair in ctx.objectPropertyPair():
@@ -639,7 +691,11 @@ class RDHLang5Visitor(langVisitor):
 
     def visitObjectPropertyPair(self, ctx):
         if ctx.SYMBOL():
-            return [ literal_op(ctx.SYMBOL().getText()), self.visit(ctx.expression()[0]) ]
+            symbol = ctx.SYMBOL().getText()
+            if len(ctx.expression()) > 0:
+                return [ literal_op(symbol), self.visit(ctx.expression()[0]) ]
+            else:
+                return [ literal_op(symbol), unbound_dereference(symbol) ]
         elif ctx.NUMBER():
             return [ literal_op(json.loads(ctx.NUMBER().getText())), self.visit(ctx.expression()[0]) ]
         else:
@@ -730,16 +786,35 @@ class RDHLang5Visitor(langVisitor):
             }),
         ])
 
+    # def visitToValueBreakFunctionType(self, ctx):
+    #     expressions = ctx.expression()
+    #     if len(expressions) == 2:
+    #         argument_type, return_type = expressions
+    #         argument_type = self.visit(argument_type)
+    #         argument_type = list_type([ argument_type ], None)
+    #     else:
+    #         return_type, = ctx.expression()
+    #         argument_type = no_value_type()
+    #
+    #     return_type = self.visit(return_type)
+    #
+    #     return function_type(argument_type, {
+    #         "value": list_template_op([ object_template_op({ "out": return_type }) ])
+    #     })
+
     def visitFunctionType(self, ctx):
-        argument_type, return_type = ctx.expression()
-        argument_type = self.visit(argument_type)
-        return_type = self.visit(return_type)
+        expressions = ctx.expression()
+        if len(expressions) == 2:
+            argument_type, break_types = expressions
+            argument_type = self.visit(argument_type)
+            argument_type = list_type([ argument_type ], None)
+        else:
+            break_types, = ctx.expression()
+            argument_type = no_value_type()
 
-        argument_type = list_type([ argument_type ], None)
+        break_types = self.visit(break_types)
 
-        return function_type(argument_type, {
-            "value": list_template_op([ object_template_op({ "out": return_type }) ])
-        })
+        return function_type_with_break_types_expression(argument_type, break_types)
 
     def visitToFunctionExpression(self, ctx):
         _, function = self.visit(ctx.function())

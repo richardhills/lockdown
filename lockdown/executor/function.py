@@ -14,7 +14,7 @@ from lockdown.executor.opcodes import enrich_opcode, get_context_type, evaluate,
     get_expression_break_types, flatten_out_types
 from lockdown.executor.raw_code_factories import dynamic_dereference_op, \
     static_op, match_op, prepared_function, inferred_type, invoke_op, \
-    object_template_op, object_type, dereference
+    object_template_op, object_type, dereference, no_value_type, nop
 from lockdown.executor.type_factories import enrich_type
 from lockdown.type_system.composites import prepare_lhs_type, \
     check_dangling_inferred_types, CompositeType, InferredType, \
@@ -30,7 +30,7 @@ from lockdown.type_system.universal_type import PythonObject, \
     UniversalObjectType, DEFAULT_READONLY_COMPOSITE_TYPE, PythonList, PythonDict, \
     Universal
 from lockdown.utils.utils import MISSING, raise_from, \
-    spread_dict, get_environment
+    spread_dict, get_environment, NO_VALUE
 
 
 def prepare_piece_of_context(declared_type, suggested_type):
@@ -127,28 +127,6 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
         data.local_initializer,
         combine(type_conditional_converter, UnboundDereferenceBinder(context))
     )
-    actual_local_type, local_other_break_types = get_expression_break_types(
-        local_initializer,
-        context,
-        frame_manager,
-        hooks
-    )
-
-    get_manager(context).remove_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
-
-    if actual_local_type is MISSING:
-        raise PreparationException("Actual local type missing. local_other_break_types: {}".format(local_other_break_types))
-
-    actual_local_type = flatten_out_types(actual_local_type)
-
-    local_type = prepare_piece_of_context(declared_local_type, actual_local_type)
-
-    local_type_reasoner = Reasoner()
-
-    if not local_type.is_copyable_from(actual_local_type, local_type_reasoner):
-        raise PreparationException("Invalid local type: {} != {}: {}".format(local_type, actual_local_type, local_type_reasoner.to_message()))
-
-    actual_break_types_factory.merge(local_other_break_types)
 
     declared_break_types = PythonDict({
         mode: PythonList([
@@ -158,42 +136,68 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
 
     get_manager(declared_break_types).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
 
-    context = Universal(True, initial_wrapped={
-        "prepare": outer_context,
-        "static": static,
-#        "types": derich_type(
-#            UniversalObjectType({
-#                "outer": outer_type,
-#                "argument": argument_type,
-#                "local": local_type
-#            }), {}
-#        ),
-        "_types": Universal(True, initial_wrapped={
-            "outer": outer_type,
-            "argument": argument_type,
-            "local": local_type
-        }, debug_reason="code-prepare-context")
-    },
-        bind=DEFAULT_READONLY_COMPOSITE_TYPE,
-        debug_reason="code-prepare-context"
+    actual_local_type, local_other_break_types = get_expression_break_types(
+        local_initializer,
+        context,
+        frame_manager,
+        hooks
     )
-
-    get_manager(context)._context_type = UniversalObjectType({
-        "outer": outer_type,
-        "argument": argument_type,
-        "local": local_type
-    }, wildcard_type=AnyType(), name="code-prepare-context-type")
-
-    code = enrich_opcode(
-        data.code,
-        combine(type_conditional_converter, UnboundDereferenceBinder(context))
-    )
-
-    code_break_types = code.get_break_types(context, frame_manager, hooks)
 
     get_manager(context).remove_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
 
-    actual_break_types_factory.merge(code_break_types)
+    actual_break_types_factory.merge(local_other_break_types)
+
+    # Be liberal. If the local initializer can not return a value, then we accept that
+    # it must exit through some other method, and the code block will never be run
+    if actual_local_type is MISSING:
+        local_type = NoValueType()
+        code = nop()
+    else:
+        actual_local_type = flatten_out_types(actual_local_type)
+
+        local_type = prepare_piece_of_context(declared_local_type, actual_local_type)
+
+        local_type_reasoner = Reasoner()
+
+        if not local_type.is_copyable_from(actual_local_type, local_type_reasoner):
+            raise PreparationException("Invalid local type: {} != {}: {}".format(local_type, actual_local_type, local_type_reasoner.to_message()))
+
+        context = Universal(True, initial_wrapped={
+            "prepare": outer_context,
+            "static": static,
+    #        "types": derich_type(
+    #            UniversalObjectType({
+    #                "outer": outer_type,
+    #                "argument": argument_type,
+    #                "local": local_type
+    #            }), {}
+    #        ),
+            "_types": Universal(True, initial_wrapped={
+                "outer": outer_type,
+                "argument": argument_type,
+                "local": local_type
+            }, debug_reason="code-prepare-context")
+        },
+            bind=DEFAULT_READONLY_COMPOSITE_TYPE,
+            debug_reason="code-prepare-context"
+        )
+    
+        get_manager(context)._context_type = UniversalObjectType({
+            "outer": outer_type,
+            "argument": argument_type,
+            "local": local_type
+        }, wildcard_type=AnyType(), name="code-prepare-context-type")
+    
+        code = enrich_opcode(
+            data.code,
+            combine(type_conditional_converter, UnboundDereferenceBinder(context))
+        )
+    
+        code_break_types = code.get_break_types(context, frame_manager, hooks)
+    
+        get_manager(context).remove_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+    
+        actual_break_types_factory.merge(code_break_types)
 
     final_declared_break_types = BreakTypesFactory(None)
 
@@ -288,12 +292,12 @@ class UnboundDereferenceBinder(object):
         from lockdown.executor.raw_code_factories import dereference_op, assignment_op, \
             literal_op, dereference, context_op
 
-        static = context._get("static", None)
-        if static and hasattr(static, reference):
+        static = context._get("static", NO_VALUE)
+        if static is not NO_VALUE and static._contains(reference):
             return dereference(prepend_context, "static", **debug_info)
 
-        prepare = context._get("prepare", None)
-        if prepare:
+        prepare = context._get("prepare", NO_VALUE)
+        if prepare is not NO_VALUE:
             prepare_search = self.search_statics_for_reference(reference, prepare, prepend_context + [ "prepare" ], debug_info)
             if prepare_search:
                 return prepare_search
@@ -565,32 +569,29 @@ class {open_function_id}(object):
         dependency_builder = DependencyBuilder()
 
         our_ast = self.to_ast(dependency_builder)
-        open_function_id = our_ast.name
 
-        combined_ast = [ our_ast ]
+        for key, dependency in list(dependency_builder.dependencies.items()):
+            if isinstance(dependency, OpenFunction):
+                open_function_ast = dependency.to_ast(dependency_builder)
+                if open_function_ast:
+                    dependency_builder.replace(key, open_function_ast)
 
-        while True:
-            for key, dependency in dependency_builder.dependencies.items():
-                if isinstance(dependency, OpenFunction):
-                    open_function_ast = dependency.to_ast(dependency_builder)
-                    if open_function_ast:
-                        dependency_builder.replace(key, open_function_ast)
-                    break
-            else:
-                break
+        compiled_dependencies = {
+            key: dependency for key, dependency in dependency_builder.dependencies.items()
+            if isinstance(dependency, ast.stmt)
+        }
 
-        for key, dependency in dependency_builder.dependencies.items():
-            if isinstance(dependency, ast.stmt):
-                combined_ast = combined_ast + [ dependency ]
-
-        dependencies = {
+        uncompiled_dependencies = {
             key: dependency for key, dependency in dependency_builder.dependencies.items()
             if not isinstance(dependency, ast.stmt)
         }
 
+        combined_ast = [ our_ast ] + list(compiled_dependencies.values())
         combined_ast = ast.Module(body=combined_ast)
 
-        return compile_ast_function_def(combined_ast, open_function_id, dependencies)
+        return compile_ast_function_def(
+            combined_ast, our_ast.name, uncompiled_dependencies
+        )
 
 
 class ClosedFunction(LockdownFunction):

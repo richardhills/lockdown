@@ -381,7 +381,7 @@ class PythonDict(Universal, MutableMapping, object):
 
                 return micro_op_type.invoke(manager, key)
         except InvalidDereferenceKey:
-            raise KeyError()
+            raise KeyError(key)
 
     def __setitem__(self, key, value):
         try:

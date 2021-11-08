@@ -326,13 +326,17 @@ class TestBuiltIns(TestCase):
         self.assertEqual(result.value, 10)
 
     def test_find(self):
+        print("Hello")
         code = parse("""
             function() {
                 var squareGenerator = function() {
+                    print "start";
                     for(var i from irange()) {
+                        print i;
                         yield i * i;
                     };
                 };
+                print "hi";
                 return find(squareGenerator, function(int i) { return i > 50; } );
             }
         """, debug=True)
@@ -437,7 +441,7 @@ class TestMapPipeline(TestCase):
     def test_map_pipeline(self):
         code = parse("""
             function() {
-                return [ 4, 6, 2 ] ||> { continue argument[2] + 1; };
+                return [ 4, 6, 2 ] *|> { continue argument[2] + 1; };
             }
         """, debug=True)
         _, result = bootstrap_function(code)
@@ -447,7 +451,7 @@ class TestMapPipeline(TestCase):
     def test_index_pipeline(self):
         code = parse("""
             function() {
-                return [ 4, 6, 2 ] ||> { continue argument[0]; };
+                return [ 4, 6, 2 ] *|> { continue argument[0]; };
             }
         """, debug=True)
         _, result = bootstrap_function(code)
@@ -457,7 +461,7 @@ class TestMapPipeline(TestCase):
     def test_keys_pipeline(self):
         code = parse("""
             function() {
-                return { foo: 3, bar: 5 } ||> { continue argument[1]; };
+                return { foo: 3, bar: 5 } *|> { continue argument[1]; };
             }
         """, debug=True)
         _, result = bootstrap_function(code)
@@ -1230,7 +1234,7 @@ class TestEuler(TestCase):
             function() => int {
                 Dictionary<int : int> cachedResults = { 1: 1 };
 
-                Function<int => int> testNumber = function(int number) => int {
+                Function<int> => int testNumber = function(int number) => int {
                     return 0;
                 };
 

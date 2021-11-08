@@ -1,0 +1,125 @@
+static var = {
+	type: "Inferred"
+};
+
+static any = {
+	type: "Any"
+};
+
+static int = {
+	type: "Integer"
+};
+
+static bool = {
+	type: "Boolean"
+};
+
+static string = {
+	type: "String"
+};
+
+static void = {
+	type: "NoValue"
+};
+
+static BaseComposite = {
+	type: "Universal",
+	micro_ops: []
+};
+
+static Iterable = function(any keyType, any valueType) => any {
+	return {
+		type: "Universal",
+		micro_ops: [{
+            type: "iter",
+            params: [ keyType, valueType ]		
+		}]
+	};
+};
+
+static keys = function(Iterable<any, any> list) {
+	return list *|> { continue argument[1]; };
+};
+
+static values = function(Iterable<any, any> list) {
+	return list *|> { continue argument[2]; };
+};
+
+static sum = function(Iterable<any, int> list) {
+	int total = 0;
+	list *|> {
+		total = total + argument[2];
+	};
+	return total;
+};
+
+static max = function({
+	type: "Universal",
+	micro_ops: [{
+        type: "iter",
+        params: [ int, int ]		
+	}, {
+		type: "get",
+		index: 0,
+		params: [ 0, int ]
+	}]
+} list) {
+	int largestValue = list[0];
+	list *|> {
+		if(argument[2] > largestValue) {
+			largestValue = argument[2];
+		};
+	};
+	return largestValue;
+};
+
+static intYielder = Function<> => void, yields int => void;
+
+static list = function(intYielder func) {
+	return for(var v from func) {
+		continue v;
+	};
+};
+
+static range = function(int start, int end) {
+	return function() {
+		int i = start;
+		while(i < end) {
+			yield i;
+			i = i + 1;
+		};
+	};
+};
+
+static irange = function() {
+	return function() {
+		int i = 0;
+		loop {
+			yield i;
+			i = i + 1;
+		};
+	};
+};
+
+static length = function(BaseComposite c) {
+	return json({
+		"opcode": "length",
+		"composite": lockdown(c)
+	});
+};
+
+static find = function(
+	intYielder func,
+	Function<int> => bool checker
+) => int {
+	for(var i from func) {
+		if(checker(i)) {
+			return i;
+		};
+	};
+	return 0;
+};
+
+export {
+	var, any, int, bool, string, void, Iterable, keys, values, sum, max, list,  range, irange, length, find
+};

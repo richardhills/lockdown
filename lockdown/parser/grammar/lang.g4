@@ -29,8 +29,10 @@ value
    | 'true'
    | 'false'
    | 'null'
-   | function // Where our language extends json...
+   // Where our language extends json...
+   | function
    | codeBlockAsFunction
+   | lockdownJsonExpression
    ;
 
 STRING
@@ -38,7 +40,7 @@ STRING
    ;
 
 SYMBOL
-   : [a-zA-Z][a-zA-Z0-9]*
+   : [a-zA-Z_][a-zA-Z0-9_]*
    ;
 
 fragment ESC
@@ -77,12 +79,16 @@ WS
    ;
 
 function
-   : 'function' SYMBOL? '(' argumentDestructurings? ')' ('=>' return_type=expression)? '{' codeBlock '}'
-   | 'function' SYMBOL? '(|' raw_argument=expression '|)' ('=>' return_type=expression)? '{' codeBlock '}'
+   : 'function' SYMBOL? '(' argumentDestructurings? ')' (functionBreakTypes=expression)? '{' codeBlock '}'
+   | 'function' SYMBOL? '(|' raw_argument=expression '|)' (functionBreakTypes=expression)? '{' codeBlock '}'
    ;
 
 codeBlockAsFunction
    : codeBlock
+   ;
+
+lockdownJsonExpression
+   : 'lockdown' '(' expression ')'
    ;
 
 argumentDestructurings
@@ -160,7 +166,8 @@ expression
    | whileLoop				# toWhileLoop
    | forGeneratorLoop		# toForGeneratorLoop
    | forListLoop			# toForListLoop
-   | expression '||>' '{' codeBlock '}' # toMap
+   | expression '*|>' '{' codeBlock '}' # toMap
+   | breakTypes				# toBreakTypes
    | objectType				# toObjectType
    | listType				# toListType
    | dictionaryType			# toDictionaryType
@@ -170,7 +177,17 @@ expression
    | 'print' expression     # toPrintStatement  
    | 'return' expression    # returnStatement  
    | 'yield' expression     # yieldStatement  
+   | 'export' expression    # exportStatement
+   | 'json' '(' json ')'	# toJsonExpression
    ;
+
+breakTypes
+   : '=>' valueType=expression (',' breakType)*
+   ;
+
+breakType
+   : SYMBOL output_type=expression ('=>' input_type=expression)?
+   ; 
 
 objectTemplate
    : '{' objectPropertyPair? (',' objectPropertyPair)* '}'
@@ -178,6 +195,7 @@ objectTemplate
 
 objectPropertyPair
    : SYMBOL ':' expression
+   | SYMBOL
    | NUMBER ':' expression
    | '[' expression ']' ':' expression
    ;
@@ -211,7 +229,7 @@ dictionaryType
    ;
 
 functionType
-   : 'Function' '<' expression '=>' expression '>'
+   : 'Function' '<' expression? '>' expression?
    ;
 
 ifStatement

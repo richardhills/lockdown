@@ -75,12 +75,17 @@ def iter_micro_op(key_type, value_type):
 def function_type(argument_type, break_types):
     if not isinstance(break_types, dict):
         raise FatalError()
+    return function_type_with_break_types_expression(
+        argument_type,
+        object_template_op(break_types)
+    )
+
+def function_type_with_break_types_expression(argument_type, break_types_expression):
     return object_template_op({
         "type": literal_op("Function"),
         "argument": argument_type,
-        "break_types": object_template_op(break_types)
+        "break_types": break_types_expression
     }, debug_reason="type-literal")
-
 
 def build_break_types(return_type=None, exception_type=None, yield_types=None, value_type=None):
     break_types = {}
@@ -94,18 +99,18 @@ def build_break_types(return_type=None, exception_type=None, yield_types=None, v
     if value_type:
         break_types["value"] = list_template_op([ object_template_op({ "out": value_type }) ])
 
-    return break_types
+    return object_template_op(break_types)
 
 
 def infer_all():
-    return {
+    return object_template_op({
         literal_op("infer-all"): list_template_op([
             object_template_op({
                 "out": inferred_type(),
                 "in": inferred_type()
             })
         ])
-    }
+    })
 
 
 def function_lit(*args, **kwargs):
@@ -138,14 +143,13 @@ def function_lit(*args, **kwargs):
     check_is_opcode(argument_type)
     check_is_opcode(local_type)
     check_is_opcode(code)
-    if not isinstance(break_types, dict):
-        raise FatalError()
+    check_is_opcode(break_types)
 
     static = spread_dict({
         "argument": argument_type,
         "local": local_type,
         "outer": inferred_type(),
-        "break_types": object_template_op(break_types)
+        "break_types": break_types
     }, extra_statics)
 
     func = spread_dict({
@@ -180,6 +184,9 @@ def object_template_op(values, debug_reason="code", **kwargs):
         check_is_opcode(k)
 
         values_list.append(PythonList([ k, v ]))
+
+    if "out" in values.keys():
+        pass
 
     return PythonObject(spread_dict({
         "opcode": "template",

@@ -19,7 +19,7 @@ from lockdown.executor.function import prepare
 from lockdown.executor.opcodes import get_context_type
 from lockdown.parser.parser import parse, ParseError
 from lockdown.type_system.exceptions import FatalError
-from lockdown.utils.utils import environment, dump_code
+from lockdown.utils.utils import environment, dump_code, NO_VALUE
 
 
 server = LanguageServer()
@@ -34,7 +34,10 @@ def validate(ls, params):
             source = text_doc.source
             code = parse(source)
 
-            outer_context = get_default_global_context()
+            if "builtins.lkdn" not in params.text_document.uri:
+                outer_context = get_default_global_context()
+            else:
+                outer_context = NO_VALUE
 
             hooks = PrepareHooks()
 
