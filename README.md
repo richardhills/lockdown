@@ -27,6 +27,11 @@ To run the unit tests, type:
 
 There are approximately [200 unit tests](lockdown/test.py) for the parser, type system and executor. Some of these unit tests are based on Euler problems [https://projecteuler.net/](https://projecteuler.net/).
 
+There is an experimental LSP (Language Server Protocol) server that is compatible with Eclipse LSP4E. It should also work with Visual Studio, Atom editor, Kate editor and others.
+
+#### Euler test 12 with verifier information in Eclipse
+![Euler test 12 with verifier information in Eclipse](./img/editor-showing-break-modes-from-functions.png)
+
 ## How is it strongly-typed and dynamic at the same time?
 
 *Structural Typing*, *Optional Typing*, *flow control verification* and *flow control inference*.

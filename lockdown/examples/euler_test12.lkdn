@@ -21,4 +21,3 @@ function() {
     	return countDivisors(number) > 10;
     });
 }
- 
