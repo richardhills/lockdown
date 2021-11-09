@@ -45,7 +45,13 @@ static values = function(Iterable<any, any> list) {
 	return list *|> { continue argument[2]; };
 };
 
-static sum = function(Iterable<any, int> list) {
+static valuesG = function(any type) {
+	return dynamic function(Iterable(any, prepare.local.type) list) => Iterable(any, prepare.local.type) {
+		return list *|> { continue argument[2]; };
+	};
+};
+
+static sum = function(Iterable<any, int> list) => int {
 	int total = 0;
 	list *|> {
 		total = total + argument[2];
@@ -63,7 +69,7 @@ static max = function({
 		index: 0,
 		params: [ 0, int ]
 	}]
-} list) {
+} list) => int {
 	int largestValue = list[0];
 	list *|> {
 		if(argument[2] > largestValue) {
@@ -81,7 +87,7 @@ static list = function(intYielder func) {
 	};
 };
 
-static range = function(int start, int end) {
+static range = function(int start, int end) => intYielder {
 	return function() {
 		int i = start;
 		while(i < end) {
@@ -121,5 +127,5 @@ static find = function(
 };
 
 export {
-	var, any, int, bool, string, void, Iterable, keys, values, sum, max, list,  range, irange, length, find
+	var, any, int, bool, string, void, Iterable, keys, values, valuesG, sum, max, list,  range, irange, length, find
 };

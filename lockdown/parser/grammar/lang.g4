@@ -79,8 +79,8 @@ WS
    ;
 
 function
-   : 'function' SYMBOL? '(' argumentDestructurings? ')' (functionBreakTypes=expression)? '{' codeBlock '}'
-   | 'function' SYMBOL? '(|' raw_argument=expression '|)' (functionBreakTypes=expression)? '{' codeBlock '}'
+   : dynamic='dynamic'? 'function' SYMBOL? '(' argumentDestructurings? ')' (functionBreakTypes=expression)? '{' codeBlock '}'
+   | dynamic='dynamic'? 'function' SYMBOL? '(|' raw_argument=expression '|)' (functionBreakTypes=expression)? '{' codeBlock '}'
    ;
 
 codeBlockAsFunction
@@ -173,7 +173,7 @@ expression
    | dictionaryType			# toDictionaryType
    | tupleType				# toTupleType
    | functionType			# toFunctionType
-   | function				# toFunctionExpression
+   | dynamic='dynamic'? function # toFunctionExpression
    | 'print' expression     # toPrintStatement  
    | 'return' expression    # returnStatement  
    | 'yield' expression     # yieldStatement  

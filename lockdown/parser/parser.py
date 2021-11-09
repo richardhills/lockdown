@@ -17,7 +17,7 @@ from lockdown.executor.raw_code_factories import function_lit, nop, comma_op, \
     local_function, reset_op, inferred_type, prepare_function_lit, transform, \
     continue_op, check_is_opcode, is_op, function_type, \
     composite_type, static_op, map_op, insert_op, prepared_function, int_type, \
-    any_type, print_op, shift_op
+    any_type, print_op, shift_op, prepare_op, close_op
 from lockdown.parser.grammar.langLexer import langLexer
 from lockdown.parser.grammar.langParser import langParser
 from lockdown.parser.grammar.langVisitor import langVisitor
@@ -247,13 +247,18 @@ class RDHLang5Visitor(langVisitor):
         return new_code_block
 
     def visitStaticValueDeclaration(self, ctx):
-        remaining_code = self.visit(ctx.codeBlock())
-
         name, value = self.visit(ctx.symbolInitialization())
 
-        return CodeBlockBuilder(
+        result = CodeBlockBuilder(
             extra_statics={ literal_op(name): value }
-        ).chain(remaining_code)
+        )
+
+        remaining_code = ctx.codeBlock()
+        if ctx.codeBlock():
+            remaining_code = self.visit(ctx.codeBlock())
+            result = result.chain(remaining_code)
+
+        return result
 
     def visitTypedef(self, ctx):
         remaining_code = self.visit(ctx.codeBlock())
@@ -277,7 +282,7 @@ class RDHLang5Visitor(langVisitor):
 #            local_initializer=object_template_op({ name: prepared_function })
             extra_statics={ literal_op(name): prepared_function }
         )
-        
+
         if remaining_code:
             builder = builder.chain(remaining_code)
 
@@ -817,8 +822,16 @@ class RDHLang5Visitor(langVisitor):
         return function_type(argument_type, break_types)
 
     def visitToFunctionExpression(self, ctx):
+        dynamic = bool(ctx.dynamic)
         _, function = self.visit(ctx.function())
-        return prepare_function_lit(function, **get_context_debug_info(ctx))
+
+        info = get_context_debug_info(ctx)
+        function = prepare_op(literal_op(function), **info)
+        if not dynamic:
+            function = static_op(function)
+        function = close_op(function, context_op())
+
+        return function
 
 
 class CodeBlockBuilder(object):

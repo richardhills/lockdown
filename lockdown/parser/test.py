@@ -298,6 +298,16 @@ class TestBasicFunction(TestCase):
 
 
 class TestBuiltIns(TestCase):
+    def test_valuesG(self):
+        code = parse("""
+            static valuesG = function(any type) {
+                return dynamic function(Iterable(string, prepare.argument.type) list) {
+                    return list *|> { continue argument[2]; };
+                };
+            };
+        """)
+        _, result = bootstrap_function(code)
+
     def test_range(self):
         code = parse("""
             function() {
