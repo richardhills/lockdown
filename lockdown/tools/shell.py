@@ -61,8 +61,39 @@ def bootstraped_executor(frame_manager):
                 "yield", "read",
                 reset_op(build_looper())
             )
-        ), get_default_global_context(), frame_manager
+        ), get_default_global_context(), frame_manager, None
     ).close(NO_VALUE)
+
+GETTING_STARTED_MESSAGE = """
+To get started, try the following:
+
+print "Hello world!";
+
+Define a variable:
+
+var x = 42;
+
+Do some maths:
+
+print x * 2 + 10;
+
+Declare a function:
+
+var doubler = function(int x) { return x * 2; };
+print doubler(42);
+
+Declare first class functions (for multi line input, start with --):
+
+--
+var multiplier = function(int x) {
+    return function(int y) {
+        return x * y;
+    };
+};
+--
+var triple = multiplier(3);
+print triple(5);
+"""
 
 def repl():
     with environment(base=True, transpile=False):
@@ -71,18 +102,24 @@ def repl():
 
             with frame_manager.capture("read") as previous_capturer:
                 previous_capturer.attempt_capture_or_raise(
-                    *bootstraped_executor(frame_manager).invoke(NO_VALUE, frame_manager)
+                    *bootstraped_executor(frame_manager).invoke(NO_VALUE, frame_manager, None)
                 )
+
+            print(GETTING_STARTED_MESSAGE)
+            print("crtl-c to quit")
 
             while True:
                 raw_code = read_input()
+                if not raw_code:
+                    continue
+
                 try:
                     code = build_executor(raw_code)
 
                     continuation = previous_capturer.value.continuation
 
                     with frame_manager.capture() as new_capturer:
-                        new_capturer.attempt_capture_or_raise(*continuation.invoke(code, frame_manager))
+                        new_capturer.attempt_capture_or_raise(*continuation.invoke(code, frame_manager, None))
 
                     if new_capturer.caught_break_mode == "read":
                         #print(new_capturer.value.value)
@@ -101,6 +138,6 @@ def repl():
 if __name__ == "__main__":
     print()
     print("Welcome to lockdown-REPL")
-    print("crtl-c to quit")
+    print("... loading")
     print()
     repl()

@@ -298,15 +298,17 @@ class TestBasicFunction(TestCase):
 
 
 class TestBuiltIns(TestCase):
-    def test_valuesG(self):
+    def test_list_from_range(self):
         code = parse("""
-            static valuesG = function(any type) {
-                return dynamic function(Iterable(string, prepare.argument.type) list) {
-                    return list *|> { continue argument[2]; };
-                };
-            };
+            function() {
+                var x = for(var i from range(0, 100)) { continue i * i; };
+                return x;
+            }
         """)
-        _, result = bootstrap_function(code)
+        func, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertIsInstance(result.value, PythonList)
+        self.assertTrue(len(result.value) == 100)
 
     def test_range(self):
         code = parse("""

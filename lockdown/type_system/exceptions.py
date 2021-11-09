@@ -10,6 +10,10 @@ def raise_if_safe(ExceptionType, can_fail):
 
 
 class FatalError(Exception):
+    def __init__(self):
+        import ipdb
+        ipdb.set_trace()
+
     pass
 
 class CompositeTypeIncompatibleWithTarget(Exception):
