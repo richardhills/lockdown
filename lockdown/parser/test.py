@@ -326,17 +326,13 @@ class TestBuiltIns(TestCase):
         self.assertEqual(result.value, 10)
 
     def test_find(self):
-        print("Hello")
         code = parse("""
             function() {
                 var squareGenerator = function() {
-                    print "start";
                     for(var i from irange()) {
-                        print i;
                         yield i * i;
                     };
                 };
-                print "hi";
                 return find(squareGenerator, function(int i) { return i > 50; } );
             }
         """, debug=True)

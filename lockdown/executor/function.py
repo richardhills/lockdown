@@ -457,6 +457,9 @@ class OpenFunction(object):
 
         return ClosedFunction(self, outer_context)
 
+    def close_and_invoke(self, argument, outer_context, frame_manager, hooks):
+        return self.close(outer_context).invoke(argument, frame_manager, hooks)
+
     def get_start_and_end(self):
         return (getattr(self.data, "start", None), getattr(self.data, "end", None))
 
@@ -487,7 +490,7 @@ class OpenFunction(object):
         return compile_statement("""
 class {open_function_id}(object):
     @classmethod
-    def invoke(cls, {context_name}_argument, {context_name}_outer_context, _frame_manager, _hooks):
+    def close_and_invoke(cls, {context_name}_argument, {context_name}_outer_context, _frame_manager, _hooks):
         {context_name} = Universal(True, initial_wrapped={{
             "prepare": {prepare_context},
             "outer": {context_name}_outer_context,
@@ -508,23 +511,30 @@ class {open_function_id}(object):
             """
         ) + """
 
-    class Closed_{open_function_id}(object):
+    @classmethod
+    def close(cls, outer_context):
+        return cls.Closed_{open_function_id}(cls, outer_context)
+
+    class Closed_{open_function_id}(LockdownFunction):
         def __init__(self, open_function, outer_context):
             self.open_function = open_function
             self.outer_context = outer_context
 
         def invoke(self, argument, frame_manager, hooks):
-            return self.open_function.invoke(argument, self.outer_context, frame_manager, hooks)
+            return self.open_function.close_and_invoke(argument, self.outer_context, frame_manager, hooks)
 
-    @classmethod
-    def close(cls, outer_context):
-        return cls.Closed_{open_function_id}(cls, outer_context)
+        def get_type(self):
+            return ClosedFunctionType(
+                {open_function_type}.argument_type,
+                {open_function_type}.break_types
+            )
 """,
             context_name, dependency_builder,
             prepare_context=self.prepare_context,
             static=self.static,
             types_context=self.types_context,
             open_function_id=open_function_id,
+            open_function_type=self.get_type(),
             local_initializer=local_initializer_ast,
             function_code=code_ast
         )
@@ -620,6 +630,13 @@ class ClosedFunction(LockdownFunction):
         return open_function_transpile.close(self.outer_context)
 
     def invoke(self, argument, frame_manager, hooks):
+        try:
+            if argument._get(0) == None:
+                print("hello")
+        except (IndexError, AttributeError):
+            pass
+
+
         if get_environment().opcode_bindings:
             bindable_reasoner = Reasoner()
             bindable = is_type_bindable_to_value(argument, self.open_function.argument_type, bindable_reasoner)
@@ -627,28 +644,35 @@ class ClosedFunction(LockdownFunction):
                 raise FatalError(bindable_reasoner.to_message())
 
         with frame_manager.get_next_frame(self) as frame:
-            new_context = frame.step(
-                "local_initialization_context",
-                lambda: Universal(True, initial_wrapped={
-                    "prepare": self.open_function.prepare_context,
-                    "outer": self.outer_context,
-                    "argument": argument,
-                    "static": self.open_function.static,
-#                    "types": derich_type(self.open_function.types_context, {}),
-                    "_types": self.open_function.types_context
-                }, debug_reason="local-initialization-context")
-            )
+            local_initializer_context_binding_reasoner = Reasoner()
+            try:
+                new_context = frame.step(
+                    "local_initialization_context",
+                    lambda: Universal(True, initial_wrapped={
+                        "prepare": self.open_function.prepare_context,
+                        "outer": self.outer_context,
+                        "argument": argument,
+                        "static": self.open_function.static,
+    #                    "types": derich_type(self.open_function.types_context, {}),
+                        "_types": self.open_function.types_context
+                    }, debug_reason="local-initialization-context")
+                )
 
-            with scoped_bind(
-                new_context,
-                self.open_function.local_initialization_context_type,
-                bind=get_environment().rtti
-            ):
-                get_manager(new_context)._context_type = self.open_function.local_initialization_context_type
-                local = frame.step("local", lambda: evaluate(self.open_function.local_initializer, new_context, frame_manager, hooks))
+                with scoped_bind(
+                    new_context,
+                    self.open_function.local_initialization_context_type,
+                    bind=get_environment().rtti,
+                    reasoner=local_initializer_context_binding_reasoner
+                ):
+                    get_manager(new_context)._context_type = self.open_function.local_initialization_context_type
+                    local = frame.step("local", lambda: evaluate(self.open_function.local_initializer, new_context, frame_manager, hooks))
 
-            if get_environment().opcode_bindings and not is_type_bindable_to_value(local, self.open_function.local_type):
-                raise FatalError()
+                if get_environment().opcode_bindings and not is_type_bindable_to_value(local, self.open_function.local_type):
+                    raise FatalError()
+            except CompositeTypeIncompatibleWithTarget:
+                raise FatalError(local_initializer_context_binding_reasoner.to_message())
+            except CompositeTypeIsInconsistent as e:
+                raise raise_from(FatalError, e)
 
             code_context_binding_reasoner = Reasoner()
             try:

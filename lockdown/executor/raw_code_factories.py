@@ -72,15 +72,7 @@ def iter_micro_op(key_type, value_type):
         ])
     })
 
-def function_type(argument_type, break_types):
-    if not isinstance(break_types, dict):
-        raise FatalError()
-    return function_type_with_break_types_expression(
-        argument_type,
-        object_template_op(break_types)
-    )
-
-def function_type_with_break_types_expression(argument_type, break_types_expression):
+def function_type(argument_type, break_types_expression):
     return object_template_op({
         "type": literal_op("Function"),
         "argument": argument_type,

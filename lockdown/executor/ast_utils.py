@@ -131,8 +131,8 @@ def build_and_compile_ast_function(name, arguments, body, dependencies):
 def compile_ast_function_def(function_creator_ast, open_function_id, dependencies):
     ast.fix_missing_locations(function_creator_ast)
 
-#    print "--- {} ---".format(open_function_id)
-#    print to_source(function_creator_ast)
+    print("--- {} ---".format(open_function_id))
+    print(to_source(function_creator_ast))
 
     function_creator = compile(function_creator_ast, "<string>", "exec")
 
@@ -145,6 +145,7 @@ def compile_ast_function_def(function_creator_ast, open_function_id, dependencie
     return function_creation_context[open_function_id]
 
 def default_globals():
+    from lockdown.executor.function import LockdownFunction, ClosedFunctionType
     from lockdown.executor.flow_control import BreakException
     from lockdown.type_system.managers import get_manager
     from lockdown.type_system.universal_type import PythonObject
@@ -163,6 +164,8 @@ def default_globals():
         "FatalError": FatalError,
         "bind_key": bind_key,
         "unbind_key": unbind_key,
+        "LockdownFunction": LockdownFunction,
+        "ClosedFunctionType": ClosedFunctionType
     }
 
 def get_dependency_key(dependency):

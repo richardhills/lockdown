@@ -956,7 +956,7 @@ except BreakException as b:
                 try_catcher = compile_statement("""
 def TransformOpTryCatcher{opcode_id}({context_name}, _frame_manager, _hooks):
     try:
-        {expression}
+        return {expression}
     except BreakException as b:
         if b.mode == "{input}":
             return b.value
@@ -1560,7 +1560,7 @@ class InvokeOp(Opcode):
                     return inline_ast
 
             return compile_expression(
-                "{function}.invoke({argument}, {outer_context}, _frame_manager, _hooks)[1]",
+                "{function}.close_and_invoke({argument}, {outer_context}, _frame_manager, _hooks)[1]",
                 context_name, dependency_builder,
                 function=open_function,
                 outer_context=self.function.outer_context.to_ast(context_name, dependency_builder),

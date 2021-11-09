@@ -17,7 +17,7 @@ from lockdown.executor.raw_code_factories import function_lit, nop, comma_op, \
     local_function, reset_op, inferred_type, prepare_function_lit, transform, \
     continue_op, check_is_opcode, is_op, function_type, \
     composite_type, static_op, map_op, insert_op, prepared_function, int_type, \
-    any_type, print_op, shift_op, function_type_with_break_types_expression
+    any_type, print_op, shift_op
 from lockdown.parser.grammar.langLexer import langLexer
 from lockdown.parser.grammar.langParser import langParser
 from lockdown.parser.grammar.langVisitor import langVisitor
@@ -814,7 +814,7 @@ class RDHLang5Visitor(langVisitor):
 
         break_types = self.visit(break_types)
 
-        return function_type_with_break_types_expression(argument_type, break_types)
+        return function_type(argument_type, break_types)
 
     def visitToFunctionExpression(self, ctx):
         _, function = self.visit(ctx.function())

@@ -256,11 +256,11 @@ class CompositeObjectManager(object):
         effective_composite_type = self.get_effective_composite_type()
         return effective_composite_type.get_micro_op_type(tag)
 
-    def add_composite_type(self, new_type, reasoner=None):
+    def add_composite_type(self, new_type, reasoner=DUMMY_REASONER):
         # TODO: remove
         add_composite_type(self, new_type, reasoner=reasoner)
 
-    def remove_composite_type(self, remove_type, reasoner=None):
+    def remove_composite_type(self, remove_type, reasoner=DUMMY_REASONER):
         # TODO: remove
         remove_composite_type(self, remove_type, reasoner=reasoner)
 
@@ -466,7 +466,7 @@ def replace_setter_value_type_with_getter(setter, getter):
         return not setter.value_type.is_nominally_the_same(getter.value_type)
     return True
 
-def add_composite_type(target_manager, new_type, reasoner=None, key_filter=None, multiplier=1, enforce_safety_checks=True):
+def add_composite_type(target_manager, new_type, reasoner=DUMMY_REASONER, key_filter=None, multiplier=1, enforce_safety_checks=True):
     """
     Safely adds a new CompositeType to a CompositeObjectManager, so that run time verification
     of mutations to the object owned by the CompositeObjectManager can be enforced.
@@ -475,9 +475,6 @@ def add_composite_type(target_manager, new_type, reasoner=None, key_filter=None,
     have been added previously. If it is found to conflict, this function raises a
     CompositeTypeIncompatibleWithTarget exception.
     """
-    if not reasoner:
-        reasoner = Reasoner()
-
     types_to_bind = {}
     succeeded = build_binding_map_for_type(None, new_type, target_manager.get_obj(), target_manager, key_filter, MISSING, {}, types_to_bind, reasoner, enforce_safety_checks=enforce_safety_checks)
     if not succeeded:
@@ -488,9 +485,6 @@ def add_composite_type(target_manager, new_type, reasoner=None, key_filter=None,
 
 
 def remove_composite_type(target_manager, remove_type, reasoner=DUMMY_REASONER, key_filter=None, multiplier=1, enforce_safety_checks=True):
-    if not reasoner:
-        reasoner = Reasoner()
-
     types_to_bind = {}
     succeeded = build_binding_map_for_type(None, remove_type, target_manager.get_obj(), target_manager, key_filter, MISSING, {}, types_to_bind, reasoner, enforce_safety_checks=enforce_safety_checks)
     if not succeeded:
