@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+import functools
 from time import time
 
 from lockdown.executor.flow_control import FrameManager, \
@@ -33,6 +34,7 @@ class ObjectDictWrapper(object):
 class BootstrapException(Exception):
     pass
 
+@functools.lru_cache(maxsize=65535)
 def get_default_global_context():
     with open("./lockdown/executor/builtins.lkdn") as builtins_file:
         frame_manager = FrameManager()
