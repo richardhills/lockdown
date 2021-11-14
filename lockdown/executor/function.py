@@ -686,8 +686,6 @@ class ClosedFunction(LockdownFunction):
                 ):
                     get_manager(new_context)._context_type = self.open_function.execution_context_type
                     result = frame.step("code", lambda: evaluate(self.open_function.code, new_context, frame_manager, hooks))
-                    if isinstance(result, ClosedFunction):
-                        evaluate(self.open_function.code, new_context, frame_manager, hooks)
                     return frame.value(self, result)
             except CompositeTypeIncompatibleWithTarget:
                 raise FatalError(code_context_binding_reasoner.to_message())
