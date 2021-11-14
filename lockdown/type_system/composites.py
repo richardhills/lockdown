@@ -59,9 +59,6 @@ class CompositeType(Type):
 
         result = CompositeType(dict(self._micro_op_types), name, delegate=self)
 
-        if hasattr(self, "from_opcode"):
-            result.from_opcode = self.from_opcode
-
         return result
 
     def get_micro_op_type(self, tag):

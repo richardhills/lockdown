@@ -10,7 +10,8 @@ def raise_if_safe(ExceptionType, can_fail):
 
 
 class FatalError(Exception):
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
+        super(FatalError, self).__init__(*args, **kwargs)
         import ipdb
         ipdb.set_trace()
 
@@ -44,7 +45,7 @@ class InvalidAssignmentType(Exception):
 class InvalidInferredType(Exception):
     pass
 
-class DanglingInferredType(FatalError):
+class DanglingInferredType(Exception):
     pass
 
 class IsNotCopyable(object):

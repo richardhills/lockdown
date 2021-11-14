@@ -220,14 +220,11 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
                 else:
                     final_in = declared_in
 
-#                 if declared_in is not None and actual_in is None:
-#                     continue
-
                 out_is_compatible = final_out.is_copyable_from(actual_out, DUMMY_REASONER)
                 in_is_compatible = final_in is None or actual_in.is_copyable_from(final_in, DUMMY_REASONER)
 
                 if out_is_compatible and in_is_compatible:
-                    final_declared_break_types.add(mode, final_out, final_in)
+                    final_declared_break_types.add(None, mode, final_out, final_in)
                     break
             else:
                 raise PreparationException("""Nothing declared for {}, {}.\nFunction declares break types {}.\nBut local_initialization breaks {}, code breaks {}""".format(
@@ -491,6 +488,8 @@ class OpenFunction(object):
 class {open_function_id}(object):
     @classmethod
     def close_and_invoke(cls, {context_name}_argument, {context_name}_outer_context, _frame_manager, _hooks):
+        import ipdb
+        ipdb.set_trace()
         {context_name} = Universal(True, initial_wrapped={{
             "prepare": {prepare_context},
             "outer": {context_name}_outer_context,
@@ -630,13 +629,6 @@ class ClosedFunction(LockdownFunction):
         return open_function_transpile.close(self.outer_context)
 
     def invoke(self, argument, frame_manager, hooks):
-        try:
-            if argument._get(0) == None:
-                print("hello")
-        except (IndexError, AttributeError):
-            pass
-
-
         if get_environment().opcode_bindings:
             bindable_reasoner = Reasoner()
             bindable = is_type_bindable_to_value(argument, self.open_function.argument_type, bindable_reasoner)
@@ -696,7 +688,9 @@ class ClosedFunction(LockdownFunction):
                 ):
                     get_manager(new_context)._context_type = self.open_function.execution_context_type
                     result = frame.step("code", lambda: evaluate(self.open_function.code, new_context, frame_manager, hooks))
-                    return frame.value(result)
+                    if isinstance(result, ClosedFunction):
+                        evaluate(self.open_function.code, new_context, frame_manager, hooks)
+                    return frame.value(self, result)
             except CompositeTypeIncompatibleWithTarget:
                 raise FatalError(code_context_binding_reasoner.to_message())
             except CompositeTypeIsInconsistent as e:

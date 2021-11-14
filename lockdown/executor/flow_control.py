@@ -5,17 +5,27 @@ from _collections import defaultdict
 
 from lockdown.type_system.composites import is_type_bindable_to_value, \
     CompositeType, does_value_fit_through_type
-from lockdown.type_system.core_types import Type
 from lockdown.type_system.exceptions import FatalError
 from lockdown.type_system.reasoner import DUMMY_REASONER, Reasoner
 from lockdown.utils.utils import MISSING, InternalMarker, get_environment
-
+from lockdown.type_system.core_types import Type
 
 class BreakException(Exception):
     """
     Represents execution leaving an opcode or function. 
     """
     def __init__(self, mode, value, opcode, restart_type, caused_by=None):
+        from lockdown.executor.opcodes import Opcode
+        from lockdown.executor.function import ClosedFunction
+        if isinstance(value, ClosedFunction):
+            print("hey")
+        if not isinstance(mode, str):
+            raise FatalError()
+        if not isinstance(opcode, (Opcode, ClosedFunction)):
+            raise FatalError()
+        if restart_type and not isinstance(restart_type, Type):
+            raise FatalError()
+
         self.mode = mode
         self.value = value
         self.opcode = opcode
@@ -39,18 +49,17 @@ class BreakTypesFactory(object):
         self.target = target
         self.result = defaultdict(list)
 
-    def add(self, mode, out_type, in_type=None, opcode=None):
+    def add(self, opcode, mode, out_type, in_type=None):
         if not isinstance(out_type, Type):
             raise FatalError()
         if in_type and not isinstance(in_type, Type):
             raise FatalError()
-        if opcode:
-            out_type.from_opcode = opcode
         break_type = {
             "out": out_type,
         }
         if in_type:
             break_type["in"] = in_type
+        break_type["opcode"] = opcode
         self.result[mode].append(break_type)
 
     def merge(self, break_types):
@@ -201,19 +210,28 @@ class PassThroughFrame(object):
     def step(self, name, func):
         return func()
 
-    def unwind(self, mode, value, opcode, restart_type):
-        if get_environment().return_value_optimization and mode == "value" and restart_type is None:
+    def unwind(self, opcode, mode, value, restart_type):
+        from lockdown.executor.opcodes import Opcode
+        from lockdown.executor.function import ClosedFunction
+
+        if not isinstance(opcode, (Opcode, ClosedFunction)):
+            raise FatalError()
+        if mode is None or value is None or opcode is None:
+            raise FatalError()
+
+        if get_environment().return_value_optimization and mode == "value" and restart_type:
             return mode, value, opcode, None
+
         raise BreakException(mode, value, opcode, restart_type)
 
-    def value(self, value, opcode=None):
-        return self.unwind("value", value, opcode, None)
+    def value(self, opcode, value):
+        return self.unwind(opcode, "value", value, None)
 
-    def exception(self, value, opcode=None):
-        return self.unwind("exception", value, opcode, None)
+    def exception(self, opcode, value):
+        return self.unwind(opcode, "exception", value, None)
 
-    def yield_(self, value, restart_type=None):
-        return self.unwind("yield", value, None, restart_type)
+    def yield_(self, opcode, value, restart_type):
+        return self.unwind(opcode, "yield", value, restart_type)
 
     def __enter__(self):
         return self
@@ -237,23 +255,35 @@ class Frame(object):
             initial_locals=dict(self.locals)
         )
 
-    def unwind(self, mode, value, opcode, restart_type):
-        if restart_type:
+    def unwind(self, opcode, mode, value, restart_type):
+        from lockdown.executor.opcodes import Opcode
+        from lockdown.executor.function import ClosedFunction
+
+        if not isinstance(opcode, (Opcode, ClosedFunction)):
+            raise FatalError()
+        if opcode != self.target:
+            raise FatalError()
+        if mode is None or value is None:
+            raise FatalError()
+        if restart_type is not None and not isinstance(restart_type, Type):
+            raise FatalError()
+
+        if restart_type is not None:
             self.manager.mode = "shift"
 
         if get_environment().return_value_optimization and restart_type is None:
-            return mode, value, self.target, None
+            return mode, value, opcode, None
 
         raise BreakException(mode, value, self.target, restart_type)
 
-    def value(self, value):
-        return self.unwind("value", value, None, None)
+    def value(self, opcode, value):
+        return self.unwind(opcode, "value", value, None)
 
-    def exception(self, value, opcode=None):
-        return self.unwind("exception", value, opcode, None)
+    def exception(self, opcode, value):
+        return self.unwind(opcode, "exception", value, None)
 
-    def yield_(self, value, restart_type=None):
-        return self.unwind("yield", value, None, restart_type)
+    def yield_(self, opcode, value, restart_type):
+        return self.unwind(opcode, "yield", value, restart_type)
 
     def step(self, name, func):
         locals = self.locals
@@ -297,9 +327,6 @@ class Frame(object):
             # at verification time. 
             break_types = self.target.break_types.get(exc_value.mode, []) + self.target.break_types.get("*", [])
 
-#            if break_types is MISSING:
-#                raise FatalError("Can not unwind {}: {}, target {} allowed {}".format(exc_value.mode, exc_value.value, self.target, break_types))
-
             failures = []
 
             reasoner = Reasoner()
@@ -307,6 +334,10 @@ class Frame(object):
             for allowed_break_type in break_types:
                 allowed_out = allowed_break_type["out"]
                 allowed_in = allowed_break_type.get("in", None)
+                allowed_opcode = allowed_break_type.get("opcode", None)
+
+                if allowed_opcode is not None and allowed_opcode != exc_value.opcode:
+                    continue
 
                 out_is_compatible = does_value_fit_through_type(exc_value.value, allowed_out, reasoner=reasoner)
                 in_is_compatible = allowed_in is None or (
@@ -319,7 +350,8 @@ class Frame(object):
                 if out_is_compatible and in_is_compatible:
                     break
             else:
-                raise FatalError("Can not unwind {} {}, target {}, allowed {}: {}".format(exc_value.mode, exc_value.value, self.target, break_types, reasoner.to_message()))
+                msg = "Can not unwind {} {}, target {}, allowed {}: {}".format(exc_value.mode, exc_value.value, self.target, break_types, reasoner.to_message())
+                raise FatalError(msg)
 
         exc_type_allows_restart = exc_value and isinstance(exc_value, BreakException) and exc_value.restart_type is not None
 

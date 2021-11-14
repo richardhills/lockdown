@@ -17,7 +17,7 @@ from lockdown.type_system.managers import get_manager
 from lockdown.type_system.micro_ops import MicroOpType
 from lockdown.type_system.reasoner import DUMMY_REASONER
 from lockdown.utils.utils import MISSING, default, micro_op_repr, InternalMarker, \
-    raise_from
+    raise_from, NO_VALUE
 
 
 SPARSE_ELEMENT = InternalMarker("SPARSE_ELEMENT")
@@ -550,6 +550,7 @@ class SetterMicroOpType(MicroOpType):
             raise FatalError()
         except TypeError:
             raise FatalError()
+        return NO_VALUE
 
     def is_derivable_from(self, other_type, reasoner):
         other_micro_op_type = other_type.get_micro_op_type(("set", self.key))
@@ -656,6 +657,8 @@ class InsertStartMicroOpType(MicroOpType):
         except TypeError:
             raise FatalError()
 
+        return NO_VALUE
+
     def is_derivable_from(self, other_type, reasoner):
         other_micro_op_type = other_type.get_micro_op_type(("insert-start",))
         return (
@@ -731,6 +734,8 @@ class InsertEndMicroOpType(MicroOpType):
             raise FatalError()
         except TypeError:
             raise FatalError()
+
+        return NO_VALUE
 
     def is_derivable_from(self, other_type, reasoner):
         other_micro_op_type = other_type.get_micro_op_type(("insert-end",))
@@ -906,6 +911,7 @@ class SetterWildcardMicroOpType(MicroOpType):
             raise FatalError()
         except TypeError:
             raise FatalError()
+        return NO_VALUE
 
     def is_derivable_from(self, other_type, reasoner):
         other_micro_op_type = other_type.get_micro_op_type(("set-wildcard",))
@@ -988,6 +994,7 @@ class DeletterWildcardMicroOpType(MicroOpType):
             raise FatalError()
         except TypeError:
             raise FatalError()
+        return NO_VALUE
 
     def is_derivable_from(self, other_type, reasoner):
         other_micro_op_type = other_type.get_micro_op_type(("delete-wildcard",))
@@ -1059,6 +1066,7 @@ class RemoverWildcardMicroOpType(MicroOpType):
             raise FatalError()
         except TypeError:
             raise FatalError()
+        return NO_VALUE
 
     def is_derivable_from(self, other_type, reasoner):
         other_micro_op_type = other_type.get_micro_op_type(("remove-wildcard",))
@@ -1141,6 +1149,7 @@ class InserterWildcardMicroOpType(MicroOpType):
         except TypeError:
             raise
             raise FatalError()
+        return NO_VALUE
 
     def is_derivable_from(self, other_type, reasoner):
         other_micro_op_type = other_type.get_micro_op_type(("insert-wildcard",))
@@ -1219,6 +1228,7 @@ class IterMicroOpType(MicroOpType):
             raise FatalError()
         except TypeError:
             raise FatalError()
+        return NO_VALUE
 
     def is_derivable_from(self, other_type, reasoner):
         other_micro_op_type = other_type.get_micro_op_type(("iter",))

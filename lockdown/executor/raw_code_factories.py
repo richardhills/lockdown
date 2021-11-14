@@ -253,13 +253,17 @@ def transform(*args, **kwargs):
 
 
 def transform_op(*args, **kwargs):
+    output = input = code = immediate_child = None
+
     if len(args) == 1:
         output, = args
-        input = code = None
     elif len(args) == 3:
         input, output, code = args
+    elif len(args) == 4:
+        input, output, code, immediate_child = args
     else:
         raise FatalError()
+
     if code:
         check_is_opcode(code)
     if input and not isinstance(input, str):
@@ -268,11 +272,13 @@ def transform_op(*args, **kwargs):
         raise FatalError()
     op = {
         "opcode": "transform",
-        "output": output,
+        "output": output
     }
     if input:
         op["input"] = input
         op["code"] = code
+    if immediate_child is not None:
+        op["immediate_child"] = immediate_child
     return PythonObject(spread_dict(op, **kwargs), debug_reason="code")
 
 

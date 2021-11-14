@@ -34,7 +34,7 @@ class ObjectDictWrapper(object):
 class BootstrapException(Exception):
     pass
 
-@functools.lru_cache(maxsize=65535)
+@functools.lru_cache(maxsize=65536)
 def get_default_global_context():
     with open("./lockdown/executor/builtins.lkdn") as builtins_file:
         frame_manager = FrameManager()
@@ -67,9 +67,9 @@ def format_unhandled_break_type(break_type, raw_code):
 
     out_break_type = break_type["out"]
 
-    opcode = getattr(out_break_type, "from_opcode", None)
+    opcode = break_type["opcode"]
     if not opcode:
-        return str(break_type) + " (break_type has no from_opcode)"
+        return str(break_type) + " <!! break_type has no from_opcode !!>"
 
     start, _ = opcode.get_start_and_end()
 

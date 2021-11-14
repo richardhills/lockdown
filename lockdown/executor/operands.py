@@ -79,7 +79,7 @@ class BoundOperand(object):
             self.value_type = flatten_out_types(self.value_type)
 
             if not self.required_type.is_copyable_from(self.value_type, DUMMY_REASONER):
-                break_types.add("exception", self.invalid_type_exception_factory.get_type(), opcode=self.opcode)
+                break_types.add(self.opcode, "exception", self.invalid_type_exception_factory.get_type())
             else:
                 self.safe = True
             return True
@@ -91,6 +91,6 @@ class BoundOperand(object):
 
         if not is_type_bindable_to_value(value, self.required_type):
             is_type_bindable_to_value(value, self.required_type)
-            return frame.exception(self.invalid_type_exception_factory())
+            return frame.exception(self.opcode, self.invalid_type_exception_factory())
 
         return value
