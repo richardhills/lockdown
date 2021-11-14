@@ -1009,6 +1009,7 @@ class TestEuler(TestCase):
             }
         """, debug=True)
         _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 233168)
 
     def test_1a(self):

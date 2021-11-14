@@ -17,8 +17,6 @@ class BreakException(Exception):
     def __init__(self, mode, value, opcode, restart_type, caused_by=None):
         from lockdown.executor.opcodes import Opcode
         from lockdown.executor.function import ClosedFunction
-        if isinstance(value, ClosedFunction):
-            print("hey")
         if not isinstance(mode, str):
             raise FatalError()
         if not isinstance(opcode, (Opcode, ClosedFunction)):
@@ -219,7 +217,7 @@ class PassThroughFrame(object):
         if mode is None or value is None or opcode is None:
             raise FatalError()
 
-        if get_environment().return_value_optimization and mode == "value" and restart_type:
+        if get_environment().return_value_optimization and mode == "value" and restart_type is None:
             return mode, value, opcode, None
 
         raise BreakException(mode, value, opcode, restart_type)

@@ -79,8 +79,8 @@ class Opcode(object):
     def get_start_and_end(self):
         return (getattr(self.data, "start", None), getattr(self.data, "end", None))
 
-    def return_value_jump(self, context, frame_manager, immediate_context=None):
-        return evaluate(self, context, frame_manager, None, immediate_context)
+    def return_value_jump(self, context, frame_manager, hooks, immediate_context=None):
+        return evaluate(self, context, frame_manager, hooks, immediate_context)
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         return compile_expression(

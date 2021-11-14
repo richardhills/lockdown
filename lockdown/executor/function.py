@@ -488,8 +488,6 @@ class OpenFunction(object):
 class {open_function_id}(object):
     @classmethod
     def close_and_invoke(cls, {context_name}_argument, {context_name}_outer_context, _frame_manager, _hooks):
-        import ipdb
-        ipdb.set_trace()
         {context_name} = Universal(True, initial_wrapped={{
             "prepare": {prepare_context},
             "outer": {context_name}_outer_context,
