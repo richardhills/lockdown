@@ -74,24 +74,26 @@ class BreakTypesFactory(object):
         return result
 
 class Capturer(object):
-    __slots__ = [ "frame_manager", "break_mode", "top_level", "value", "caught_break_mode", "caught_restart_type", "caught_frames", "opcode" ]
+    __slots__ = [ "frame_manager", "break_mode", "opcode", "top_level", "value", "caught_break_mode", "caught_restart_type", "caught_frames", "caught_opcode" ]
 
-    def __init__(self, frame_manager, break_mode=None, top_level=False):
+    def __init__(self, frame_manager, break_mode=None, opcode=None, top_level=False):
         self.frame_manager = frame_manager
         self.break_mode = break_mode
+        self.opcode = opcode
         self.top_level = top_level
 
         self.value = MISSING
         self.caught_break_mode = MISSING
         self.caught_restart_type = MISSING
         self.caught_frames = MISSING
-        self.opcode = MISSING
+        self.caught_opcode = MISSING
 
     def attempt_capture(self, mode, value, opcode, restart_type):
-        if self.break_mode is None or self.break_mode == mode:
+        if ((self.break_mode is None or self.break_mode == mode)
+            and (self.opcode is None or self.opcode is opcode)):
             self.value = value
             self.caught_break_mode = mode
-            self.opcode = opcode
+            self.caught_opcode = opcode
 
             if restart_type:
                 self.caught_restart_type = restart_type
@@ -174,8 +176,8 @@ class FrameManager(object):
     def pop_frame(self):
         del self.frames[-1]
 
-    def capture(self, break_mode=None, top_level=False):
-        return Capturer(self, break_mode, top_level)
+    def capture(self, break_mode=None, opcode=None, top_level=False):
+        return Capturer(self, break_mode, opcode, top_level)
 
     def slice_frames(self):
         if self.fully_wound():

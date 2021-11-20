@@ -329,7 +329,7 @@ class UnboundDereferenceBinder(object):
             bound_countext_op, is_static = self.search_for_reference(reference, debug_info)
 
             if bound_countext_op:
-                new_dereference = dereference_op(bound_countext_op, literal_op(reference), True, **debug_info)
+                new_dereference = dereference_op(bound_countext_op, literal_op(reference), **debug_info)
                 if is_static:
                     new_dereference = static_op(new_dereference)
                 get_manager(new_dereference).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)

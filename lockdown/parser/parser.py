@@ -364,8 +364,7 @@ class RDHLang5Visitor(langVisitor):
     def visitStaticDereference(self, ctx):
         return dereference_op(
             self.visit(ctx.expression()),
-            literal_op(ctx.SYMBOL().getText()),
-            True
+            literal_op(ctx.SYMBOL().getText())
         )
 
     def visitDynamicDereference(self, ctx):
@@ -373,7 +372,10 @@ class RDHLang5Visitor(langVisitor):
         of = self.visit(of)
         reference = self.visit(reference)
         unsafe = bool(ctx.unsafe)
-        return dereference_op(of, reference, not unsafe)
+        result = dereference_op(of, reference)
+        if unsafe:
+            result = transform_op("exception", "value", result, True)
+        return result
 
     def visitMultiplication(self, ctx):
         lvalue, rvalue = ctx.expression()

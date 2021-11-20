@@ -382,14 +382,13 @@ def is_op(expression, type, **kwargs):
     }, **kwargs), debug_reason="code")
 
 
-def dereference_op(of, reference, safe, **kwargs):
+def dereference_op(of, reference, **kwargs):
     check_is_opcode(of)
     check_is_opcode(reference)
     return PythonObject(spread_dict({
         "opcode": "dereference",
         "of": of,
-        "reference": reference,
-        "safe": safe
+        "reference": reference
     }, **kwargs), debug_reason="code")
 
 
@@ -613,12 +612,12 @@ def dereference(*vars, **kwargs):
     for var in vars:
         if isinstance(var, str):
             for v in var.split("."):
-                result = dereference_op(result, literal_op(munge_ints(v)), True, **kwargs)
+                result = dereference_op(result, literal_op(munge_ints(v)), **kwargs)
         elif isinstance(var, int):
-            result = dereference_op(result, literal_op(var), True, **kwargs)
+            result = dereference_op(result, literal_op(var), **kwargs)
         elif isinstance(var, list):
             for v in var:
-                result = dereference_op(result, literal_op(munge_ints(v)), True, **kwargs)
+                result = dereference_op(result, literal_op(munge_ints(v)), **kwargs)
         else:
             raise FatalError(var)
 

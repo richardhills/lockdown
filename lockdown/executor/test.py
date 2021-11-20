@@ -60,11 +60,9 @@ class TestDereference(TestCase):
                 dereference_op(
                     dereference_op(
                         context_op(),
-                        literal_op("outer"),
-                        True
+                        literal_op("outer")
                     ),
-                    literal_op("local"),
-                    True
+                    literal_op("local")
                 )
             )
         )
@@ -93,27 +91,21 @@ class TestDereference(TestCase):
                         dereference_op(
                             dereference_op(
                                 context_op(),
-                                literal_op("outer"),
-                                True
+                                literal_op("outer")
                             ),
-                            literal_op("local"),
-                            True
+                            literal_op("local")
                         ),
-                        literal_op(0),
-                        True
+                        literal_op(0)
                     ),
                     dereference_op(
                         dereference_op(
                             dereference_op(
                                 context_op(),
-                                literal_op("outer"),
-                                True
+                                literal_op("outer")
                             ),
-                            literal_op("local"),
-                            True
+                            literal_op("local")
                         ),
-                        literal_op(1),
-                        True
+                        literal_op(1)
                     )
                 )
             )
@@ -229,7 +221,7 @@ class TestTemplates(TestCase):
             function_lit(
                 int_type(), build_break_types(object_type({ "foo": unit_type(42), "bar": any_type() })),
                 comma_op(
-                    return_op(object_template_op({ "foo": literal_op(42), "bar": dereference_op(context_op(), literal_op("argument"), True) }))
+                    return_op(object_template_op({ "foo": literal_op(42), "bar": dereference_op(context_op(), literal_op("argument")) }))
                 )
             ),
             argument=42,
@@ -247,7 +239,7 @@ class TestTemplates(TestCase):
             function_lit(
                 int_type(), build_break_types(object_type({ "foo": unit_type(42), "bar": int_type() })),
                 comma_op(
-                    return_op(object_template_op({ "foo": literal_op(42), "bar": dereference_op(context_op(), literal_op("argument"), True) }))
+                    return_op(object_template_op({ "foo": literal_op(42), "bar": dereference_op(context_op(), literal_op("argument")) }))
                 )
             ),
             argument=42,
@@ -265,7 +257,7 @@ class TestTemplates(TestCase):
             function_lit(
                 int_type(), build_break_types(object_type({ "foo": int_type(), "bar": any_type() })),
                 comma_op(
-                    return_op(object_template_op({ "foo": literal_op(42), "bar": dereference_op(context_op(), literal_op("argument"), True) }))
+                    return_op(object_template_op({ "foo": literal_op(42), "bar": dereference_op(context_op(), literal_op("argument")) }))
                 )
             ),
             argument=42,
@@ -283,7 +275,7 @@ class TestTemplates(TestCase):
             function_lit(
                 int_type(), build_break_types(object_type({ "foo": any_type(), "bar": any_type() })),
                 comma_op(
-                    return_op(object_template_op({ "foo": literal_op(42), "bar": dereference_op(context_op(), literal_op("argument"), True) }))
+                    return_op(object_template_op({ "foo": literal_op(42), "bar": dereference_op(context_op(), literal_op("argument")) }))
                 )
             ),
             argument=42,
@@ -301,7 +293,7 @@ class TestTemplates(TestCase):
             bootstrap_function(
                 function_lit(
                     int_type(), build_break_types(object_type({ "foo": any_type(), "bar": unit_type(42) })),
-                    return_op(object_template_op({ "foo": literal_op(42), "bar": dereference_op(context_op(), literal_op("argument"), True) }))
+                    return_op(object_template_op({ "foo": literal_op(42), "bar": dereference_op(context_op(), literal_op("argument")) }))
                 ),
                 argument=42,
                 check_safe_exit=True
@@ -330,7 +322,7 @@ class TestLocals(TestCase):
             function_lit(
                 no_value_type(), build_break_types(int_type()), int_type(), literal_op(42),
                 comma_op(
-                    return_op(dereference_op(context_op(), literal_op("local"), True))
+                    return_op(dereference_op(context_op(), literal_op("local")))
                 )
             ),
             check_safe_exit=True
@@ -342,9 +334,9 @@ class TestLocals(TestCase):
     def test_initialization_from_argument(self):
         _, result = bootstrap_function(
             function_lit(
-                int_type(), build_break_types(int_type()), int_type(), dereference_op(context_op(), literal_op("argument"), True),
+                int_type(), build_break_types(int_type()), int_type(), dereference_op(context_op(), literal_op("argument")),
                 comma_op(
-                    return_op(dereference_op(context_op(), literal_op("local"), True))
+                    return_op(dereference_op(context_op(), literal_op("local")))
                 )
             ),
             argument=123,
@@ -362,7 +354,7 @@ class TestLocals(TestCase):
             function_lit(
                 no_value_type(), build_break_types(any_type(), yield_types={ "out": any_type(), "in": int_type() }),
                 int_type(), shift_op(literal_op("hello"), int_type()),
-                return_op(dereference_op(context_op(), literal_op("local"), True))
+                return_op(dereference_op(context_op(), literal_op("local")))
             ),
             context, frame_manager, None
         ).close(None)
@@ -392,7 +384,7 @@ class TestLocals(TestCase):
             function_lit(
                 no_value_type(), build_break_types(any_type(), yield_types={ "out": any_type(), "in": int_type() }),
                 int_type(), shift_op(literal_op("first"), int_type()),
-                return_op(addition_op(dereference_op(context_op(), literal_op("local"), True), shift_op(literal_op("second"), int_type())))
+                return_op(addition_op(dereference_op(context_op(), literal_op("local")), shift_op(literal_op("second"), int_type())))
             ),
             context, frame_manager, None
         ).close(None)
@@ -426,7 +418,7 @@ class TestAssignment(TestCase):
                 no_value_type(), build_break_types(int_type()), int_type(), literal_op(0),
                 comma_op(
                     assignment_op(context_op(), literal_op("local"), literal_op(42)),
-                    return_op(dereference_op(context_op(), literal_op("local"), True))
+                    return_op(dereference_op(context_op(), literal_op("local")))
                 )
             ),
             check_safe_exit=True
@@ -440,8 +432,8 @@ class TestAssignment(TestCase):
             function_lit(
                 int_type(), build_break_types(int_type()), int_type(), literal_op(0),
                 comma_op(
-                    assignment_op(context_op(), literal_op("local"), dereference_op(context_op(), literal_op("argument"), True)),
-                    return_op(dereference_op(context_op(), literal_op("local"), True))
+                    assignment_op(context_op(), literal_op("local"), dereference_op(context_op(), literal_op("argument"))),
+                    return_op(dereference_op(context_op(), literal_op("local")))
                 )
             ),
             argument=43,
@@ -456,7 +448,7 @@ class TestArguments(TestCase):
     def test_simple_return_argument(self):
         func = function_lit(
             int_type(), build_break_types(int_type()),
-            return_op(dereference_op(context_op(), literal_op("argument"), True))
+            return_op(dereference_op(context_op(), literal_op("argument")))
         )
 
         _, result = bootstrap_function(func, argument=42)
@@ -467,7 +459,7 @@ class TestArguments(TestCase):
     def test_doubler(self):
         func = function_lit(
             int_type(), build_break_types(int_type()),
-            return_op(addition_op(dereference_op(context_op(), literal_op("argument"), True), dereference_op(context_op(), literal_op("argument"), True)))
+            return_op(addition_op(dereference_op(context_op(), literal_op("argument")), dereference_op(context_op(), literal_op("argument"))))
         )
 
         _, result = bootstrap_function(func, argument=21)
@@ -518,10 +510,10 @@ class TestLoops(TestCase):
                     comma_op(
                         assignment_op(
                             context_op(), literal_op("local"),
-                            addition_op(dereference_op(context_op(), literal_op("local"), True), literal_op(1))
+                            addition_op(dereference_op(context_op(), literal_op("local")), literal_op(1))
                         ),
                         condition_op(equality_op(
-                            dereference_op(context_op(), literal_op("local"), True), literal_op(42)
+                            dereference_op(context_op(), literal_op("local")), literal_op(42)
                         ), return_op(dereference_op(context_op(), literal_op("local"))), nop())
                     )
                 )
@@ -597,7 +589,7 @@ class TestFunctionInvocation(TestCase):
                 close_op(static_op(prepare_op(literal_op(function_lit(
                     no_value_type(), build_break_types(int_type()), return_op(literal_op(42))
                 )))), context_op()),
-                return_op(invoke_op(dereference_op(context_op(), literal_op("local"), True)))
+                return_op(invoke_op(dereference_op(context_op(), literal_op("local"))))
             )
         )
 
@@ -612,7 +604,7 @@ class TestFunctionInvocation(TestCase):
                 close_op(static_op(prepare_op(literal_op(function_lit(
                     no_value_type(), infer_all(), return_op(literal_op(42))
                 )))), context_op()),
-                return_op(invoke_op(dereference_op(context_op(), literal_op("local"), True)))
+                return_op(invoke_op(dereference_op(context_op(), literal_op("local"))))
             )
         )
 
@@ -627,7 +619,7 @@ class TestFunctionInvocation(TestCase):
                 close_op(static_op(prepare_op(literal_op(function_lit(
                     no_value_type(), infer_all(), return_op(literal_op(42))
                 )))), context_op()),
-                return_op(invoke_op(dereference_op(context_op(), literal_op("local"), True)))
+                return_op(invoke_op(dereference_op(context_op(), literal_op("local"))))
             )
         )
 
@@ -874,7 +866,7 @@ class TestTryCatch(TestCase):
         #  Function safely handles an internal exception
         func = function_lit(
             try_catch_op(
-                dereference_op(context_op(), literal_op("foo"), True),
+                dereference_op(context_op(), literal_op("foo")),
                 prepared_function(
                     object_type({
                         "type": const_string_type(),

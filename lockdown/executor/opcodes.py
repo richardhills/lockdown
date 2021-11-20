@@ -303,7 +303,6 @@ class DereferenceOp(OpcodeOperandMixin, Opcode):
 
     def __init__(self, data, visitor):
         super(DereferenceOp, self).__init__(data, visitor)
-        self.safe = data.safe
         self.binder = MicroOpBinder()
         self.generates_exceptions = True
 
@@ -343,13 +342,12 @@ class DereferenceOp(OpcodeOperandMixin, Opcode):
                 else:
                     invalid_dereferences.add(reference)
 
-        exception_break_mode = "exception" if self.safe else "value"
         for invalid_dereference in invalid_dereferences:
-            break_types.add(self, exception_break_mode, self.INVALID_DEREFERENCE.get_type(
+            break_types.add(self, "exception", self.INVALID_DEREFERENCE.get_type(
                 message="DereferenceOp: invalid_dereference".format(invalid_dereference)
             ))
         if invalid_unknown_dereference:
-            break_types.add(self, exception_break_mode, self.INVALID_DEREFERENCE.get_type())
+            break_types.add(self, "exception", self.INVALID_DEREFERENCE.get_type())
 
         self.generates_exceptions = len(invalid_dereferences) > 0 or invalid_unknown_dereference
 
@@ -362,10 +360,8 @@ class DereferenceOp(OpcodeOperandMixin, Opcode):
 
             manager = get_manager(of)
 
-            exception_break_mode = "exception" if self.safe else "value"
-
             if manager is None:
-                return frame.unwind(self, exception_break_mode, self.INVALID_DEREFERENCE(reference=reference), None)
+                return frame.exception(self, self.INVALID_DEREFERENCE(reference=reference))
 
             try:
                 tag, micro_op = self.binder.get(
@@ -384,7 +380,7 @@ class DereferenceOp(OpcodeOperandMixin, Opcode):
                 direct = tag and tag[0] != "get-wildcard"
 
                 if not micro_op:                    
-                    return frame.unwind(self, exception_break_mode, self.INVALID_DEREFERENCE(reference=reference), None)
+                    return frame.exception(self, self.INVALID_DEREFERENCE(reference=reference))
 
                 result = None
 
@@ -394,17 +390,17 @@ class DereferenceOp(OpcodeOperandMixin, Opcode):
                     result = micro_op.invoke(manager, reference, shortcut_checks=True)
 
                 if result is SPARSE_ELEMENT:
-                    return frame.unwind(self, exception_break_mode, self.INVALID_DEREFERENCE(reference=reference), None)
+                    return frame.exception(self, self.INVALID_DEREFERENCE(reference=reference))
 
                 return frame.value(self, result)
             except InvalidDereferenceType:
-                return frame.unwind(self, exception_break_mode, self.INVALID_DEREFERENCE(
+                return frame.exception(self, self.INVALID_DEREFERENCE(
                     message="DereferenceOp: invalid_dereference"
-                ), None)
+                ))
             except InvalidDereferenceKey:
-                return frame.unwind(self, exception_break_mode, self.INVALID_DEREFERENCE(
+                return frame.exception(self, self.INVALID_DEREFERENCE(
                     message="DereferenceOp: invalid_dereference"
-                ), None)
+                ))
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         tag, micro_op_to_compile = self.binder.simple_bind()
@@ -901,16 +897,24 @@ class TransformOp(Opcode):
 
         if self.expression:
             expression_break_types = dict(self.expression.get_break_types(context, frame_manager, hooks))
-            if self.output not in expression_break_types:
-                expression_break_types[self.output] = []
-            if self.input in expression_break_types:
-                expression_break_types[self.output].extend([
-                    {
-                        **break_types,
-                        "opcode": self
-                    } for break_types in 
-                    expression_break_types.pop(self.input)
-                ])
+            all_inputs = transformed_inputs = expression_break_types.pop(self.input, [])
+            remaining_inputs = []
+
+            if self.immediate_child:
+                transformed_inputs = [ i for i in all_inputs if i.get("opcode", None) is self.expression ]
+                remaining_inputs = [ i for i in all_inputs if i.get("opcode", None) is not self.expression ]
+
+            transformed_inputs = [{
+                **i,
+                "opcode": self
+            } for i in transformed_inputs]
+
+            expression_break_types[self.input] = remaining_inputs
+            expression_break_types[self.output] = [
+                *expression_break_types.get(self.output, []),
+                *transformed_inputs
+            ]
+
             break_types.merge(expression_break_types)
         else:
             break_types.add(self, self.output, NoValueType())
@@ -920,7 +924,8 @@ class TransformOp(Opcode):
     def jump(self, context, frame_manager, hooks, immediate_context=None):
         with frame_manager.get_next_frame(self) as frame:
             if self.expression:
-                with frame_manager.capture(self.input) as capture_result:
+                opcode = self.expression if self.immediate_child else None
+                with frame_manager.capture(break_mode=self.input, opcode=opcode) as capture_result:
                     capture_result.attempt_capture_or_raise(*self.expression.jump(context, frame_manager, hooks))
 
                 return frame.unwind(self, self.output, capture_result.value, None)
