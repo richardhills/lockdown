@@ -34,7 +34,7 @@ def read_input():
 
 def build_looper():
     return invoke_op(close_op(prepare_op(
-        shift_op(literal_op(42), any_type())
+        shift_op(literal_op(42), any_type()),
     ), context_op()), nop())
 
 def build_executor(raw_code):
@@ -50,7 +50,8 @@ def build_executor(raw_code):
                         ])
                     )
                 ))), context_op()), nop()
-            )
+            ),
+            True
         )
     )
 
@@ -59,7 +60,10 @@ def bootstraped_executor(frame_manager):
         function_lit(
             transform_op(
                 "yield", "read",
-                reset_op(build_looper())
+                reset_op(
+                    build_looper()
+                ),
+                True
             )
         ), get_default_global_context(), frame_manager, None
     ).close(NO_VALUE)
@@ -96,7 +100,7 @@ print triple(5);
 """
 
 def repl():
-    with environment(base=True, transpile=False):
+    with environment(base=True, transpile=True):
         try:
             frame_manager = FrameManager()
 

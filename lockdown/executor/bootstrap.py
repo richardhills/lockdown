@@ -46,7 +46,7 @@ def get_default_global_context():
                 NO_VALUE, FrameManager(), None
             ).close(NO_VALUE)
 
-        if capture_preparation.caught_break_mode is not MISSING:
+        if capture_preparation.caught_break_mode is not None:
             raise_unhandled_break(capture_preparation.caught_break_mode, capture_preparation.value, None, capture_preparation.opcode, builtins_data)
 
         with frame_manager.capture("export") as capture_export:
@@ -158,7 +158,7 @@ def bootstrap_function(data, argument=None, outer_context=None, check_safe_exit=
 
         closed_function = open_function.close(outer_context)
 
-    if capture_preparation.caught_break_mode is not MISSING:
+    if capture_preparation.caught_break_mode is not None:
         raise_unhandled_break(capture_preparation.caught_break_mode, capture_preparation.value, None, capture_preparation.opcode, data)
 
     with frame_manager.capture() as capture_result:

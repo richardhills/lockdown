@@ -7,7 +7,7 @@ import ast
 from lockdown.executor.ast_utils import compile_expression, compile_statement, \
     unwrap_modules, wrap_as_statement
 from lockdown.executor.exceptions import PreparationException
-from lockdown.executor.flow_control import BreakTypesFactory
+from lockdown.executor.flow_control import BreakTypesFactory, BreakException
 from lockdown.executor.function_type import OpenFunctionType, ClosedFunctionType
 from lockdown.executor.operands import OpcodeOperandMixin, Operand, BoundOperand
 from lockdown.executor.type_factories import enrich_type
@@ -443,10 +443,10 @@ class DynamicDereferenceOp(Opcode):
     def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
         break_types = BreakTypesFactory(self)
 
-        break_types.add(self, 
+        break_types.add(
+            self, 
             "exception",
-            self.INVALID_DEREFERENCE.get_type(message="DynamicDereferenceOp: invalid_dereference {}".format(self.reference)),
-            opcode=self
+            self.INVALID_DEREFERENCE.get_type(message="DynamicDereferenceOp: invalid_dereference {}".format(self.reference))
         )
 
         return break_types.build()
@@ -794,12 +794,12 @@ class MapOp(OpcodeOperandMixin, Opcode):
                         with frame_manager.capture("continue") as capturer:
                             with frame_manager.capture("value"):
                                 mapper.invoke(PythonList([ i, k, v ]), frame_manager, hooks)
-                        if capturer.value is not MISSING:
+                        if capturer.value is not None:
                             results.append(capturer.value)
-                    if ender.value is not MISSING:
+                    if ender.value is not None:
                         break
                 return frame.value(self, PythonList(results))
-            if breaker.value is not MISSING:
+            if breaker.value is not None:
                 return frame.value(self, breaker.value)
 
             raise FatalError()
@@ -928,7 +928,7 @@ class TransformOp(Opcode):
                 with frame_manager.capture(break_mode=self.input, opcode=opcode) as capture_result:
                     capture_result.attempt_capture_or_raise(*self.expression.jump(context, frame_manager, hooks))
 
-                return frame.unwind(self, self.output, capture_result.value, None)
+                return frame.unwind(*capture_result.reraise(opcode=self, break_mode=self.output))
             else:
                 return frame.unwind(self, self.output, NO_VALUE, None)
         raise FatalError()
@@ -1105,7 +1105,7 @@ class ResetOp(Opcode):
                 with frame_manager.capture("yield") as capture_result:
                     capture_result.attempt_capture_or_raise(*enter_expression())
 
-                if capture_result.caught_frames is MISSING:
+                if capture_result.caught_frames is None:
                     return frame.exception(self, self.MISSING_IN_BREAK_TYPE())
 
                 restart_continuation = capture_result.create_continuation(
@@ -1121,7 +1121,7 @@ class ResetOp(Opcode):
                 with frame_manager.capture("yield") as capture_result:
                     capture_result.attempt_capture_or_raise(*enter_function())
 
-                if capture_result.caught_frames is MISSING:
+                if capture_result.caught_frames is None:
                     return frame.exception(self, self.MISSING_IN_BREAK_TYPE())
 
                 if isinstance(function, Continuation):
@@ -1257,11 +1257,11 @@ class LoopOp(Opcode):
                     with frame_manager.capture("end") as ender:
                         with frame_manager.capture("continue") as capturer:
                             evaluate(self.code, context, frame_manager, hooks)
-                        if capturer.value is not MISSING:
+                        if capturer.value is not None:
                             results.append(capturer.value)
-                    if ender.value is not MISSING:
+                    if ender.value is not None:
                         return frame.value(self, PythonList(results))
-            if breaker.value is not MISSING:
+            if breaker.value is not None:
                 return frame.value(self, breaker.value)
 
         raise FatalError()
@@ -1504,12 +1504,14 @@ class StaticOp(Opcode):
 class InvokeOp(Opcode):
     INVALID_FUNCTION_TYPE = TypeErrorFactory("Invoke: invalid_function_type")
     INVALID_ARGUMENT_TYPE = TypeErrorFactory("Invoke: invalid_argument_type")
+    INVALID_BREAK_TYPE = TypeErrorFactory("Invoke: invalid_break_type")
 
     def __init__(self, data, visitor):
         super(InvokeOp, self).__init__(data, visitor)
         self.function = enrich_opcode(data.function, visitor)
         self.argument = enrich_opcode(data.argument, visitor)
         self.invalid_argument_type_exception_is_possible = True
+        self.known_function_type = False
 
     def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
         break_types = BreakTypesFactory(self)
@@ -1530,13 +1532,22 @@ class InvokeOp(Opcode):
             function_type = flatten_out_types(function_type)
 
             if isinstance(function_type, ClosedFunctionType):
-                break_types.merge(function_type.break_types)
+                self.known_function_type = True
+                break_types.merge({
+                    break_mode: [{
+                        **break_type,
+                        "opcode": self
+                    } for break_type in sub_break_types]
+                    for break_mode, sub_break_types in function_type.break_types.items()
+                })
                 reasoner = Reasoner()
                 if function_type.argument_type.is_copyable_from(argument_type, reasoner):
                     self.invalid_argument_type_exception_is_possible = False
             else:
                 break_types.add(self, "exception", self.INVALID_FUNCTION_TYPE.get_type())
-                break_types.add(self, "*", AnyType())
+                break_types.add(self, "exception", self.INVALID_BREAK_TYPE.get_type())
+                break_types.add(self, "value", AnyType())
+                break_types.add(self, "yield", AnyType(), BottomType())
 
             if self.invalid_argument_type_exception_is_possible:
                 break_types.add(self, "exception", self.INVALID_ARGUMENT_TYPE.get_type())
@@ -1555,7 +1566,16 @@ class InvokeOp(Opcode):
             if self.invalid_argument_type_exception_is_possible and not does_value_fit_through_type(argument, function.get_type().argument_type):
                 return frame.exception(self, self.INVALID_ARGUMENT_TYPE()) 
 
-            return function.invoke(argument, frame_manager, hooks)
+            with frame_manager.capture() as capture_result:
+                capture_result.attempt_capture_or_raise(*function.invoke(argument, frame_manager, hooks))
+
+            if not self.known_function_type:
+                if capture_result.caught_break_mode not in ("value", "yield"):
+                    import ipdb
+                    ipdb.set_trace()
+                    return frame.exception(self, self.INVALID_BREAK_TYPE())
+
+            return frame.unwind(*capture_result.reraise(opcode=self))
 
         raise FatalError()
 

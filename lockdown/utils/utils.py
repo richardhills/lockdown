@@ -145,13 +145,13 @@ fastest = {
 
 @contextmanager
 def environment(
-    rtti=MISSING,
-    frame_shortcut=MISSING,
-    validate_flow_control=MISSING,
-    opcode_bindings=MISSING,
-    consume_python_objects=MISSING,
-    return_value_optimization=MISSING,
-    transpile=MISSING,
+    rtti=True,
+    frame_shortcut=True,
+    validate_flow_control=True,
+    opcode_bindings=True,
+    consume_python_objects=True,
+    return_value_optimization=True,
+    transpile=False,
     base=False
 ):
     environment = get_environment()

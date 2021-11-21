@@ -38,7 +38,9 @@ static Iterable = function(any keyType, any valueType) => any {
 };
 
 static keys = function(Iterable<any, any> list) {
-	return list *|> { continue argument[1]; };
+	return list *|> {
+		continue argument[1];
+	};
 };
 
 static values = function(Iterable<any, any> list) {

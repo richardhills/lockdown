@@ -7,7 +7,8 @@ from lockdown.type_system.composites import is_type_bindable_to_value, \
     CompositeType, does_value_fit_through_type
 from lockdown.type_system.exceptions import FatalError
 from lockdown.type_system.reasoner import DUMMY_REASONER, Reasoner
-from lockdown.utils.utils import MISSING, InternalMarker, get_environment
+from lockdown.utils.utils import MISSING, InternalMarker, get_environment,\
+    default
 from lockdown.type_system.core_types import Type
 
 class BreakException(Exception):
@@ -82,11 +83,11 @@ class Capturer(object):
         self.opcode = opcode
         self.top_level = top_level
 
-        self.value = MISSING
-        self.caught_break_mode = MISSING
-        self.caught_restart_type = MISSING
-        self.caught_frames = MISSING
-        self.caught_opcode = MISSING
+        self.value = None
+        self.caught_break_mode = None
+        self.caught_restart_type = None
+        self.caught_frames = None
+        self.caught_opcode = None
 
     def attempt_capture(self, mode, value, opcode, restart_type):
         if ((self.break_mode is None or self.break_mode == mode)
@@ -101,6 +102,16 @@ class Capturer(object):
 
             return True
         return False
+
+    def reraise(self, opcode=MISSING, break_mode = MISSING):
+        if self.caught_frames:
+            self.frame_manager.splice_frames(self.caught_frames)
+        return (
+            default(opcode, self.caught_opcode),
+            default(break_mode, self.caught_break_mode),
+            self.value,
+            self.caught_restart_type
+        )
 
     def attempt_capture_or_raise(self, mode, value, opcode, restart_type):
         if not self.attempt_capture(mode, value, opcode, restart_type):
@@ -188,6 +199,10 @@ class FrameManager(object):
         sliced_frames = self.frames[self.index:]
         self.frames = self.frames[:self.index]
         return sliced_frames
+
+    def splice_frames(self, frames):
+        self.mode = "reset"
+        self.frames = self.frames + frames
 
     def prepare_restart(self, frames, restart_value):
         self.mode = "reset"
@@ -325,7 +340,7 @@ class Frame(object):
         if get_environment().validate_flow_control and isinstance(exc_value, BreakException) and self.target.break_types is not None:
             # Verifies that execution is leaving the target opcode at run-time in a way that was forecast
             # at verification time. 
-            break_types = self.target.break_types.get(exc_value.mode, []) + self.target.break_types.get("*", [])
+            break_types = self.target.break_types.get(exc_value.mode, [])
 
             failures = []
 
@@ -336,7 +351,7 @@ class Frame(object):
                 allowed_in = allowed_break_type.get("in", None)
                 allowed_opcode = allowed_break_type.get("opcode", None)
 
-                if allowed_opcode is not None and allowed_opcode != exc_value.opcode:
+                if allowed_opcode is not None and allowed_opcode is not exc_value.opcode:
                     continue
 
                 out_is_compatible = does_value_fit_through_type(exc_value.value, allowed_out, reasoner=reasoner)
@@ -350,6 +365,8 @@ class Frame(object):
                 if out_is_compatible and in_is_compatible:
                     break
             else:
+                import ipdb
+                ipdb.set_trace()
                 msg = "Can not unwind {} {}, target {}, allowed {}: {}".format(exc_value.mode, exc_value.value, self.target, break_types, reasoner.to_message())
                 raise FatalError(msg)
 
