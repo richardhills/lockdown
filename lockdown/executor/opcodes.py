@@ -1082,13 +1082,14 @@ class ResetOp(Opcode):
         for yield_break_type in yield_break_types:
             if "in" not in yield_break_type:
                 missing_in_error = True
-            break_types.add(
-                self,
-                "yield",
-                self.get_value_and_continuation_block_type(
-                    yield_break_type["out"], yield_break_type["in"], self.continuation_break_types
+            else:
+                break_types.add(
+                    self,
+                    "yield",
+                    self.get_value_and_continuation_block_type(
+                        yield_break_type["out"], yield_break_type["in"], self.continuation_break_types
+                    )
                 )
-            )
 
         if missing_in_error:
             break_types.add(self, "exception", self.MISSING_IN_BREAK_TYPE.get_type())
@@ -1512,6 +1513,7 @@ class InvokeOp(Opcode):
         self.argument = enrich_opcode(data.argument, visitor)
         self.invalid_argument_type_exception_is_possible = True
         self.known_function_type = False
+        self.allowed_break_modes = data.allowed_break_modes
 
     def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
         break_types = BreakTypesFactory(self)
@@ -1546,8 +1548,9 @@ class InvokeOp(Opcode):
             else:
                 break_types.add(self, "exception", self.INVALID_FUNCTION_TYPE.get_type())
                 break_types.add(self, "exception", self.INVALID_BREAK_TYPE.get_type())
-                break_types.add(self, "value", AnyType())
-                break_types.add(self, "yield", AnyType(), BottomType())
+
+                for allowed_break_mode in self.allowed_break_modes:
+                    break_types.add(self, allowed_break_mode, AnyType())
 
             if self.invalid_argument_type_exception_is_possible:
                 break_types.add(self, "exception", self.INVALID_ARGUMENT_TYPE.get_type())
@@ -1570,8 +1573,9 @@ class InvokeOp(Opcode):
                 capture_result.attempt_capture_or_raise(*function.invoke(argument, frame_manager, hooks))
 
             if not self.known_function_type:
-                if capture_result.caught_break_mode not in ("value", "yield"):
+                if capture_result.caught_break_mode not in self.allowed_break_modes:
                     import ipdb
+                    
                     ipdb.set_trace()
                     return frame.exception(self, self.INVALID_BREAK_TYPE())
 

@@ -483,7 +483,7 @@ def static_op(expression, **kwargs):
     }, **kwargs), debug_reason="code")
 
 
-def invoke_op(function_expression, argument_expression=None, **kwargs):
+def invoke_op(function_expression, argument_expression=None, allowed_break_modes=[ "value" ], **kwargs):
     if argument_expression is None:
         argument_expression = nop()
     check_is_opcode(function_expression)
@@ -491,7 +491,8 @@ def invoke_op(function_expression, argument_expression=None, **kwargs):
     return PythonObject(spread_dict({
         "opcode": "invoke",
         "function": function_expression,
-        "argument": argument_expression
+        "argument": argument_expression,
+        "allowed_break_modes": PythonList(allowed_break_modes)
     }, kwargs), debug_reason="code")
 
 
