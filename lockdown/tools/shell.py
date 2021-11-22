@@ -35,14 +35,10 @@ def read_input():
 def build_looper():
     return invoke_op(
         close_op(prepare_op(
-            transform_op(
-                "yield", "get-code",
-                shift_op(literal_op(42), any_type()),
-                True
-            )
+            shift_op(literal_op(42), any_type()),
         ), context_op()),
         nop(),
-        allowed_break_modes=[ "get-code", "read", "value" ]
+        allowed_break_modes=[ "read" ]
     )
 
 def build_executor(raw_code):
@@ -70,10 +66,7 @@ def bootstraped_executor(frame_manager):
             transform_op(
                 "yield", "read",
                 reset_op(
-                    transform_op(
-                        "get-code", "yield",
-                        build_looper()
-                    )
+                    build_looper()
                 ),
                 True
             )

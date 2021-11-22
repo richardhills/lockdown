@@ -14,7 +14,7 @@ from lockdown.executor.raw_code_factories import function_lit, no_value_type, \
     equality_op, nop, inferred_type, infer_all, invoke_op, static_op, prepare_op, \
     unbound_dereference, match_op, dereference, prepared_function, one_of_type, \
     string_type, bool_type, try_catch_op, throw_op, const_string_type, \
-    function_type, close_op, shift_op
+    function_type, close_op, shift_op, transform_op
 from lockdown.type_system.core_types import IntegerType, StringType
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.reasoner import DUMMY_REASONER
@@ -125,6 +125,143 @@ class TestDereference(TestCase):
 
         self.assertEqual(result.caught_break_mode, "return")
         self.assertEqual(result.value, 42)
+
+class TestTransform(TestCase):
+    def test_transform(self):
+        _, result = bootstrap_function(
+            function_lit(
+                transform_op("value")
+            )
+        )
+
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, NO_VALUE)
+
+    def test_non_standard_transform(self):
+        _, result = bootstrap_function(
+            function_lit(
+                transform_op("blah")
+            ),
+            check_safe_exit=False
+        )
+
+        self.assertEqual(result.caught_break_mode, "blah")
+        self.assertEqual(result.value, NO_VALUE)
+
+
+    def test_transform_with_value(self):
+        _, result = bootstrap_function(
+            function_lit(
+                transform_op("value", "blah", literal_op(5))
+            ),
+            check_safe_exit=False
+        )
+
+        self.assertEqual(result.caught_break_mode, "blah")
+        self.assertEqual(result.value, 5)
+
+    def test_multiple_transforms(self):
+        _, result = bootstrap_function(
+            function_lit(
+                transform_op(
+                    "blah", "blam",
+                    transform_op(
+                        "value", "blah",
+                        literal_op(5)
+                    )
+                )
+            ),
+            check_safe_exit=False
+        )
+
+        self.assertEqual(result.caught_break_mode, "blam")
+        self.assertEqual(result.value, 5)
+
+    def test_direct_transforms(self):
+        _, result = bootstrap_function(
+            function_lit(
+                transform_op(
+                    "blah", "blam",
+                    transform_op(
+                        "value", "blah",
+                        literal_op(5),
+                        True
+                    ),
+                    True
+                )
+            ),
+            check_safe_exit=False
+        )
+
+        self.assertEqual(result.caught_break_mode, "blam")
+        self.assertEqual(result.value, 5)
+
+    def test_nested_complex_transforms(self):
+        _, result = bootstrap_function(
+            function_lit(
+                transform_op(
+                    "foo", "baz",
+                    transform_op(
+                        "bar", "bam",
+                        transform_op(
+                            "value", "foo",
+                            literal_op(5)
+                        )
+                    )
+                )
+            ),
+            check_safe_exit=False
+        )
+
+        self.assertEqual(result.caught_break_mode, "baz")
+        self.assertEqual(result.value, 5)
+
+    def test_nested_ignored_complex_transforms(self):
+        _, result = bootstrap_function(
+            function_lit(
+                transform_op(
+                    "foo", "baz",
+                    transform_op(
+                        "bar", "bam",
+                        transform_op(
+                            "value", "foo",
+                            literal_op(5)
+                        )
+                    ),
+                    True
+                )
+            ),
+            check_safe_exit=False
+        )
+
+        self.assertEqual(result.caught_break_mode, "foo")
+        self.assertEqual(result.value, 5)
+
+    def test_irrelevant_transforms_ignored(self):
+        _, result = bootstrap_function(
+            function_lit(
+                transform_op(
+                    "foo", "baz",
+                    literal_op(5)
+                )
+            ),
+            check_safe_exit=True
+        )
+
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 5)
+
+    def test_original_opcode_hidden_by_function(self):
+        closed_function, result = bootstrap_function(
+            function_lit(
+                literal_op(5)
+            ),
+            check_safe_exit=False
+        )
+
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 5)
+        self.assertEqual(result.caught_opcode, closed_function)
 
 
 class TestComma(TestCase):
