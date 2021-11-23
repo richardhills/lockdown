@@ -412,6 +412,16 @@ def assignment_op(of, reference, rvalue, **kwargs):
         "rvalue": rvalue
     }, **kwargs), debug_reason="code")
 
+def dynamic_assignment_op(reference, rvalue, **kwargs):
+    if not isinstance(reference, str):
+        raise FatalError()
+    check_is_opcode(rvalue)
+    return PythonObject(spread_dict({
+        "opcode": "dynamic_assignment",
+        "reference": reference,
+        "rvalue": rvalue
+    }, **kwargs), debug_reason="code")
+
 
 def insert_op(of, reference, rvalue):
     check_is_opcode(of)

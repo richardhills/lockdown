@@ -886,6 +886,29 @@ class TestParserMisc(TestCase):
         _, result = bootstrap_function(code, check_safe_exit=False)
         self.assertEqual(result.value, 54)
 
+class TestDynamic(TestCase):
+    def test_local(self):
+        code = parse("""
+            function() {
+                foo = 321123;
+                return foo;
+            }
+        """)
+        _, result = bootstrap_function(code, check_safe_exit=False)
+        self.assertEqual(result.value, 321123)
+        
+
+    def test_dynamic_maths(self):
+        code = parse("""
+            function() {
+                foo = 40;
+                bar = 2;
+                return foo + bar;
+            }
+        """)
+        _, result = bootstrap_function(code, check_safe_exit=False)
+        self.assertEqual(result.value, 42)
+        
 
 class TestSpeed(TestCase):
     def test_loops(self):

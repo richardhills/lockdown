@@ -2,12 +2,13 @@ from lockdown.executor.flow_control import BreakException
 from lockdown.type_system.composites import CompositeType, \
     is_type_bindable_to_value
 from lockdown.type_system.core_types import Type, merge_types, Const, UnitType, \
-    StringType, AnyType, unwrap_types, PermittedValuesDoesNotExist
-from lockdown.type_system.exceptions import FatalError
-from lockdown.type_system.universal_type import PythonDict, PythonObject, \
-    UniversalDictType, UniversalObjectType
-from lockdown.utils.utils import get_environment, MISSING
+    StringType, AnyType, unwrap_types, PermittedValuesDoesNotExist, NoValueType
+from lockdown.type_system.exceptions import FatalError, InvalidDereferenceKey
+from lockdown.type_system.managers import get_manager
 from lockdown.type_system.reasoner import DUMMY_REASONER
+from lockdown.type_system.universal_type import PythonDict, PythonObject, \
+    UniversalDictType, UniversalObjectType, DEFAULT_READONLY_COMPOSITE_TYPE
+from lockdown.utils.utils import get_environment, MISSING, NO_VALUE
 
 
 def evaluate(expression, context, frame_manager, hooks, immediate_context=None):
@@ -147,3 +148,115 @@ class MicroOpBinder(object):
             return list(self.bound.values())[0]
 
         return (None, None)
+
+
+def get_context_type(context):
+    if context is None:
+        return NoValueType()
+    context_manager = get_manager(context)
+    if not hasattr(context_manager, "_context_type"):
+        value_type = {}
+        if context is NO_VALUE:
+            return NoValueType()
+        if hasattr(context, "_types"):
+            if hasattr(context._types, "argument"):
+                value_type["argument"] = context._types.argument
+            if hasattr(context._types, "local"):
+                value_type["local"] = context._types.local
+            if hasattr(context._types, "outer"):
+                value_type["outer"] = context._types.outer
+        if hasattr(context, "prepare"):
+            value_type["prepare"] = DEFAULT_READONLY_COMPOSITE_TYPE
+        if hasattr(context, "static"):
+            value_type["static"] = DEFAULT_READONLY_COMPOSITE_TYPE
+        context_manager._context_type = UniversalObjectType(value_type, name="context-type-{}".format(context_manager.debug_reason))
+ 
+    return context_manager._context_type
+
+class ContextSearcher(object):
+    def __init__(self, context, check_wildcards=False):
+        self.context = context
+        self.context_type = get_context_type(self.context)
+        self.check_wildcards = check_wildcards
+
+    def search_context_type_area_for_reference(self, reference, area_name, context, context_type, prepend_context, debug_info):
+        from lockdown.executor.raw_code_factories import dereference_op, assignment_op, \
+            literal_op, dereference, context_op
+
+        area_getter = context_type.get_micro_op_type(("get", area_name))
+        if not area_getter:
+            return None
+        area_type = area_getter.value_type
+        if not isinstance(area_type, CompositeType):
+            return None
+        getter = area_type.get_micro_op_type(("get", reference))
+        if getter:
+            return [ *prepend_context, area_name ]
+
+        if self.check_wildcards:
+            area = area_getter.invoke(get_manager(context))
+            wildcard_getter = area_type.get_micro_op_type(("get-wildcard", ))
+            try:
+                if wildcard_getter:
+                    wildcard_getter.invoke(get_manager(area), reference)
+                    return [ *prepend_context, area_name ]
+            except InvalidDereferenceKey:
+                pass
+
+    def search_context_type_for_reference(self, reference, context, context_type, prepend_context, debug_info):
+        from lockdown.executor.raw_code_factories import dereference_op, assignment_op, \
+            literal_op, dereference, context_op
+
+        if not isinstance(context_type, CompositeType):
+            return None
+
+        argument_search = self.search_context_type_area_for_reference(reference, "argument", context, context_type, prepend_context, debug_info)
+        if argument_search:
+            return argument_search
+        local_search = self.search_context_type_area_for_reference(reference, "local", context, context_type, prepend_context, debug_info)
+        if local_search:
+            return local_search
+
+        outer_getter = context_type.get_micro_op_type(("get", "outer"))
+        if outer_getter:
+            if self.check_wildcards:
+                outer_context = outer_getter.invoke(get_manager(context))
+            else:
+                outer_context = None
+            outer_search = self.search_context_type_for_reference(reference, outer_context, outer_getter.value_type, [ *prepend_context, "outer" ], debug_info)
+            if outer_search:
+                return outer_search
+
+    def search_statics_for_reference(self, reference, context, prepend_context, debug_info):
+        from lockdown.executor.raw_code_factories import dereference_op, assignment_op, \
+            literal_op, dereference, context_op
+
+        static = context._get("static", NO_VALUE)
+        if static is not NO_VALUE and static._contains(reference):
+            return [ *prepend_context, "static" ]
+
+        prepare = context._get("prepare", NO_VALUE)
+        if prepare is not NO_VALUE:
+            prepare_search = self.search_statics_for_reference(reference, prepare, [ *prepend_context, "prepare" ], debug_info)
+            if prepare_search:
+                return prepare_search
+
+    def search_for_reference(self, reference, debug_info):
+        from lockdown.executor.raw_code_factories import dereference_op, assignment_op, \
+            literal_op, dereference, context_op
+
+        if not isinstance(reference, str):
+            raise FatalError()
+
+        if reference in ("prepare", "local", "argument", "outer", "static"):
+            return [], False
+
+        types_search = self.search_context_type_for_reference(reference, self.context, self.context_type, [], debug_info)
+        if types_search:
+            return types_search, False
+        statics_search = self.search_statics_for_reference(reference, self.context, [], debug_info)
+        if statics_search:
+            return statics_search, True
+
+        return None, False
+

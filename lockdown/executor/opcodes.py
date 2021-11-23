@@ -10,10 +10,13 @@ from lockdown.executor.exceptions import PreparationException
 from lockdown.executor.flow_control import BreakTypesFactory, BreakException
 from lockdown.executor.function_type import OpenFunctionType, ClosedFunctionType
 from lockdown.executor.operands import OpcodeOperandMixin, Operand, BoundOperand
+from lockdown.executor.raw_code_factories import dereference, assignment_op, \
+    literal_op
 from lockdown.executor.type_factories import enrich_type
 from lockdown.executor.utils import evaluate, TypeErrorFactory, \
     get_expression_break_types, flatten_out_types, MicroOpBinder, \
-    each_reference, get_best_micro_op, get_operand_type
+    each_reference, get_best_micro_op, get_operand_type, get_context_type, \
+    ContextSearcher
 from lockdown.type_system.composites import CompositeType, scoped_bind, \
     does_value_fit_through_type, is_type_bindable_to_value, Composite
 from lockdown.type_system.core_types import AnyType, merge_types, Const, \
@@ -252,31 +255,6 @@ class TemplateOp(OpcodeOperandMixin, Opcode):
             context_name, dependency_builder, **parameters
         )
 
- 
-def get_context_type(context):
-    if context is None:
-        return NoValueType()
-    context_manager = get_manager(context)
-    if not hasattr(context_manager, "_context_type"):
-        value_type = {}
-        if context is NO_VALUE:
-            return NoValueType()
-        if hasattr(context, "_types"):
-            if hasattr(context._types, "argument"):
-                value_type["argument"] = context._types.argument
-            if hasattr(context._types, "local"):
-                value_type["local"] = context._types.local
-            if hasattr(context._types, "outer"):
-                value_type["outer"] = context._types.outer
-        if hasattr(context, "prepare"):
-            value_type["prepare"] = DEFAULT_READONLY_COMPOSITE_TYPE
-        if hasattr(context, "static"):
-            value_type["static"] = DEFAULT_READONLY_COMPOSITE_TYPE
-        context_manager._context_type = UniversalObjectType(value_type, name="context-type-{}".format(context_manager.debug_reason))
- 
-    return context_manager._context_type
-
-
 class ContextOp(Opcode):
     def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
         break_types = BreakTypesFactory(self)
@@ -433,28 +411,6 @@ class DereferenceOp(OpcodeOperandMixin, Opcode):
         return "{}.{}".format(self.of, self.reference)
 
 
-class DynamicDereferenceOp(Opcode):
-    INVALID_DEREFERENCE = TypeErrorFactory("DynamicDereferenceOp: invalid_dereference {reference}")
-
-    def __init__(self, data, visitor):
-        super(DynamicDereferenceOp, self).__init__(data, visitor)
-        self.reference = data.reference
-
-    def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
-        break_types = BreakTypesFactory(self)
-
-        break_types.add(
-            self, 
-            "exception",
-            self.INVALID_DEREFERENCE.get_type(message="DynamicDereferenceOp: invalid_dereference {}".format(self.reference))
-        )
-
-        return break_types.build()
-
-    def jump(self, context, frame_manager, hooks, immediate_context=None):
-        raise FatalError(self.reference)
-
-
 class AssignmentOp(Opcode):
     INVALID_LVALUE = TypeErrorFactory("AssignmentOp: invalid_lvalue")
     INVALID_RVALUE = TypeErrorFactory("AssignmentOp: invalid_rvalue")
@@ -573,6 +529,115 @@ class AssignmentOp(Opcode):
             self.of.to_ast(context_name, dependency_builder),
             *args
         )
+
+class DynamicDereferenceOp(Opcode):
+    INVALID_DEREFERENCE = TypeErrorFactory("DynamicDereferenceOp: invalid_dereference {reference}")
+
+    def __init__(self, data, visitor):
+        super(DynamicDereferenceOp, self).__init__(data, visitor)
+        self.reference = data._get("reference")
+
+    def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
+        break_types = BreakTypesFactory(self)
+
+        break_types.add(
+            self, 
+            "exception",
+            self.INVALID_DEREFERENCE.get_type(message="DynamicDereferenceOp: invalid_dereference {}".format(self.reference))
+        )
+
+        break_types.add(self, "value", AnyType())
+
+        return break_types.build()
+
+    def jump(self, context, frame_manager, hooks, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
+            references, _ = frame.step(
+                "references",
+                lambda: ContextSearcher(context, check_wildcards=True).search_for_reference(self.reference, {})
+            )
+
+            if references is None:
+                return frame.exception(self, self.INVALID_DEREFERENCE())
+
+            target = context
+            for reference in [ *references, self.reference ]:
+                target_manager = get_manager(target)
+                target_type = target_manager.get_effective_composite_type()
+
+                tag, micro_op = get_best_micro_op((("get", reference), ("get-wildcard",)), target_type)
+
+                is_direct = tag[0] != "get-wildcard"
+
+                if is_direct:
+                    target = micro_op.invoke(target_manager)
+                else:
+                    target = micro_op.invoke(target_manager, reference, shortcut_checks=True)
+
+            return frame.value(self, target)
+
+class DynamicAssignmentOp(OpcodeOperandMixin, Opcode):
+    INVALID_ASSIGNMENT = TypeErrorFactory("DynamicAssignmentOp: invalid_assignment {reference}")
+
+    rvalue = Operand(AnyType(), INVALID_ASSIGNMENT)
+
+    def __init__(self, data, visitor):
+        super(DynamicAssignmentOp, self).__init__(data, visitor)
+        self.reference = data._get("reference")
+
+    def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
+        break_types = BreakTypesFactory(self)
+
+        self.rvalue.prepare(break_types, context, frame_manager, hooks, immediate_context=immediate_context)
+
+        break_types.add(
+            self, "exception",
+            self.INVALID_ASSIGNMENT.get_type(message="DynamicDereferenceOp: invalid_dereference {}".format(self.reference))
+        )
+
+        break_types.add(self, "value", NoValueType())
+
+        return break_types.build()
+
+    def jump(self, context, frame_manager, hooks, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
+            rvalue = self.rvalue.get(context, frame, hooks)
+            references, _ = frame.step(
+                "context_links",
+                lambda: ContextSearcher(context, check_wildcards=True).search_for_reference(self.reference, {})
+            )
+
+            if references is None:
+                references = [ "local" ]
+
+            target = context
+            for reference in references:
+                target_manager = get_manager(target)
+                target_type = target_manager.get_effective_composite_type()
+
+                tag, micro_op = get_best_micro_op((("get", reference), ("get-wildcard",)), target_type)
+
+                is_direct = tag[0] != "get-wildcard"
+
+                if is_direct:
+                    target = micro_op.invoke(target_manager)
+                else:
+                    target = micro_op.invoke(target_manager, reference, shortcut_checks=True)
+
+            target_manager = get_manager(target)
+            target_type = target_manager.get_effective_composite_type()
+            tag, micro_op = get_best_micro_op((("set", self.reference), ("set-wildcard",)), target_type)
+
+            if micro_op is None:
+                return frame.exception(self, self.INVALID_ASSIGNMENT())
+
+            is_direct = tag[0] != "set-wildcard"
+            if is_direct:
+                micro_op.invoke(target_manager, rvalue)
+            else:
+                micro_op.invoke(target_manager, self.reference, rvalue)
+
+            return frame.value(self, NO_VALUE)
 
 
 WILDCARD = InternalMarker("WILDCARD")
@@ -989,7 +1054,7 @@ def TransformOpTryCatcher{opcode_id}({context_name}, _frame_manager, _hooks):
                     try_catcher=try_catcher
                 )
         else:
-            return super(TransformOp, self).to_ast(context_name)
+            return super(TransformOp, self).to_ast(context_name, dependency_builder)
 
 
 class ShiftOp(Opcode):
@@ -1754,6 +1819,7 @@ DATA_OPCODES = {
     "dereference": DereferenceOp,
     "dynamic_dereference": DynamicDereferenceOp,
     "assignment": AssignmentOp,
+    "dynamic_assignment": DynamicAssignmentOp,
     "literal": LiteralOp,
     "template": TemplateOp,
     "insert": InsertOp,

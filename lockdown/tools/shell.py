@@ -30,6 +30,9 @@ def read_input():
 
         value = "\n".join(multi_line_value)
 
+    # So you don't have to remember to include at the end of the line in the shell
+    value = value + ";"
+
     return value
 
 def build_looper():

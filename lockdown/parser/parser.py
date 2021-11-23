@@ -937,7 +937,7 @@ class CodeBlockBuilder(object):
         if self.local_variable_type is not MISSING:
             local_type = self.local_variable_type
         else:
-            local_type = object_type({})  # For future python local variables...
+            local_type = object_type({}, wildcard_type=any_type())  # For future python local variables...
 
         if self.local_initializer is not MISSING:
             local_initializer = self.local_initializer

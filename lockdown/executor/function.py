@@ -14,8 +14,10 @@ from lockdown.executor.opcodes import enrich_opcode, get_context_type, evaluate,
     get_expression_break_types, flatten_out_types
 from lockdown.executor.raw_code_factories import dynamic_dereference_op, \
     static_op, match_op, prepared_function, inferred_type, invoke_op, \
-    object_template_op, object_type, dereference, no_value_type, nop
+    object_template_op, object_type, dereference, no_value_type, nop, is_opcode, \
+    dynamic_assignment_op
 from lockdown.executor.type_factories import enrich_type
+from lockdown.executor.utils import ContextSearcher
 from lockdown.type_system.composites import prepare_lhs_type, \
     check_dangling_inferred_types, CompositeType, InferredType, \
     is_type_bindable_to_value, Composite, scoped_bind
@@ -244,80 +246,7 @@ def get_debug_info_from_opcode(opcode):
         "line": getattr(opcode, "line", None),
     }
 
-
-class UnboundDereferenceBinder(object):
-    def __init__(self, context, search_types=True):
-        self.context = context
-        self.search_types = search_types
-        self.context_type = get_context_type(self.context)
-
-    def search_context_type_area_for_reference(self, reference, area, context_type, prepend_context, debug_info):
-        from lockdown.executor.raw_code_factories import dereference_op, assignment_op, \
-            literal_op, dereference, context_op
-
-        area_getter = context_type.get_micro_op_type(("get", area))
-        if not area_getter:
-            return None
-        area_type = area_getter.value_type
-        if not isinstance(area_type, CompositeType):
-            return None
-        getter = area_type.get_micro_op_type(("get", reference))
-        if getter:
-            return dereference(prepend_context, area, **debug_info)
-
-    def search_context_type_for_reference(self, reference, context_type, prepend_context, debug_info):
-        from lockdown.executor.raw_code_factories import dereference_op, assignment_op, \
-            literal_op, dereference, context_op
-
-        if not isinstance(context_type, CompositeType):
-            return None
-
-        argument_search = self.search_context_type_area_for_reference(reference, "argument", context_type, prepend_context, debug_info)
-        if argument_search:
-            return argument_search
-        local_search = self.search_context_type_area_for_reference(reference, "local", context_type, prepend_context, debug_info)
-        if local_search:
-            return local_search
-
-        outer_getter = context_type.get_micro_op_type(("get", "outer"))
-        if outer_getter:
-            outer_search = self.search_context_type_for_reference(reference, outer_getter.value_type, prepend_context + [ "outer" ], debug_info)
-            if outer_search:
-                return outer_search
-
-    def search_statics_for_reference(self, reference, context, prepend_context, debug_info):
-        from lockdown.executor.raw_code_factories import dereference_op, assignment_op, \
-            literal_op, dereference, context_op
-
-        static = context._get("static", NO_VALUE)
-        if static is not NO_VALUE and static._contains(reference):
-            return dereference(prepend_context, "static", **debug_info)
-
-        prepare = context._get("prepare", NO_VALUE)
-        if prepare is not NO_VALUE:
-            prepare_search = self.search_statics_for_reference(reference, prepare, prepend_context + [ "prepare" ], debug_info)
-            if prepare_search:
-                return prepare_search
-
-    def search_for_reference(self, reference, debug_info):
-        from lockdown.executor.raw_code_factories import dereference_op, assignment_op, \
-            literal_op, dereference, context_op
-
-        if not isinstance(reference, str):
-            raise FatalError()
-
-        if reference in ("prepare", "local", "argument", "outer", "static"):
-            return context_op(), False
-
-        types_search = self.search_context_type_for_reference(reference, self.context_type, [], debug_info)
-        if types_search:
-            return types_search, False
-        statics_search = self.search_statics_for_reference(reference, self.context, [], debug_info)
-        if statics_search:
-            return statics_search, True
-
-        return None, False
-
+class UnboundDereferenceBinder(ContextSearcher):
     def __call__(self, expression):
         from lockdown.executor.raw_code_factories import dereference_op, assignment_op, \
             literal_op, dereference, context_op
@@ -326,10 +255,11 @@ class UnboundDereferenceBinder(object):
 
         if expression._get("opcode", None) == "unbound_dereference":
             reference = expression.reference
-            bound_countext_op, is_static = self.search_for_reference(reference, debug_info)
+            context_links, is_static = self.search_for_reference(reference, debug_info)
 
-            if bound_countext_op:
-                new_dereference = dereference_op(bound_countext_op, literal_op(reference), **debug_info)
+            if context_links is not None:
+                bound_context_op = dereference(*context_links)
+                new_dereference = dereference_op(bound_context_op, literal_op(reference), **debug_info)
                 if is_static:
                     new_dereference = static_op(new_dereference)
                 get_manager(new_dereference).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
@@ -341,17 +271,19 @@ class UnboundDereferenceBinder(object):
 
         if expression._get("opcode", None) == "unbound_assignment":
             reference = expression.reference
-            bound_countext_op, _ = self.search_for_reference(reference, debug_info)
+            context_links, _ = self.search_for_reference(reference, debug_info)
 
-            if bound_countext_op:
-                new_assignment = assignment_op(bound_countext_op, literal_op(reference), expression.rvalue, **debug_info)
+            if context_links is not None:
+                bound_context_op = dereference(*context_links)
+                new_assignment = assignment_op(bound_context_op, literal_op(reference), expression.rvalue, **debug_info)
                 get_manager(new_assignment).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
                 return new_assignment
             else:
-                raise FatalError()  # TODO, dynamic assignment
+                new_assignment = dynamic_assignment_op(reference, expression.rvalue, **debug_info)
+                get_manager(new_assignment).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+                return new_assignment
 
         return expression
-
 
 def type_conditional_converter(expression):
     is_conditional = expression.opcode == "conditional"
@@ -396,6 +328,8 @@ def combine(*funcs):
     def wrapped(expression):
         for func in funcs:
             expression = func(expression)
+            if not is_opcode(expression):
+                raise FatalError()
         return expression
     return wrapped
 

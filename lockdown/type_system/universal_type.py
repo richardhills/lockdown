@@ -436,10 +436,10 @@ class GetterMicroOpType(MicroOpType):
                 value = default_factory(target_manager, self.key)
 
             return value
-        except KeyError:
-            raise FatalError()
-        except TypeError:
-            raise FatalError()
+        except KeyError as e:
+            raise FatalError(e)
+        except TypeError as e:
+            raise FatalError(e)
 
     def is_derivable_from(self, other_type, reasoner):
         other_micro_op_type = other_type.get_micro_op_type(("get", self.key))
