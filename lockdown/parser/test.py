@@ -895,8 +895,9 @@ class TestDynamic(TestCase):
             }
         """)
         _, result = bootstrap_function(code, check_safe_exit=False)
+        self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 321123)
-        
+
 
     def test_dynamic_maths(self):
         code = parse("""
@@ -907,8 +908,20 @@ class TestDynamic(TestCase):
             }
         """)
         _, result = bootstrap_function(code, check_safe_exit=False)
+        self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 42)
-        
+
+    def test_dynamic_object(self):
+        code = parse("""
+            function() {
+                foo = { bar : 42 };
+                return foo.bar;
+            }
+        """)
+        _, result = bootstrap_function(code, check_safe_exit=False)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 42)
+
 
 class TestSpeed(TestCase):
     def test_loops(self):

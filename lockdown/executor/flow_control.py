@@ -365,8 +365,11 @@ class Frame(object):
                 if out_is_compatible and in_is_compatible:
                     break
             else:
-                import ipdb
-                ipdb.set_trace()
+                try:
+                    import ipdb
+                    ipdb.set_trace()
+                except ModuleNotFoundError:
+                    pass
                 msg = "Can not unwind {} {}, target {}, allowed {}: {}".format(exc_value.mode, exc_value.value, self.target, break_types, reasoner.to_message())
                 raise FatalError(msg)
 

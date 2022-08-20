@@ -232,10 +232,14 @@ class CompositeObjectManager(object):
         if self.attached_type_counts[new_type_id] == 0:
             self.cached_effective_composite_type = None
 
+        #print("Attaching {} {} to {} {}".format(id(new_type), new_type.name, id(self.get_obj()), self.debug_reason))
+
         self.attached_types[new_type_id] = new_type
         self.attached_type_counts[new_type_id] += multiplier
 
     def detach_type(self, remove_type, multiplier=1):
+        #print("Detaching {} {} from {} {}".format(id(remove_type), remove_type.name, id(self.get_obj()), self.debug_reason))
+
         remove_type_id = id(remove_type)
         if remove_type_id not in self.attached_type_counts:
             raise FatalError()
@@ -474,8 +478,12 @@ def add_composite_type(target_manager, new_type, reasoner=DUMMY_REASONER, key_fi
     """
     types_to_bind = {}
     succeeded = build_binding_map_for_type(None, new_type, target_manager.get_obj(), target_manager, key_filter, MISSING, {}, types_to_bind, reasoner, enforce_safety_checks=enforce_safety_checks)
+
+    ## DEBUG
     if not succeeded:
+        build_binding_map_for_type(None, new_type, target_manager.get_obj(), target_manager, key_filter, MISSING, {}, types_to_bind, reasoner, enforce_safety_checks=enforce_safety_checks)
         raise CompositeTypeIncompatibleWithTarget()
+    ##
 
     for _, type, target in types_to_bind.values():
         get_manager(target).attach_type(type, multiplier=multiplier)
@@ -485,6 +493,8 @@ def remove_composite_type(target_manager, remove_type, reasoner=DUMMY_REASONER, 
     types_to_bind = {}
     succeeded = build_binding_map_for_type(None, remove_type, target_manager.get_obj(), target_manager, key_filter, MISSING, {}, types_to_bind, reasoner, enforce_safety_checks=enforce_safety_checks)
     if not succeeded:
+        types_to_bind = {}
+        build_binding_map_for_type(None, remove_type, target_manager.get_obj(), target_manager, key_filter, MISSING, {}, types_to_bind, reasoner, enforce_safety_checks=enforce_safety_checks)
         raise CompositeTypeIncompatibleWithTarget()
 
     for _, type, target in types_to_bind.values():
@@ -505,7 +515,7 @@ def bind_key(manager, key_filter):
             manager,
             attached_type,
             key_filter=key_filter,
-            multiplier=manager.attached_type_counts[id(attached_type)],
+            multiplier=1, #manager.attached_type_counts[id(attached_type)],
             enforce_safety_checks=False
         )
 
@@ -516,7 +526,7 @@ def unbind_key(manager, key_filter):
             manager,
             attached_type,
             key_filter=key_filter,
-            multiplier=manager.attached_type_counts[id(attached_type)],
+            multiplier=1, #manager.attached_type_counts[id(attached_type)],
             enforce_safety_checks=False
         )
 
@@ -583,6 +593,7 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
                         break
 
                     if micro_op.conflicts_with(sub_type, target_effective_type, child_reasoner):
+                        micro_op.conflicts_with(sub_type, target_effective_type, child_reasoner)
                         micro_ops_checks_worked = False
                         break
 
@@ -624,6 +635,7 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
 
     if atleast_one_sub_type_worked and types_to_bind is not None:
         types_to_bind.update(extra_types_to_bind)
+
     if not atleast_one_sub_type_worked:
         cache[result_key] = False
         reasoner.attach_child_reasoners(child_reasoners, source_micro_op, new_type, target)

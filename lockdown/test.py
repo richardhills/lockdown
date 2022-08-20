@@ -10,12 +10,13 @@ from lockdown.utils.utils import profile, environment
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-t', action='store_false', help='rtti mode off')
-parser.add_argument('-s', action='store_false', help='frame shortcut off')
-parser.add_argument('-f', action='store_false', help='validate flow control off')
-parser.add_argument('-o', action='store_false', help='opcode bindings off')
-parser.add_argument('-p', action='store_false', help='consume python objects off')
-parser.add_argument('-r', action='store_false', help='return value optimization off')
-parser.add_argument('-T', action='store_true', help="transpile to python")
+parser.add_argument('-s', action='store_true', help='enable frame optimization - avoid creating Frame objects when not needed, for speed')
+parser.add_argument('-r', action='store_true', help='enable return-value optimization - avoids using Python Exception-flow control for simple values')
+parser.add_argument('-f', action='store_false', help='disable validate run-time flow control - turns off interpreter checks for speed')
+parser.add_argument('-o', action='store_false', help='disable opcode bindings - avoid checking if types bind at runtime, when we know that they must bind based on verification checks, for speed')
+parser.add_argument('-p', action='store_false', help='disable consuming Python objects - leave enabled for Python interopability')
+parser.add_argument('-T', action='store_true', help="transpile to Python - used to speed up execution")
+parser.add_argument('-O', action='store_true', help="print transpiled Python")
 parser.add_argument('-P', help='cProfile mode')
 args, unknown_args = parser.parse_known_args()
 sys.argv[1:] = unknown_args
@@ -36,6 +37,7 @@ if __name__ == "__main__":
         consume_python_objects=args.p,
         return_value_optimization=args.r,
         transpile=args.T,
+        output_transpiled_code=args.O,
         base=True
     ):
         if args.P:

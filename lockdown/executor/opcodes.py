@@ -31,7 +31,7 @@ from lockdown.type_system.universal_type import UniversalObjectType, \
     GetterMicroOpType, SetterMicroOpType, GetterWildcardMicroOpType, \
     SetterWildcardMicroOpType, InsertStartMicroOpType, InsertEndMicroOpType, DeletterWildcardMicroOpType, \
     IterMicroOpType, RemoverWildcardMicroOpType, InserterWildcardMicroOpType, \
-    UniversalTupleType, Universal, SPARSE_ELEMENT
+    UniversalTupleType, Universal, SPARSE_ELEMENT, RICH_TYPE
 from lockdown.utils.utils import MISSING, NO_VALUE, InternalMarker, get_environment, \
     spread_dict
 
@@ -482,6 +482,15 @@ class AssignmentOp(Opcode):
             try:
                 tag, micro_op = self.binder.get([ reference, None ])
 
+                if micro_op is None:
+                    # Runtime dynamic behaviour! We weren't even able to bind to the
+                    # wildcard microop at verification time (maybe we dind't know whether
+                    # the target would be a CompositeType). No harm though - we get the
+                    # microop at runtime instead.
+                    tag, micro_op = get_best_micro_op([
+                        ("set", reference), ("set-wildcard",)
+                    ], manager.get_effective_composite_type())
+
                 if not micro_op:
                     return frame.exception(self, self.INVALID_LVALUE())
 
@@ -543,7 +552,7 @@ class DynamicDereferenceOp(Opcode):
         break_types.add(
             self, 
             "exception",
-            self.INVALID_DEREFERENCE.get_type(message="DynamicDereferenceOp: invalid_dereference {}".format(self.reference))
+            self.INVALID_DEREFERENCE.get_type()
         )
 
         break_types.add(self, "value", AnyType())
@@ -558,6 +567,7 @@ class DynamicDereferenceOp(Opcode):
             )
 
             if references is None:
+                ContextSearcher(context, check_wildcards=True).search_for_reference(self.reference, {})
                 return frame.exception(self, self.INVALID_DEREFERENCE())
 
             target = context
@@ -577,6 +587,7 @@ class DynamicDereferenceOp(Opcode):
             return frame.value(self, target)
 
 class DynamicAssignmentOp(OpcodeOperandMixin, Opcode):
+    INVALID_OF = TypeErrorFactory("DynamicAssignmentOp: invalid_of")
     INVALID_ASSIGNMENT = TypeErrorFactory("DynamicAssignmentOp: invalid_assignment {reference}")
 
     rvalue = Operand(AnyType(), INVALID_ASSIGNMENT)
@@ -592,7 +603,7 @@ class DynamicAssignmentOp(OpcodeOperandMixin, Opcode):
 
         break_types.add(
             self, "exception",
-            self.INVALID_ASSIGNMENT.get_type(message="DynamicDereferenceOp: invalid_dereference {}".format(self.reference))
+            self.INVALID_ASSIGNMENT.get_type()
         )
 
         break_types.add(self, "value", NoValueType())
@@ -616,6 +627,9 @@ class DynamicAssignmentOp(OpcodeOperandMixin, Opcode):
                 target_type = target_manager.get_effective_composite_type()
 
                 tag, micro_op = get_best_micro_op((("get", reference), ("get-wildcard",)), target_type)
+
+                if micro_op is None:
+                    return frame.exception(self, self.INVALID_ASSIGNMENT())
 
                 is_direct = tag[0] != "get-wildcard"
 
@@ -1521,6 +1535,7 @@ def create_readonly_static_type(value):
     that refer to the value from StaticOp are able to run against.
     """
     if isinstance(value, Composite):
+        return RICH_TYPE
         # Only do ListTypes atm since that is what is needed for unit tests, but can be expanded...
         result = CompositeType({}, name="reasonable list type")
         if isinstance(value, Universal):
@@ -1555,6 +1570,7 @@ class StaticOp(Opcode):
 
     def jump(self, context, frame_manager, hooks, immediate_context=None):
         with frame_manager.get_next_frame(self) as frame:
+            from lockdown.executor.function import OpenFunction
             self.lazy_initialize(context, frame_manager, hooks, immediate_context)
             return frame.unwind(self, "value", self.value, None)
 

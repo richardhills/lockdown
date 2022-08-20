@@ -12,8 +12,11 @@ def raise_if_safe(ExceptionType, can_fail):
 class FatalError(Exception):
     def __init__(self, *args, **kwargs):
         super(FatalError, self).__init__(*args, **kwargs)
-        import ipdb
-        ipdb.set_trace()
+        try:
+            import ipdb
+            ipdb.set_trace()
+        except ModuleNotFoundError:
+            pass
 
     pass
 

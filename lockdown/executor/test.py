@@ -5,6 +5,7 @@ from unittest import main
 from unittest.case import TestCase
 
 from lockdown.executor.bootstrap import bootstrap_function
+from lockdown.executor.context import Context
 from lockdown.executor.flow_control import FrameManager
 from lockdown.executor.function import prepare
 from lockdown.executor.raw_code_factories import function_lit, no_value_type, \
@@ -67,15 +68,13 @@ class TestDereference(TestCase):
             )
         )
 
-        context = PythonObject({
-            "local": 42,
-            "_types": PythonObject({
-                "local": IntegerType()
-            })
-        }, bind=UniversalObjectType({
-            "local": IntegerType(),
-            "_types": DEFAULT_READONLY_COMPOSITE_TYPE
-        }, wildcard_type=RICH_READONLY_TYPE))
+        context_type = UniversalObjectType({
+            "local": IntegerType()
+        })
+
+        context = Context(
+            context_type, context_type, local=42
+        )
 
         _, result = bootstrap_function(func, outer_context=context)
 
@@ -111,15 +110,13 @@ class TestDereference(TestCase):
             )
         )
 
-        context = PythonObject({
-            "local": PythonList([ 39, 3 ]),
-            "_types": PythonObject({
-                "local": UniversalTupleType([ IntegerType(), IntegerType() ])
-            })
-        }, bind=UniversalObjectType({
-            "local": UniversalTupleType([ IntegerType(), IntegerType() ]),
-            "_types": DEFAULT_READONLY_COMPOSITE_TYPE
-        }))
+        context_type = UniversalObjectType({
+            "local": UniversalTupleType([ IntegerType(), IntegerType() ])
+        })
+
+        context = Context(
+            context_type, context_type, local=PythonList([ 39, 3 ])
+        )
 
         _, result = bootstrap_function(func, outer_context=context)
 

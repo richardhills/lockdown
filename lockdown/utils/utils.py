@@ -1,17 +1,20 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-from six import reraise
+from _collections_abc import MutableMapping
 import cProfile
 from collections import OrderedDict
 from contextlib import contextmanager
 from json.encoder import JSONEncoder
 import sys
+import unittest
 import weakref
+
+from six import reraise
 
 from lockdown.type_system.core_types import Type
 from lockdown.type_system.exceptions import FatalError
-from _collections_abc import MutableMapping
+from functools import wraps
 
 
 class InternalMarker(object):
@@ -97,7 +100,8 @@ class Environment(object):
             opcode_bindings=True,
             consume_python_objects=True,
             return_value_optimization=True,
-            transpile=False
+            transpile=False,
+            output_transpiled_code=False
         ):
         self.rtti = rtti
         self.frame_shortcut = frame_shortcut
@@ -106,6 +110,7 @@ class Environment(object):
         self.consume_python_objects = consume_python_objects
         self.return_value_optimization = return_value_optimization
         self.transpile = transpile
+        self.output_transpiled_code = output_transpiled_code
 
     def clone(
         self,
@@ -115,7 +120,8 @@ class Environment(object):
         opcode_bindings=MISSING,
         consume_python_objects=MISSING,
         return_value_optimization=MISSING,
-        transpile=MISSING
+        transpile=MISSING,
+        output_transpiled_code=MISSING
     ):
         return Environment(
             rtti=default(rtti, self.rtti),
@@ -124,7 +130,8 @@ class Environment(object):
             opcode_bindings=default(opcode_bindings, self.opcode_bindings),
             consume_python_objects=default(consume_python_objects, self.consume_python_objects),
             return_value_optimization=default(return_value_optimization, self.return_value_optimization),
-            transpile=default(transpile, self.transpile)
+            transpile=default(transpile, self.transpile),
+            output_transpiled_code=default(output_transpiled_code, self.output_transpiled_code)
         )
 
 environment_stack = None
@@ -152,11 +159,10 @@ def environment(
     consume_python_objects=True,
     return_value_optimization=True,
     transpile=False,
+    output_transpiled_code=False,
     base=False
 ):
     environment = get_environment()
-    if (environment and environment.transpile or transpile is True) and not (environment and environment.return_value_optimization or return_value_optimization is True):
-        raise FatalError("Transpiling has return_value_optomization baked in")
 
     if base:
         global environment_stack
@@ -170,7 +176,8 @@ def environment(
             opcode_bindings=opcode_bindings,
             consume_python_objects=consume_python_objects,
             return_value_optimization=return_value_optimization,
-            transpile=transpile
+            transpile=transpile,
+            output_transpiled_code=output_transpiled_code
         )
     else:
         new_environment = get_environment().clone(
@@ -180,7 +187,8 @@ def environment(
             opcode_bindings=opcode_bindings,
             consume_python_objects=consume_python_objects,
             return_value_optimization=return_value_optimization,
-            transpile=transpile
+            transpile=transpile,
+            output_transpiled_code=output_transpiled_code
         )
 
     environment_stack.append(new_environment)
@@ -191,6 +199,14 @@ def environment(
         environment_stack.pop()
         if base:
             environment_stack = None
+
+def skipIfNoOpcodeBindings(func):
+    @wraps(func)
+    def new_test(*args, **kwargs):
+        if not get_environment().opcode_bindings:
+            return unittest.skip("Test requires opcode bindings")
+        func(*args, **kwargs)
+    return new_test
 
 class WeakIdentityKeyDictionary(MutableMapping):
     def __init__(self, dict={}):

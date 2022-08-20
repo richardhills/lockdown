@@ -7,7 +7,8 @@ from lockdown.type_system.exceptions import FatalError, InvalidDereferenceKey
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.reasoner import DUMMY_REASONER
 from lockdown.type_system.universal_type import PythonDict, PythonObject, \
-    UniversalDictType, UniversalObjectType, DEFAULT_READONLY_COMPOSITE_TYPE
+    UniversalDictType, UniversalObjectType, DEFAULT_READONLY_COMPOSITE_TYPE, \
+    Universal
 from lockdown.utils.utils import get_environment, MISSING, NO_VALUE
 
 
@@ -149,29 +150,35 @@ class MicroOpBinder(object):
 
         return (None, None)
 
-
 def get_context_type(context):
     if context is None:
         return NoValueType()
-    context_manager = get_manager(context)
-    if not hasattr(context_manager, "_context_type"):
-        value_type = {}
-        if context is NO_VALUE:
-            return NoValueType()
-        if hasattr(context, "_types"):
-            if hasattr(context._types, "argument"):
-                value_type["argument"] = context._types.argument
-            if hasattr(context._types, "local"):
-                value_type["local"] = context._types.local
-            if hasattr(context._types, "outer"):
-                value_type["outer"] = context._types.outer
-        if hasattr(context, "prepare"):
-            value_type["prepare"] = DEFAULT_READONLY_COMPOSITE_TYPE
-        if hasattr(context, "static"):
-            value_type["static"] = DEFAULT_READONLY_COMPOSITE_TYPE
-        context_manager._context_type = UniversalObjectType(value_type, name="context-type-{}".format(context_manager.debug_reason))
- 
-    return context_manager._context_type
+    if context._contains("_types"):
+        return context._get("_types")
+    raise FatalError()
+
+# def get_context_type(context):
+#     if context is None:
+#         return NoValueType()
+#     context_manager = get_manager(context)
+#     if not hasattr(context_manager, "_context_type"):
+#         value_type = {}
+#         if context is NO_VALUE:
+#             return NoValueType()
+#         if hasattr(context, "_types"):
+#             if hasattr(context._types, "argument"):
+#                 value_type["argument"] = context._types.argument
+#             if hasattr(context._types, "local"):
+#                 value_type["local"] = context._types.local
+#             if hasattr(context._types, "outer"):
+#                 value_type["outer"] = context._types.outer
+#         if hasattr(context, "prepare"):
+#             value_type["prepare"] = DEFAULT_READONLY_COMPOSITE_TYPE
+#         if hasattr(context, "static"):
+#             value_type["static"] = DEFAULT_READONLY_COMPOSITE_TYPE
+#         context_manager._context_type = UniversalObjectType(value_type, name="context-type-{}".format(context_manager.debug_reason))
+#
+#     return context_manager._context_type
 
 class ContextSearcher(object):
     def __init__(self, context, check_wildcards=False):

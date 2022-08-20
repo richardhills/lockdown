@@ -17,7 +17,7 @@ from types import FunctionType, MethodType
 from astor.code_gen import to_source
 
 from lockdown.type_system.exceptions import FatalError
-from lockdown.utils.utils import spread_dict, NO_VALUE
+from lockdown.utils.utils import spread_dict, NO_VALUE, get_environment
 
 
 def compile_module(code, context_name, dependency_builder, **subs):
@@ -131,8 +131,9 @@ def build_and_compile_ast_function(name, arguments, body, dependencies):
 def compile_ast_function_def(function_creator_ast, open_function_id, dependencies):
     ast.fix_missing_locations(function_creator_ast)
 
-#    print("--- {} ---".format(open_function_id))
-#    print(to_source(function_creator_ast))
+    if get_environment().output_transpiled_code:
+        print("--- {} ---".format(open_function_id))
+        print(to_source(function_creator_ast))
 
     function_creator = compile(function_creator_ast, "<string>", "exec")
 
@@ -152,6 +153,7 @@ def default_globals():
     from lockdown.type_system.universal_type import CALCULATE_INITIAL_LENGTH, \
         Universal
     from lockdown.type_system.composites import bind_key, unbind_key
+    from lockdown.type_system.composites import scoped_bind
 
     return {
         "__builtins": None,
@@ -160,12 +162,14 @@ def default_globals():
         "BreakException": BreakException,
         "NoValue": NO_VALUE,
         "get_manager": get_manager,
+        "get_environment": get_environment,
         "CALCULATE_INITIAL_LENGTH": CALCULATE_INITIAL_LENGTH,
-        "FatalError": FatalError,
+        "scoped_bind": scoped_bind,
         "bind_key": bind_key,
         "unbind_key": unbind_key,
+        "FatalError": FatalError,
         "LockdownFunction": LockdownFunction,
-        "ClosedFunctionType": ClosedFunctionType
+        "ClosedFunctionType": ClosedFunctionType,
     }
 
 def get_dependency_key(dependency):

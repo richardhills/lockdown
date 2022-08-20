@@ -19,7 +19,8 @@ from lockdown.type_system.universal_type import PythonObject, \
     DeletterWildcardMicroOpType, GetterWildcardMicroOpType, \
     SetterWildcardMicroOpType, UniversalDefaultDictType, UniversalListType, \
     SPARSE_ELEMENT, UniversalLupleType, InsertStartMicroOpType, RICH_TYPE, \
-    DEFAULT_COMPOSITE_TYPE, NO_SETTER_ERROR_COMPOSITE_TYPE
+    DEFAULT_COMPOSITE_TYPE, NO_SETTER_ERROR_COMPOSITE_TYPE, Universal
+from lockdown.utils.utils import skipIfNoOpcodeBindings
 
 
 class TestMicroOpMerging(TestCase):
@@ -82,10 +83,11 @@ class TestBasicObject(TestCase):
             ("set", "foo"): SetterMicroOpType("foo", StringType())
         }, name="test"))
 
+    @skipIfNoOpcodeBindings
     def test_failed_setup_broad_writing_property(self):
-        with self.assertRaises(CompositeTypeIsInconsistent):
-            obj = PythonObject({ "foo": "hello" })
+        obj = PythonObject({ "foo": "hello" })
 
+        with self.assertRaises(CompositeTypeIsInconsistent):
             get_manager(obj).add_composite_type(CompositeType({
                 ("get", "foo"): GetterMicroOpType("foo", StringType()),
                 ("set", "foo"): SetterMicroOpType("foo", AnyType())
@@ -156,7 +158,7 @@ class TestBasicObject(TestCase):
         obj.foo = "what"
         self.assertEqual(obj.foo, "what")
 
-        with self.assertRaises(Exception):
+        with self.assertRaises(AttributeError):
             obj.bar = "hello"
 
     def test_const_property(self):
@@ -167,7 +169,7 @@ class TestBasicObject(TestCase):
         }, name="test"))
 
         self.assertEqual(obj.foo, "hello")
-        with self.assertRaises(Exception):
+        with self.assertRaises(AttributeError):
             obj.foo = "what"
 
     def test_delete_property(self):
@@ -208,6 +210,7 @@ class TestRevConstType(TestCase):
 
         self.assertTrue(normal_broad_type.is_copyable_from(rev_const_type, DUMMY_REASONER))
 
+    @skipIfNoOpcodeBindings
     def test_rev_const_can_not_be_added_to_object(self):
         rev_const_type = CompositeType({
             ("get", "foo"): GetterMicroOpType("foo", StringType()),
@@ -215,7 +218,7 @@ class TestRevConstType(TestCase):
         }, name="test")
 
         obj = PythonObject({ "foo": "hello" })
-        with self.assertRaises(Exception):
+        with self.assertRaises(CompositeTypeIsInconsistent):
             get_manager(obj).add_composite_type(rev_const_type)
 
     def test_rev_const_narrowing(self):
@@ -727,6 +730,35 @@ class TestNestedPythonTypes(TestCase):
         with self.assertRaises(CompositeTypeIncompatibleWithTarget):
             get_manager(foo.bar).add_composite_type(UniversalObjectType({ "baz": IntegerType() }))
 
+    def test_python_constraints_work_with_lists(self):
+        foo = PythonObject({
+            "bar": PythonList([ 1, 2, 3 ])
+        })
+
+        get_manager(foo).add_composite_type(DEFAULT_COMPOSITE_TYPE)
+        del foo.bar[1]
+
+    def test_python_constraints_work_with_lists2(self):
+        foo = PythonObject({
+            "bar": PythonList([ 1, 2, 3 ])
+        })
+
+        get_manager(foo).add_composite_type(DEFAULT_COMPOSITE_TYPE)
+        foo.bar.insert(5, 2)
+
+    def test_python_constraints_work_with_lists3(self):
+        foo = Universal(True, initial_wrapped={
+            "bar": Universal(False, initial_wrapped={ 0: 1, 1: 2, 2: 3 })
+        })
+
+        get_manager(foo).add_composite_type(DEFAULT_COMPOSITE_TYPE)
+
+        Bar = get_manager(foo._get("bar")).get_effective_composite_type()
+
+        iter = Bar.get_micro_op_type(("iter", ))
+
+        self.assertIsNotNone(iter)
+
     def test_python_delete_works(self):
         foo = PythonObject({
             "bar": PythonObject({
@@ -763,7 +795,6 @@ class TestNestedPythonTypes(TestCase):
 
         with self.assertRaises(AttributeError):
             foo.bop
-
 
 class TestDefaultDict(TestCase):
     def test_default_dict_is_consistent_type(self):
@@ -1210,6 +1241,107 @@ class TestRuntime(TestCase):
         self.assertEqual(get_manager(A).attached_type_counts[id(At)], 1)
 
 
+    def test_wildcard_extensions(self):
+        B = PythonObject({
+            "foo": 5
+        })
+        A = PythonObject({
+            "bar": B
+        })
+
+        Bt = UniversalObjectType({
+            "foo": IntegerType()
+        })
+        At = UniversalObjectType({
+            "bar": Bt
+        }, wildcard_type=Bt)
+
+        get_manager(A).add_composite_type(At)
+        self.assertEqual(len(get_manager(A).attached_types), 1)
+        self.assertEqual(len(get_manager(B).attached_types), 1)
+        self.assertEqual(get_manager(A).attached_type_counts[id(At)], 1)
+        self.assertEqual(get_manager(B).attached_type_counts[id(Bt)], 2)
+
+        get_manager(A).remove_composite_type(At)
+        self.assertEqual(len(get_manager(A).attached_types), 0)
+        self.assertEqual(len(get_manager(B).attached_types), 0)
+        self.assertEqual(get_manager(A).attached_type_counts[id(At)], 0)
+        self.assertEqual(get_manager(B).attached_type_counts[id(Bt)], 0)
+
+
+    def test_overlapping_types(self):
+        B = PythonObject({
+            "foo": 5
+        })
+        A = PythonObject({
+            "bar": B
+        })
+
+        Bt = UniversalObjectType({
+            "foo": IntegerType()
+        })
+        At = UniversalObjectType({
+            "bar": Bt
+        })
+
+        Bs = UniversalObjectType({
+            "foo": IntegerType()
+        })
+        As = UniversalObjectType({
+            "bar": Bs
+        })
+
+        get_manager(A).add_composite_type(At)
+        get_manager(A).add_composite_type(As)
+        self.assertEqual(len(get_manager(A).attached_types), 2)
+        self.assertEqual(len(get_manager(B).attached_types), 2)
+        self.assertEqual(get_manager(A).attached_type_counts[id(At)], 1)
+        self.assertEqual(get_manager(B).attached_type_counts[id(Bt)], 1)
+        self.assertEqual(get_manager(A).attached_type_counts[id(As)], 1)
+        self.assertEqual(get_manager(B).attached_type_counts[id(Bs)], 1)
+
+        get_manager(A).remove_composite_type(At)
+        get_manager(A).remove_composite_type(As)
+        self.assertEqual(len(get_manager(A).attached_types), 0)
+        self.assertEqual(len(get_manager(B).attached_types), 0)
+        self.assertEqual(get_manager(A).attached_type_counts[id(At)], 0)
+        self.assertEqual(get_manager(B).attached_type_counts[id(Bt)], 0)
+        self.assertEqual(get_manager(A).attached_type_counts[id(As)], 0)
+        self.assertEqual(get_manager(B).attached_type_counts[id(Bs)], 0)
+
+
+    def test_overlapping_with_rich_type(self):
+        B = PythonObject({
+            "foo": 5
+        })
+        A = PythonObject({
+            "bar": B
+        })
+
+        Bt = UniversalObjectType({
+            "foo": IntegerType()
+        })
+
+        At = UniversalObjectType({
+            "bar": Bt
+        })
+
+        get_manager(A).add_composite_type(At)
+        get_manager(A).add_composite_type(DEFAULT_COMPOSITE_TYPE)
+        self.assertEqual(len(get_manager(A).attached_types), 2)
+        self.assertEqual(len(get_manager(B).attached_types), 2)
+        self.assertEqual(get_manager(A).attached_type_counts[id(At)], 1)
+        self.assertEqual(get_manager(A).attached_type_counts[id(DEFAULT_COMPOSITE_TYPE)], 1)
+        self.assertEqual(get_manager(B).attached_type_counts[id(Bt)], 1)
+        self.assertEqual(get_manager(B).attached_type_counts[id(DEFAULT_COMPOSITE_TYPE)], 2)
+
+        get_manager(A).remove_composite_type(At)
+        get_manager(A).remove_composite_type(DEFAULT_COMPOSITE_TYPE)
+
+        self.assertEqual(len(get_manager(A).attached_types), 0)
+        self.assertEqual(len(get_manager(B).attached_types), 0)
+
+
     def test_modifying(self):
         At = UniversalObjectType({
             "foo": IntegerType()
@@ -1235,6 +1367,82 @@ class TestRuntime(TestCase):
         
         self.assertEqual(len(get_manager(A).attached_types), 0)
         self.assertEqual(get_manager(A).attached_type_counts[id(At)], 0)
+
+    def test_modifying2(self):
+        Bt = UniversalObjectType({
+            "foo": IntegerType()
+        })
+
+        At = UniversalObjectType({
+            "bar": Bt
+        })
+
+        B = PythonObject({
+            "foo": 5
+        })
+        A = PythonObject({
+            "bar": B
+        })
+
+        get_manager(A).add_composite_type(At)
+        get_manager(A).add_composite_type(DEFAULT_COMPOSITE_TYPE)
+
+        self.assertEqual(len(get_manager(A).attached_types), 2)
+        self.assertEqual(get_manager(A).attached_type_counts[id(At)], 1)
+        self.assertEqual(get_manager(A).attached_type_counts[id(DEFAULT_COMPOSITE_TYPE)], 1)
+        self.assertEqual(len(get_manager(B).attached_types), 2)
+        self.assertEqual(get_manager(B).attached_type_counts[id(Bt)], 1)
+        self.assertEqual(get_manager(B).attached_type_counts[id(DEFAULT_COMPOSITE_TYPE)], 2)
+
+        B2 = PythonObject({
+            "foo": 42
+        })
+
+        A.bar = B2
+        
+        self.assertEqual(len(get_manager(A).attached_types), 2)
+        self.assertEqual(get_manager(A).attached_type_counts[id(At)], 1)
+        self.assertEqual(get_manager(A).attached_type_counts[id(DEFAULT_COMPOSITE_TYPE)], 1)
+        self.assertEqual(len(get_manager(B).attached_types), 0)
+        self.assertEqual(len(get_manager(B2).attached_types), 2)
+        self.assertEqual(get_manager(B2).attached_type_counts[id(Bt)], 1)
+        self.assertEqual(get_manager(B2).attached_type_counts[id(DEFAULT_COMPOSITE_TYPE)], 2)
+
+    def test_modifying_list(self):
+        Bt = UniversalObjectType({
+            "foo": IntegerType()
+        })
+
+        At = UniversalListType(Bt)
+
+        B = PythonObject({
+            "foo": 5
+        })
+        A = PythonList([ B ])
+
+        get_manager(A).add_composite_type(At)
+        get_manager(A).add_composite_type(DEFAULT_COMPOSITE_TYPE)
+
+        self.assertEqual(len(get_manager(A).attached_types), 2)
+        self.assertEqual(get_manager(A).attached_type_counts[id(At)], 1)
+        self.assertEqual(get_manager(A).attached_type_counts[id(DEFAULT_COMPOSITE_TYPE)], 1)
+        self.assertEqual(len(get_manager(B).attached_types), 2)
+        self.assertEqual(get_manager(B).attached_type_counts[id(Bt)], 2) # Two bindings through the Setter and Iter MicroOps
+        self.assertEqual(get_manager(B).attached_type_counts[id(DEFAULT_COMPOSITE_TYPE)], 2)
+
+        B2 = PythonObject({
+            "foo": 42
+        })
+
+        A[0] = B2
+        
+        self.assertEqual(len(get_manager(A).attached_types), 2)
+        self.assertEqual(get_manager(A).attached_type_counts[id(At)], 1)
+        self.assertEqual(get_manager(A).attached_type_counts[id(DEFAULT_COMPOSITE_TYPE)], 1)
+        self.assertEqual(len(get_manager(B).attached_types), 0)
+        self.assertEqual(len(get_manager(B2).attached_types), 2)
+        self.assertEqual(get_manager(B2).attached_type_counts[id(Bt)], 2)
+        self.assertEqual(get_manager(B2).attached_type_counts[id(DEFAULT_COMPOSITE_TYPE)], 2)
 
 class TestRDHInstances(TestCase):
     def test_object_set_and_get(self):

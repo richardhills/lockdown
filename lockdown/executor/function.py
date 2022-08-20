@@ -30,7 +30,7 @@ from lockdown.type_system.managers import get_manager, get_type_of_value
 from lockdown.type_system.reasoner import DUMMY_REASONER, Reasoner
 from lockdown.type_system.universal_type import PythonObject, \
     UniversalObjectType, DEFAULT_READONLY_COMPOSITE_TYPE, PythonList, PythonDict, \
-    Universal
+    Universal, DEFAULT_COMPOSITE_TYPE, RICH_TYPE, RICH_READONLY_TYPE
 from lockdown.utils.utils import MISSING, raise_from, \
     spread_dict, get_environment, NO_VALUE
 
@@ -62,7 +62,10 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
     actual_break_types_factory = BreakTypesFactory(None)
 
     context = Universal(True, initial_wrapped={
-        "prepare": outer_context
+        "prepare": outer_context,
+        "_types": UniversalObjectType({
+            "prepare": DEFAULT_READONLY_COMPOSITE_TYPE
+        })
     }, bind=DEFAULT_READONLY_COMPOSITE_TYPE, debug_reason="static-prepare-context")
 
     static = evaluate(
@@ -101,18 +104,12 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
     context = Universal(True, initial_wrapped={
         "prepare": outer_context,
         "static": static,
-#        "types": derich_type(
-#            UniversalObjectType({
-#                "outer": outer_type,
-#                "argument": argument_type,
-##                "local": local_type
-#            }), {}
-#        ),
-        "_types": Universal(True, initial_wrapped={
+        "_types": UniversalObjectType({
+            "prepare": RICH_READONLY_TYPE,
+            "static": RICH_READONLY_TYPE,
             "outer": outer_type,
             "argument": argument_type,
-#            "local": local_type
-        }, debug_reason="local-prepare-context")
+        })
     },
         bind=DEFAULT_READONLY_COMPOSITE_TYPE,
         debug_reason="local-prepare-context"
@@ -167,29 +164,24 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
         context = Universal(True, initial_wrapped={
             "prepare": outer_context,
             "static": static,
-    #        "types": derich_type(
-    #            UniversalObjectType({
-    #                "outer": outer_type,
-    #                "argument": argument_type,
-    #                "local": local_type
-    #            }), {}
-    #        ),
-            "_types": Universal(True, initial_wrapped={
+            "_types": UniversalObjectType({
+                "prepare": RICH_READONLY_TYPE,
+                "static": RICH_READONLY_TYPE,
                 "outer": outer_type,
                 "argument": argument_type,
                 "local": local_type
-            }, debug_reason="code-prepare-context")
+            })
         },
             bind=DEFAULT_READONLY_COMPOSITE_TYPE,
             debug_reason="code-prepare-context"
         )
-    
+
         get_manager(context)._context_type = UniversalObjectType({
             "outer": outer_type,
             "argument": argument_type,
             "local": local_type
         }, wildcard_type=AnyType(), name="code-prepare-context-type")
-    
+
         code = enrich_opcode(
             data.code,
             combine(type_conditional_converter, UnboundDereferenceBinder(context))
@@ -354,28 +346,24 @@ class OpenFunction(object):
         self.local_initializer = local_initializer
         self.break_types = break_types
 
-        self.types_context = Universal(True, initial_wrapped={
-            "outer": self.outer_type,
-            "argument": self.argument_type
-        }, debug_reason="local-initialization-context")
-
         self.local_initialization_context_type = UniversalObjectType({
             "outer": self.outer_type,
             "argument": self.argument_type,
-#            "types": readonly_rich_composite_type
-        }, wildcard_type=AnyType(), name="local-initialization-context-type")
+            "static": RICH_READONLY_TYPE,
+            "prepare": RICH_READONLY_TYPE
+        }, name="local-initialization-context-type")
 
         self.execution_context_type = UniversalObjectType({
-#            "prepare": readonly_rich_composite_type,
             "outer": self.outer_type,
             "argument": self.argument_type,
-#            "static": readonly_rich_composite_type,
             "local": self.local_type,
-#            "types": readonly_rich_composite_type
-        }, wildcard_type=AnyType(), name="code-execution-context-type")
+            "static": RICH_READONLY_TYPE,
+            "prepare": RICH_READONLY_TYPE
+        }, name="code-execution-context-type")
 
-        if not self.execution_context_type.is_self_consistent(DUMMY_REASONER):
-            raise FatalError()
+        reasoner = Reasoner()
+        if not self.execution_context_type.is_self_consistent(reasoner):
+            raise FatalError(reasoner)
 
         self.compiled_ast = None
 
@@ -427,18 +415,45 @@ class {open_function_id}(object):
             "outer": {context_name}_outer_context,
             "argument": {context_name}_argument,
             "static": {static},
-            "_types": {types_context}
-        }})
-        {context_name}._set("local", {local_initializer})
+            "_types": {local_initialization_context_type}
+        }}, debug_reason="local-initialization-transpiled-context")
+
+        local = None
+
+        with scoped_bind(
+            {context_name},
+            {local_initialization_context_type},
+            bind=get_environment().rtti
+        ):
+            local = {local_initializer}
+
+        {context_name} = Universal(True, initial_wrapped={{
+            "prepare": {prepare_context},
+            "outer": {context_name}_outer_context,
+            "argument": {context_name}_argument,
+            "static": {static},
+            "local": local,
+            "_types": {execution_context_type}
+        }}, debug_reason="code-execution-transpiled-context")
         """ \
         +(
             """
-        {function_code}
-        return ("value", NoValue, None, None)
+        with scoped_bind(
+            {context_name},
+            {execution_context_type},
+            bind=get_environment().rtti
+        ):
+            {function_code}
+            return ("value", NoValue, None, None)
             """
             if will_ignore_return_value else 
             """
-        return ("value", {function_code}, None, None)
+        with scoped_bind(
+            {context_name},
+            {execution_context_type},
+            bind=get_environment().rtti
+        ):
+            return ("value", {function_code}, None, None)
             """
         ) + """
 
@@ -463,10 +478,11 @@ class {open_function_id}(object):
             context_name, dependency_builder,
             prepare_context=self.prepare_context,
             static=self.static,
-            types_context=self.types_context,
+            local_initialization_context_type=self.local_initialization_context_type,
+            local_initializer=local_initializer_ast,
+            execution_context_type=self.execution_context_type,
             open_function_id=open_function_id,
             open_function_type=self.get_type(),
-            local_initializer=local_initializer_ast,
             function_code=code_ast
         )
 
@@ -491,18 +507,42 @@ class {open_function_id}(object):
     "outer": {outer_context},
     "argument": {argument},
     "static": {static},
-    "_types": {types_context}
+    "_types": {local_initialization_context_type}
 }})
-{context_name}._set("local", {local_initializer})
-{function_code}
+
+local = None
+
+with scoped_bind(
+    {context_name},
+    {local_initialization_context_type},
+    bind=get_environment().rtti
+):
+    local = {local_initializer}
+
+{context_name} = Universal(True, initial_wrapped={{
+    "prepare": {prepare_context},
+    "outer": {outer_context},
+    "argument": {argument},
+    "static": {static},
+    "local": local,
+    "_types": {execution_context_type}
+}}, debug_reason="code-execution-transpiled-context")
+
+with scoped_bind(
+    {context_name},
+    {execution_context_type},
+    bind=get_environment().rtti
+):
+    {function_code}
             """,
             context_name, dependency_builder,
             prepare_context=self.prepare_context,
-            outer_context=outer_context_ast,
-            argument=argument_ast,
             static=self.static,
-            types_context=self.types_context,
+            local_initialization_context_type=self.local_initialization_context_type,
             local_initializer=local_initializer_ast,
+            execution_context_type=self.execution_context_type,
+            outer_context=outer_context_ast,
+            argument=argument_ast,            
             function_code=code_ast
         )
 
@@ -577,8 +617,7 @@ class ClosedFunction(LockdownFunction):
                         "outer": self.outer_context,
                         "argument": argument,
                         "static": self.open_function.static,
-    #                    "types": derich_type(self.open_function.types_context, {}),
-                        "_types": self.open_function.types_context
+                        "_types": self.open_function.local_initialization_context_type
                     }, debug_reason="local-initialization-context")
                 )
 
@@ -588,7 +627,7 @@ class ClosedFunction(LockdownFunction):
                     bind=get_environment().rtti,
                     reasoner=local_initializer_context_binding_reasoner
                 ):
-                    get_manager(new_context)._context_type = self.open_function.local_initialization_context_type
+                    #get_manager(new_context)._context_type = self.open_function.local_initialization_context_type
                     local = frame.step("local", lambda: evaluate(self.open_function.local_initializer, new_context, frame_manager, hooks))
 
                 if get_environment().opcode_bindings and not is_type_bindable_to_value(local, self.open_function.local_type):
@@ -608,8 +647,7 @@ class ClosedFunction(LockdownFunction):
                         "argument": argument,
                         "static": self.open_function.static,
                         "local": local,
-#                        "types": derich_type(self.open_function.types_context, {}),
-                        "_types": self.open_function.types_context
+                        "_types": self.open_function.execution_context_type
                     }, debug_reason="code-execution-context")
                 )
                 with scoped_bind(

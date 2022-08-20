@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 import functools
 from time import time
 
+from lockdown.executor.context import Context
 from lockdown.executor.flow_control import FrameManager, \
     break_exception_to_string
 from lockdown.executor.function import prepare
@@ -21,7 +22,8 @@ from lockdown.type_system.core_types import NoValueType
 from lockdown.type_system.exceptions import FatalError
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.universal_type import PythonObject, \
-    DEFAULT_READONLY_COMPOSITE_TYPE, IterMicroOpType
+    DEFAULT_READONLY_COMPOSITE_TYPE, IterMicroOpType, UniversalObjectType, \
+    RICH_READONLY_TYPE
 from lockdown.utils.utils import NO_VALUE, print_code, MISSING, get_environment, \
     spread_dict
 
@@ -57,9 +59,13 @@ def get_default_global_context():
         if capture_export.caught_break_mode != "export":
             raise FatalError()
 
-        return PythonObject({
-            "static": capture_export.value
-        })
+        return Context(
+            UniversalObjectType({
+                "static": RICH_READONLY_TYPE
+            }),
+            DEFAULT_READONLY_COMPOSITE_TYPE,
+            static=capture_export.value
+        )
 
 def format_unhandled_break_type(break_type, raw_code):
     if not raw_code:

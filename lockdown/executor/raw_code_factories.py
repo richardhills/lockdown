@@ -419,7 +419,7 @@ def dynamic_assignment_op(reference, rvalue, **kwargs):
     return PythonObject(spread_dict({
         "opcode": "dynamic_assignment",
         "reference": reference,
-        "rvalue": rvalue
+        "rvalue": rvalue,
     }, **kwargs), debug_reason="code")
 
 

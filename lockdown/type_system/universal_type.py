@@ -327,16 +327,12 @@ class PythonList(Universal, MutableSequence):
         try:
             manager = get_manager(self)
 
-            micro_op_type = manager.get_micro_op_type(("delete", key))
-            if micro_op_type is not None:
-                return micro_op_type.invoke(manager)
-            else:
-                micro_op_type = manager.get_micro_op_type(("delete-wildcard",))
+            micro_op_type = manager.get_micro_op_type(("remove-wildcard",))
 
-                if micro_op_type is None:
-                    raise MissingMicroOp()
+            if micro_op_type is None:
+                raise MissingMicroOp()
 
-                return micro_op_type.invoke(manager, key)
+            return micro_op_type.invoke(manager, key)
         except InvalidDereferenceKey:
             raise IndexError()
         except MissingMicroOp:
@@ -946,7 +942,7 @@ class SetterWildcardMicroOpType(MicroOpType):
                         return True
 
         iter = other_type.get_micro_op_type(("iter", ))
-        if iter and not iter.key_type.is_copyable_from(self.key_type, reasoner):
+        if iter and not self.key_error and not iter.key_type.is_copyable_from(self.key_type, reasoner):
             reasoner.push_micro_op_conflicts_with_micro_op(self, iter)
             return True
 
@@ -1049,7 +1045,7 @@ class RemoverWildcardMicroOpType(MicroOpType):
 
             if self.type_error:
                 target_type = target_manager.get_effective_composite_type()
-                for i in range(key, self._length - 1):
+                for i in range(key, obj._length - 1):
                     if not can_add_composite_type_with_filter(
                         obj, target_type, i, obj._get(i + 1)
                     ):
@@ -1263,7 +1259,7 @@ class IterMicroOpType(MicroOpType):
             reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_setter)
             return True
 
-        if wildcard_setter and not self.key_type.is_copyable_from(wildcard_setter.key_type, reasoner):
+        if wildcard_setter and not wildcard_setter.key_error and not self.key_type.is_copyable_from(wildcard_setter.key_type, reasoner):
             reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_setter)
             return True
 
@@ -1293,8 +1289,8 @@ class IterMicroOpType(MicroOpType):
 
     def merge(self, other_micro_op_type):
         return IterMicroOpType(
-            merge_types([ self.key_type, other_micro_op_type.key_type ], "sub"),            
-            merge_types([ self.value_type, other_micro_op_type.value_type ], "sub")
+            merge_types([ self.key_type, other_micro_op_type.key_type ], "super"),            
+            merge_types([ self.value_type, other_micro_op_type.value_type ], "super")
         )
 
     def clone(self, value_type=MISSING, key_type=MISSING):
@@ -1453,17 +1449,24 @@ def UniversalDefaultDictType(key_type, value_type, name=None):
 
     return CompositeType(micro_ops, name)
 
+# A Composite Type that does not support any operations, and does not conflict with any other Composite Types
 EMPTY_COMPOSITE_TYPE = CompositeType({}, "EmptyCompositeType")
 
 DEFAULT_READONLY_COMPOSITE_TYPE = CompositeType({}, "DefaultReadonlyUniversalType")
 RICH_READONLY_TYPE = OneOfType([ AnyType(), DEFAULT_READONLY_COMPOSITE_TYPE ])
 DEFAULT_READONLY_COMPOSITE_TYPE.set_micro_op_type(("get-wildcard",), GetterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), RICH_READONLY_TYPE, True))
 
+# A reasonable default composite type, with the goal of:
+# 1. Supporting as wide a range of operations as possible (even if not safe)
+# 2. Being as compatible with as many other Composite types as possible
 DEFAULT_COMPOSITE_TYPE = CompositeType({}, "DefaultUniversalType")
 RICH_TYPE = OneOfType([ AnyType(), DEFAULT_COMPOSITE_TYPE ])
 DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("get-wildcard",), GetterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), RICH_TYPE, True))
 DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("set-wildcard",), SetterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), RICH_TYPE, True, True))
 DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("delete-wildcard",), DeletterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), True))
+DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("remove-wildcard",), RemoverWildcardMicroOpType(True, True))
+DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("insert-wildcard",), InsertEndMicroOpType(RICH_TYPE, True))
+DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("iter",), IterMicroOpType(OneOfType([ StringType(), IntegerType() ]), RICH_TYPE))
 
 # A Type that you can always set values on without any errors
 # Similar to how a standard unsafe Python Object works
@@ -1471,3 +1474,4 @@ NO_SETTER_ERROR_COMPOSITE_TYPE = CompositeType({}, "NoSetterError")
 NO_SETTER_ERROR_TYPE = OneOfType([ AnyType(), NO_SETTER_ERROR_COMPOSITE_TYPE ])
 NO_SETTER_ERROR_COMPOSITE_TYPE.set_micro_op_type(("get-wildcard",), GetterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), NO_SETTER_ERROR_TYPE, True))
 NO_SETTER_ERROR_COMPOSITE_TYPE.set_micro_op_type(("set-wildcard",), SetterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), NO_SETTER_ERROR_TYPE, False, False))
+NO_SETTER_ERROR_COMPOSITE_TYPE.set_micro_op_type(("iter",), IterMicroOpType(OneOfType([ StringType(), IntegerType() ]), NO_SETTER_ERROR_TYPE))
