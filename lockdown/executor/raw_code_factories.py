@@ -4,7 +4,7 @@ from __future__ import unicode_literals
 from lockdown.type_system.exceptions import FatalError
 from lockdown.type_system.universal_type import Universal, PythonObject, \
     PythonList
-from lockdown.utils.utils import spread_dict
+from lockdown.utils.utils import spread_dict, ANY
 
 
 def is_opcode(data):
@@ -78,6 +78,75 @@ def function_type(argument_type, break_types_expression):
         "argument": argument_type,
         "break_types": break_types_expression
     }, debug_reason="type-literal")
+
+# TODO: Use this in more places
+def micro_op(type, params):
+    code = {
+        "type": literal_op(type),
+        "params": list_template_op([
+            (p if isinstance(p, Universal) and is_opcode(p) else literal_op(p)) for p in params
+        ])
+    }
+
+    return object_template_op(code)
+
+def rich_type():
+    # returns a code literal that generates the default composite type
+    return invoke_op(prepared_function(
+        no_value_type(), infer_all(), inferred_type(),
+        one_of_type([
+            any_type(),
+            composite_type([
+                micro_op("get-wildcard", [
+                    one_of_type([ string_type(), int_type() ]),
+                    literal_op(ANY),
+                    True
+                ]),
+                micro_op("set-wildcard", [
+                    one_of_type([ string_type(), int_type() ]),
+                    literal_op(ANY),
+                    True, True
+                ]),
+                micro_op("delete-wildcard", [
+                    one_of_type([ string_type(), int_type() ]),
+                    True
+                ]),
+                micro_op("remove-wildcard", [
+                    True, True
+                ]),
+                micro_op("insert-end", [
+                    literal_op(ANY), True
+                ]),
+                micro_op("iter", [
+                    one_of_type([ string_type(), int_type() ]),
+                    literal_op(ANY),
+                ]),
+            ])
+        ]),
+        comma_op(
+            assignment_op(
+                dereference("local.types.1.micro_ops.0.params"),
+                literal_op(1),
+                dereference("local")
+            ),
+            assignment_op(
+                dereference("local.types.1.micro_ops.1.params"),
+                literal_op(1),
+                dereference("local")
+            ),
+            assignment_op(
+                dereference("local.types.1.micro_ops.4.params"),
+                literal_op(0),
+                dereference("local")
+            ),
+            assignment_op(
+                dereference("local.types.1.micro_ops.5.params"),
+                literal_op(1),
+                dereference("local")
+            ),
+            dereference("local")
+        )
+    ))
 
 def build_break_types(return_type=None, exception_type=None, yield_types=None, value_type=None):
     break_types = {}
@@ -176,9 +245,6 @@ def object_template_op(values, debug_reason="code", **kwargs):
         check_is_opcode(k)
 
         values_list.append(PythonList([ k, v ]))
-
-    if "out" in values.keys():
-        pass
 
     return PythonObject(spread_dict({
         "opcode": "template",

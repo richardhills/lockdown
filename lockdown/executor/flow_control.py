@@ -90,6 +90,9 @@ class Capturer(object):
         self.caught_opcode = None
 
     def attempt_capture(self, mode, value, opcode, restart_type):
+        if mode is None or value is None or opcode is None:
+            raise ValueError()
+
         if ((self.break_mode is None or self.break_mode == mode)
             and (self.opcode is None or self.opcode is opcode)):
             self.value = value

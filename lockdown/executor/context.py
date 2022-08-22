@@ -4,7 +4,7 @@ from lockdown.type_system.exceptions import FatalError
 from lockdown.type_system.universal_type import Universal
 from lockdown.utils.utils import MISSING
 
-
+# TODO: use this in more places
 class Context(Universal):
     def __init__(
         self,

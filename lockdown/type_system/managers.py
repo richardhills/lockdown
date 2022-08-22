@@ -3,11 +3,12 @@ from __future__ import unicode_literals
 
 import weakref
 
-from lockdown.type_system.core_types import Type, UnitType, NoValueType
+from lockdown.type_system.core_types import Type, UnitType, NoValueType, AnyType
 from lockdown.type_system.exceptions import FatalError, InvalidData
-#from lockdown.type_system.runtime import replace_all_refs
-from lockdown.utils.utils import InternalMarker, NO_VALUE, get_environment
+from lockdown.utils.utils import InternalMarker, NO_VALUE, get_environment, ANY
 
+
+#from lockdown.type_system.runtime import replace_all_refs
 def replace_all_refs(*args, **kwargs):
     raise FatalError("TODO: implement replace_all_refs in python 3")
 
@@ -103,11 +104,14 @@ def obj_cleared_callback(obj_id):
 def get_type_of_value(value):
     if isinstance(value, (str, int)):
         return UnitType(value)
+    if value is ANY:
+        return AnyType()
     if value is None:
         return NoValueType()
     if value is NO_VALUE:
         return NoValueType()
     if isinstance(value, Type):
+        # TODO: check if this is right
         return NoValueType()
 
     from lockdown.executor.function import LockdownFunction, OpenFunction

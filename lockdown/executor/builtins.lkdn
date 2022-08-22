@@ -27,6 +27,21 @@ static BaseComposite = {
 	micro_ops: []
 };
 
+static tuple = function(any type, int length) {
+  return dynamic function(type value) {
+    var opcodes = list(range(0, length)) *|> {
+      continue json({
+        "opcode": "literal",
+        "value": lockdown(value)
+      });
+    };
+    return json({
+      "opcode": "template",
+      "opcodes": lockdown(opcodes)
+    });
+  };
+};
+
 static Iterable = function(any keyType, any valueType) => any {
 	return {
 		type: "Universal",

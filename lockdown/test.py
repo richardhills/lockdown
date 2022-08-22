@@ -11,7 +11,7 @@ from lockdown.utils.utils import profile, environment
 parser = argparse.ArgumentParser()
 parser.add_argument('-t', action='store_false', help='rtti mode off')
 parser.add_argument('-s', action='store_true', help='enable frame optimization - avoid creating Frame objects when not needed, for speed')
-parser.add_argument('-r', action='store_true', help='enable return-value optimization - avoids using Python Exception-flow control for simple values')
+parser.add_argument('-r', action='store_true', help='enable return-value optimization - avoids using Python Exception-flow control for simple values (enabled by default with -T)')
 parser.add_argument('-f', action='store_false', help='disable validate run-time flow control - turns off interpreter checks for speed')
 parser.add_argument('-o', action='store_false', help='disable opcode bindings - avoid checking if types bind at runtime, when we know that they must bind based on verification checks, for speed')
 parser.add_argument('-p', action='store_false', help='disable consuming Python objects - leave enabled for Python interopability')
@@ -35,7 +35,7 @@ if __name__ == "__main__":
         validate_flow_control=args.f,
         opcode_bindings=args.o,
         consume_python_objects=args.p,
-        return_value_optimization=args.r,
+        return_value_optimization=args.r or args.T,
         transpile=args.T,
         output_transpiled_code=args.O,
         base=True

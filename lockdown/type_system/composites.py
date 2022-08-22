@@ -74,8 +74,6 @@ class CompositeType(Type):
         if not isinstance(tag, tuple):
             raise FatalError()
 
-        if "post-conflict-resolution><post-conflict-resolution" in self.name:
-            pass
         if self.delegate:
             self.delegate = None
 
@@ -405,7 +403,7 @@ def resolve_micro_op_conflicts(type, results):
     if not isinstance(type, CompositeType):
         return type
 
-    finished_type = type.clone("{}<post-conflict-resolution>".format(type.name))
+    finished_type = type.clone("({})<pcr>".format(type.name))
 
     results[id(type)] = finished_type
 

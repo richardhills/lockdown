@@ -23,7 +23,7 @@ from lockdown.type_system.exceptions import FatalError
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.universal_type import PythonObject, \
     DEFAULT_READONLY_COMPOSITE_TYPE, IterMicroOpType, UniversalObjectType, \
-    RICH_READONLY_TYPE
+    RICH_READONLY_TYPE, Universal
 from lockdown.utils.utils import NO_VALUE, print_code, MISSING, get_environment, \
     spread_dict
 
@@ -36,36 +36,39 @@ class ObjectDictWrapper(object):
 class BootstrapException(Exception):
     pass
 
-@functools.lru_cache(maxsize=65536)
-def get_default_global_context():
-    with open("./lockdown/executor/builtins.lkdn") as builtins_file:
+@functools.lru_cache(maxsize=65536, typed=True)
+def load(filename):
+    with open(filename) as file_contents:
         frame_manager = FrameManager()
         with frame_manager.capture() as capture_preparation:
-            builtins_code = builtins_file.read()
-            builtins_data = parse(builtins_code)
-            builtins_function = prepare(
-                builtins_data,
+            code = file_contents.read()
+            data = parse(code)
+            function = prepare(
+                data,
                 NO_VALUE, FrameManager(), None
             ).close(NO_VALUE)
 
         if capture_preparation.caught_break_mode is not None:
-            raise_unhandled_break(capture_preparation.caught_break_mode, capture_preparation.value, None, capture_preparation.opcode, builtins_data)
+            raise_unhandled_break(capture_preparation.caught_break_mode, capture_preparation.value, None, capture_preparation.opcode, data)
 
         with frame_manager.capture("export") as capture_export:
             capture_export.attempt_capture_or_raise(
-                *builtins_function.invoke(NO_VALUE, frame_manager, None)
+                *function.invoke(NO_VALUE, frame_manager, None)
             )
 
         if capture_export.caught_break_mode != "export":
             raise FatalError()
 
-        return Context(
-            UniversalObjectType({
-                "static": RICH_READONLY_TYPE
-            }),
-            DEFAULT_READONLY_COMPOSITE_TYPE,
-            static=capture_export.value
-        )
+        return capture_export.value
+
+def get_default_global_context():
+    return Context(
+        UniversalObjectType({
+            "static": RICH_READONLY_TYPE
+        }),
+        DEFAULT_READONLY_COMPOSITE_TYPE,
+        static=load("./lockdown/executor/builtins.lkdn")
+    )
 
 def format_unhandled_break_type(break_type, raw_code):
     if not raw_code:

@@ -337,6 +337,44 @@ class TestBuiltIns(TestCase):
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 10)
 
+    # def test_tuple(self):    
+    #     code = parse("""
+    #         function() => Tuple<int, int, int> {
+    #             return tuple<int, 3>(7);
+    #         }
+    #     """, debug=True)
+    #     _, result = bootstrap_function(code)
+    #     self.assertEqual(result.caught_break_mode, "value")
+    #     self.assertIsInstance(result.value, PythonList)
+    #     get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+    #     self.assertEqual(len(result.value), 3)
+    #     self.assertEqual(list(result.value), [ 7, 7, 7 ])
+
+#
+#     def test_tuple_range(self):
+#
+#
+# # static tuple_range = function(int start, int end) {
+# #   return dynamic function() => Tuple<tuple<int, end - start>> {
+# #     var result = tuple<int, (end - start)>(0);
+# #     return result *|> {
+# #       continue argument[0] + start;
+# #     };
+# #   };
+# # };
+#
+#         code = parse("""
+#             function() => Tuple<int, int, int> {
+#                 return tuple_range(3, 6);
+#             }
+#         """, debug=True)
+#         _, result = bootstrap_function(code)
+#         self.assertEqual(result.caught_break_mode, "value")
+#         self.assertIsInstance(result.value, PythonList)
+#         get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+#         self.assertEqual(len(result.value), 3)
+#         self.assertEqual(list(result.value), [ 3, 4, 5 ])
+
     def test_find(self):
         code = parse("""
             function() {
@@ -1295,7 +1333,7 @@ class TestEuler(TestCase):
                     return calcedResult;
                 };
 
-                Tuple<int...> results = for(var test in <list(range(1, 10))>) { continue testNumber(test); };
+                Tuple<int...> results = for(var test in list<range(1, 10)>) { continue testNumber(test); };
                 return max(results);
             }
         """, debug=True)

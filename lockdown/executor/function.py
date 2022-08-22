@@ -32,7 +32,7 @@ from lockdown.type_system.universal_type import PythonObject, \
     UniversalObjectType, DEFAULT_READONLY_COMPOSITE_TYPE, PythonList, PythonDict, \
     Universal, DEFAULT_COMPOSITE_TYPE, RICH_TYPE, RICH_READONLY_TYPE
 from lockdown.utils.utils import MISSING, raise_from, \
-    spread_dict, get_environment, NO_VALUE
+    spread_dict, get_environment, NO_VALUE, print_code
 
 
 def prepare_piece_of_context(declared_type, suggested_type):
@@ -54,6 +54,7 @@ def prepare_piece_of_context(declared_type, suggested_type):
 def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
     if not isinstance(data, Composite):
         raise FatalError()
+
     get_manager(data).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
 
     if not hasattr(data, "code"):
@@ -64,7 +65,7 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
     context = Universal(True, initial_wrapped={
         "prepare": outer_context,
         "_types": UniversalObjectType({
-            "prepare": DEFAULT_READONLY_COMPOSITE_TYPE
+            "prepare": RICH_READONLY_TYPE
         })
     }, bind=DEFAULT_READONLY_COMPOSITE_TYPE, debug_reason="static-prepare-context")
 
@@ -376,9 +377,6 @@ class OpenFunction(object):
 
         return ClosedFunction(self, outer_context)
 
-    def close_and_invoke(self, argument, outer_context, frame_manager, hooks):
-        return self.close(outer_context).invoke(argument, frame_manager, hooks)
-
     def get_start_and_end(self):
         return (getattr(self.data, "start", None), getattr(self.data, "end", None))
 
@@ -409,55 +407,6 @@ class OpenFunction(object):
         return compile_statement("""
 class {open_function_id}(object):
     @classmethod
-    def close_and_invoke(cls, {context_name}_argument, {context_name}_outer_context, _frame_manager, _hooks):
-        {context_name} = Universal(True, initial_wrapped={{
-            "prepare": {prepare_context},
-            "outer": {context_name}_outer_context,
-            "argument": {context_name}_argument,
-            "static": {static},
-            "_types": {local_initialization_context_type}
-        }}, debug_reason="local-initialization-transpiled-context")
-
-        local = None
-
-        with scoped_bind(
-            {context_name},
-            {local_initialization_context_type},
-            bind=get_environment().rtti
-        ):
-            local = {local_initializer}
-
-        {context_name} = Universal(True, initial_wrapped={{
-            "prepare": {prepare_context},
-            "outer": {context_name}_outer_context,
-            "argument": {context_name}_argument,
-            "static": {static},
-            "local": local,
-            "_types": {execution_context_type}
-        }}, debug_reason="code-execution-transpiled-context")
-        """ \
-        +(
-            """
-        with scoped_bind(
-            {context_name},
-            {execution_context_type},
-            bind=get_environment().rtti
-        ):
-            {function_code}
-            return ("value", NoValue, None, None)
-            """
-            if will_ignore_return_value else 
-            """
-        with scoped_bind(
-            {context_name},
-            {execution_context_type},
-            bind=get_environment().rtti
-        ):
-            return ("value", {function_code}, None, None)
-            """
-        ) + """
-
-    @classmethod
     def close(cls, outer_context):
         return cls.Closed_{open_function_id}(cls, outer_context)
 
@@ -466,8 +415,53 @@ class {open_function_id}(object):
             self.open_function = open_function
             self.outer_context = outer_context
 
-        def invoke(self, argument, frame_manager, hooks):
-            return self.open_function.close_and_invoke(argument, self.outer_context, frame_manager, hooks)
+        def invoke(self, {context_name}_argument, _frame_manager, _hooks):
+            {context_name} = Universal(True, initial_wrapped={{
+                "prepare": {prepare_context},
+                "outer": self.outer_context,
+                "argument": {context_name}_argument,
+                "static": {static},
+                "_types": {local_initialization_context_type}
+            }}, debug_reason="local-initialization-transpiled-context")
+    
+            local = None
+    
+            with scoped_bind(
+                {context_name},
+                {local_initialization_context_type},
+                bind=get_environment().rtti
+            ):
+                local = {local_initializer}
+    
+            {context_name} = Universal(True, initial_wrapped={{
+                "prepare": {prepare_context},
+                "outer": self.outer_context,
+                "argument": {context_name}_argument,
+                "static": {static},
+                "local": local,
+                "_types": {execution_context_type}
+            }}, debug_reason="code-execution-transpiled-context")
+            """ \
+            +(
+                """
+            with scoped_bind(
+                {context_name},
+                {execution_context_type},
+                bind=get_environment().rtti
+            ):
+                {function_code}
+                return ("value", NoValue, self, None)
+                """
+                if will_ignore_return_value else 
+                """
+            with scoped_bind(
+                {context_name},
+                {execution_context_type},
+                bind=get_environment().rtti
+            ):
+                return ("value", {function_code}, self, None)
+                """
+            ) + """
 
         def get_type(self):
             return ClosedFunctionType(

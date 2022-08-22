@@ -31,6 +31,8 @@ NO_VALUE = InternalMarker("NO_VALUE")
 MISSING = InternalMarker("MISSING")
 NOTHING = InternalMarker("NOTHING")
 
+ANY = InternalMarker("ANY")
+
 def spread_dict(*args, **kwargs):
     result = {}
     for arg in args:
@@ -72,7 +74,7 @@ def dump_code(ast):
                 return o._to_list()
             if isinstance(o, Universal):
                 items = o._to_dict().items()
-                items = [ i for i in items if i[0] not in ("start_column", "start_line", "end_column", "end_line") ]
+                items = [ i for i in items if i[0] not in ("start", "end") ]
                 items = sorted(items, key=sort_dict_output)
                 return OrderedDict(items)
             return o
@@ -102,7 +104,10 @@ class Environment(object):
             return_value_optimization=True,
             transpile=False,
             output_transpiled_code=False
-        ):
+    ):
+        if transpile and not return_value_optimization:
+            raise ValueError("Transpilation requires return_value_optimization")
+
         self.rtti = rtti
         self.frame_shortcut = frame_shortcut
         self.validate_flow_control = validate_flow_control

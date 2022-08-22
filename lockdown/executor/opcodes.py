@@ -31,7 +31,7 @@ from lockdown.type_system.universal_type import UniversalObjectType, \
     GetterMicroOpType, SetterMicroOpType, GetterWildcardMicroOpType, \
     SetterWildcardMicroOpType, InsertStartMicroOpType, InsertEndMicroOpType, DeletterWildcardMicroOpType, \
     IterMicroOpType, RemoverWildcardMicroOpType, InserterWildcardMicroOpType, \
-    UniversalTupleType, Universal, SPARSE_ELEMENT, RICH_TYPE
+    UniversalTupleType, Universal, SPARSE_ELEMENT, RICH_TYPE, RICH_READONLY_TYPE
 from lockdown.utils.utils import MISSING, NO_VALUE, InternalMarker, get_environment, \
     spread_dict
 
@@ -1516,6 +1516,7 @@ class CloseOp(Opcode):
                 reasoner = Reasoner()
                 if not does_value_fit_through_type(outer_context, open_function.outer_type, reasoner):
                     print(reasoner)
+                    does_value_fit_through_type(outer_context, open_function.outer_type, reasoner)
                     return frame.exception(self, self.INVALID_OUTER_CONTEXT())
 
             return frame.value(self, open_function.close(outer_context))
@@ -1535,7 +1536,7 @@ def create_readonly_static_type(value):
     that refer to the value from StaticOp are able to run against.
     """
     if isinstance(value, Composite):
-        return RICH_TYPE
+        #return DEFAULT_READONLY_COMPOSITE_TYPE
         # Only do ListTypes atm since that is what is needed for unit tests, but can be expanded...
         result = CompositeType({}, name="reasonable list type")
         if isinstance(value, Universal):
@@ -1655,9 +1656,6 @@ class InvokeOp(Opcode):
 
             if not self.known_function_type:
                 if capture_result.caught_break_mode not in self.allowed_break_modes:
-                    import ipdb
-                    
-                    ipdb.set_trace()
                     return frame.exception(self, self.INVALID_BREAK_TYPE())
 
             return frame.unwind(*capture_result.reraise(opcode=self))
@@ -1681,13 +1679,13 @@ class InvokeOp(Opcode):
                 if inline_ast:
                     return inline_ast
 
-            return compile_expression(
-                "{function}.close_and_invoke({argument}, {outer_context}, _frame_manager, _hooks)[1]",
-                context_name, dependency_builder,
-                function=open_function,
-                outer_context=self.function.outer_context.to_ast(context_name, dependency_builder),
-                argument=self.argument.to_ast(context_name, dependency_builder)
-            )
+            # return compile_expression(
+            #     "{function}.close_and_invoke({argument}, {outer_context}, _frame_manager, _hooks)[1]",
+            #     context_name, dependency_builder,
+            #     function=open_function,
+            #     outer_context=self.function.outer_context.to_ast(context_name, dependency_builder),
+            #     argument=self.argument.to_ast(context_name, dependency_builder)
+            # )
         return compile_expression(
             "{function}.invoke({argument}, _frame_manager, _hooks)[1]",
             context_name, dependency_builder,

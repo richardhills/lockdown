@@ -21,7 +21,7 @@ from lockdown.type_system.universal_type import GetterMicroOpType, \
     UniversalTupleType, UniversalLupleType, EMPTY_COMPOSITE_TYPE, Universal
 
 
-def build_closed_function_type(data):
+def build_closed_function_type(data, cache):
     if not isinstance(data._get("break_types"), Universal):
         raise FatalError()
     for mode, break_types in data._get("break_types")._items():
@@ -47,19 +47,19 @@ def build_closed_function_type(data):
         }, bind=DEFAULT_READONLY_COMPOSITE_TYPE, debug_reason="type")
     )
 
-def build_unit_type(data):
+def build_unit_type(data, cache):
     if not data._contains("value"):
         raise PreparationException(data)
     return UnitType(data._get("value"))
 
-def build_one_of_type(data):
+def build_one_of_type(data, cache):
     if not data._contains("types"):
         raise PreparationException(data)
     return OneOfType(
-        [ enrich_type(type) for type in data._get("types")._values() ]
+        [ enrich_type_with_cache(type, cache) for type in data._get("types")._values() ]
     )
 
-def build_object_type(data):
+def build_object_type(data, cache):
     properties = {}
     for name, type in data._get("properties")._items():
         properties[name] = enrich_type(type)
@@ -76,7 +76,7 @@ def build_object_type(data):
         name="declared-object-type"
     )
 
-def build_list_type(data):
+def build_list_type(data, cache):
     property_types = [ enrich_type(type) for type in data._get("entry_types")._values() ]
     wildcard_type = data._get("wildcard_type", default=None)
     if wildcard_type:
@@ -106,21 +106,32 @@ class InferRemainerPlaceholder(object):
         self.base_type = base_type
 
 MICRO_OP_FACTORIES = {
-    "get": lambda k, v: GetterMicroOpType(k, enrich_type(v)),
-    "set": lambda k, v: SetterMicroOpType(k, enrich_type(v)),
-    "insert-start": lambda v, t: InsertStartMicroOpType(enrich_type(v), t),
-    "insert-end": lambda v, t: InsertEndMicroOpType(enrich_type(v), t),
-    "get-wildcard": lambda k, v, e: GetterWildcardMicroOpType(enrich_type(k), enrich_type(v), e),
-    "set-wildcard": lambda k, v, ke, te: SetterWildcardMicroOpType(enrich_type(k), enrich_type(v), ke, te),
-    "delete-wildcard": lambda kt, ke: DeletterWildcardMicroOpType(enrich_type(kt), ke),
-    "remove-wildcard": lambda ke, te: RemoverWildcardMicroOpType(ke, te),
-    "insert-wildcard": lambda vt, ke, te: InserterWildcardMicroOpType(enrich_type(vt), ke, te),
-    "iter": lambda kt, vt: IterMicroOpType(enrich_type(kt), enrich_type(vt)),
-    "infer-remainder": lambda base_type: InferRemainerPlaceholder(enrich_type(base_type))
+    "get": lambda c, k, v: GetterMicroOpType(k, enrich_type_with_cache(v, c)),
+    "set": lambda c, k, v: SetterMicroOpType(k, enrich_type_with_cache(v, c)),
+    "insert-start": lambda c, v, t: InsertStartMicroOpType(enrich_type_with_cache(v, c), t),
+    "insert-end": lambda c, v, t: InsertEndMicroOpType(enrich_type_with_cache(v, c), t),
+    "get-wildcard": lambda c, k, v, e: GetterWildcardMicroOpType(enrich_type_with_cache(k, c), enrich_type_with_cache(v, c), e),
+    "set-wildcard": lambda c, k, v, ke, te: SetterWildcardMicroOpType(enrich_type_with_cache(k, c), enrich_type_with_cache(v, c), ke, te),
+    "delete-wildcard": lambda c, kt, ke: DeletterWildcardMicroOpType(enrich_type_with_cache(kt, c), ke),
+    "remove-wildcard": lambda c, ke, te: RemoverWildcardMicroOpType(ke, te),
+    "insert-wildcard": lambda c, vt, ke, te: InserterWildcardMicroOpType(enrich_type_with_cache(vt, c), ke, te),
+    "iter": lambda c, kt, vt: IterMicroOpType(enrich_type_with_cache(kt, c), enrich_type_with_cache(vt, c)),
+    "infer-remainder": lambda c, base_type: InferRemainerPlaceholder(enrich_type_with_cache(base_type, c))
 }
 
-def build_universal_type(data):    
+def build_universal_type(data, cache):
+    if cache is None:
+        cache = {}
+
+    data_id = id(data)
+    if data_id in cache:
+        return cache[data_id]
+
     micro_ops = OrderedDict({})
+
+    # Put the new type in the cache before building it, so that
+    # if we see it again we can reuse the type, and avoid infinite recursion
+    cache[data_id] = CompositeType(micro_ops, name="User")
 
     for micro_op in data._get("micro_ops")._to_list():
         if micro_op._contains("index"):
@@ -130,9 +141,12 @@ def build_universal_type(data):
 
         Factory = MICRO_OP_FACTORIES[micro_op._get("type")]
 
-        micro_ops[tag] = Factory(*micro_op._get("params")._to_list())
+        try:
+            micro_ops[tag] = Factory(cache, *micro_op._get("params")._to_list())
+        except TypeError:
+            raise PreparationException("build_universal_type: {} {}".format(micro_op._get("type"), micro_op._get("params")))
 
-    return CompositeType(micro_ops, name="User")
+    return cache[data_id]
 
 # def deconstruct_micro_op(micro_op, results):
 #     if isinstance(micro_op, GetterMicroOpType):
@@ -199,23 +213,25 @@ def build_universal_type(data):
 #     })
 
 TYPES = {
-    "Any": lambda data: AnyType(),
-    "Bottom": lambda data: BottomType(),
+    "Any": lambda data, cache: AnyType(),
+    "Bottom": lambda data, cache: BottomType(),
     "Object": build_object_type,
     "List": build_list_type,
     "Universal": build_universal_type,
     "Function": build_closed_function_type,
     "OneOf": build_one_of_type,
-    "Integer": lambda data: IntegerType(),
-    "Boolean": lambda data: BooleanType(),
-    "NoValue": lambda data: NoValueType(),
-    "String": lambda data: StringType(),
+    "Integer": lambda data, cache: IntegerType(),
+    "Boolean": lambda data, cache: BooleanType(),
+    "NoValue": lambda data, cache: NoValueType(),
+    "String": lambda data, cache: StringType(),
     "Unit": build_unit_type,
-    "Inferred": lambda data: InferredType()
+    "Inferred": lambda data, cache: InferredType()
 }
 
-
 def enrich_type(data):
+    return enrich_type_with_cache(data, {})
+
+def enrich_type_with_cache(data, cache):
     from lockdown.type_system.managers import get_manager
     if not isinstance(data, Universal):
         raise PreparationException("Unknown type data {}, {}".format(data, type(data)))
@@ -224,7 +240,7 @@ def enrich_type(data):
     if data._get("type") not in TYPES:
         raise PreparationException("Unknown type {}".format(data.type))
 
-    new_type = TYPES[data._get("type")](data)
+    new_type = TYPES[data._get("type")](data, cache)
     if not isinstance(new_type, Type):
         raise FatalError(data)
 

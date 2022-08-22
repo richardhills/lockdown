@@ -15,7 +15,8 @@ from lockdown.executor.raw_code_factories import function_lit, no_value_type, \
     equality_op, nop, inferred_type, infer_all, invoke_op, static_op, prepare_op, \
     unbound_dereference, match_op, dereference, prepared_function, one_of_type, \
     string_type, bool_type, try_catch_op, throw_op, const_string_type, \
-    function_type, close_op, shift_op, transform_op
+    function_type, close_op, shift_op, transform_op, \
+    rich_type
 from lockdown.type_system.core_types import IntegerType, StringType
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.reasoner import DUMMY_REASONER
@@ -805,6 +806,46 @@ class TestUnboundReference(TestCase):
         self.assertEqual(result.caught_break_mode, "return")
         self.assertEqual(result.value, 42)
 
+class TestCompositeTypes(TestCase):
+    def testShallowRichType(self):
+        func = function_lit(
+            no_value_type(), infer_all(),
+            rich_type(), object_template_op({ "foo": literal_op(5) }),
+            dereference("local")
+        )
+        _, result = bootstrap_function(func)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._get("foo"), 5)
+
+    def testDereferenceShallowRichType(self):
+        func = function_lit(
+            no_value_type(), infer_all(),
+            rich_type(), object_template_op({ "foo": literal_op(5) }),
+            dereference("local.foo")
+        )
+        _, result = bootstrap_function(func, check_safe_exit=False)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 5)
+
+    def testDeepRichType(self):
+        func = function_lit(
+            no_value_type(), infer_all(),
+            rich_type(), object_template_op({ "foo": object_template_op({ "bar": literal_op(7) }) }),
+            dereference("local")
+        )
+        _, result = bootstrap_function(func)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._get("foo")._get("bar"), 7)
+
+    def testDereferenceDeepRichType(self):
+        func = function_lit(
+            no_value_type(), infer_all(),
+            rich_type(), object_template_op({ "foo": object_template_op({ "bar": literal_op(7) }) }),
+            dereference("local.foo.bar")
+        )
+        _, result = bootstrap_function(func, check_safe_exit=False)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 7)
 
 class TestMatch(TestCase):
     def test_interesting(self):

@@ -429,6 +429,9 @@ class GetterMicroOpType(MicroOpType):
                 value = obj._get(self.key)
             else:
                 default_factory = target_manager.default_factory
+                if not default_factory:
+                    raise FatalError()
+
                 value = default_factory(target_manager, self.key)
 
             return value
@@ -1455,6 +1458,7 @@ EMPTY_COMPOSITE_TYPE = CompositeType({}, "EmptyCompositeType")
 DEFAULT_READONLY_COMPOSITE_TYPE = CompositeType({}, "DefaultReadonlyUniversalType")
 RICH_READONLY_TYPE = OneOfType([ AnyType(), DEFAULT_READONLY_COMPOSITE_TYPE ])
 DEFAULT_READONLY_COMPOSITE_TYPE.set_micro_op_type(("get-wildcard",), GetterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), RICH_READONLY_TYPE, True))
+DEFAULT_READONLY_COMPOSITE_TYPE.set_micro_op_type(("iter",), IterMicroOpType(OneOfType([ StringType(), IntegerType() ]), RICH_READONLY_TYPE))
 
 # A reasonable default composite type, with the goal of:
 # 1. Supporting as wide a range of operations as possible (even if not safe)
@@ -1465,7 +1469,7 @@ DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("get-wildcard",), GetterWildcardMicroO
 DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("set-wildcard",), SetterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), RICH_TYPE, True, True))
 DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("delete-wildcard",), DeletterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), True))
 DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("remove-wildcard",), RemoverWildcardMicroOpType(True, True))
-DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("insert-wildcard",), InsertEndMicroOpType(RICH_TYPE, True))
+DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("insert-end",), InsertEndMicroOpType(RICH_TYPE, True))
 DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("iter",), IterMicroOpType(OneOfType([ StringType(), IntegerType() ]), RICH_TYPE))
 
 # A Type that you can always set values on without any errors

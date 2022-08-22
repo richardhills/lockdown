@@ -17,7 +17,7 @@ from lockdown.executor.raw_code_factories import function_lit, nop, comma_op, \
     local_function, reset_op, inferred_type, prepare_function_lit, transform, \
     continue_op, check_is_opcode, is_op, function_type, \
     composite_type, static_op, map_op, insert_op, prepared_function, int_type, \
-    any_type, print_op, shift_op, prepare_op, close_op
+    any_type, print_op, shift_op, prepare_op, close_op, rich_type
 from lockdown.parser.grammar.langLexer import langLexer
 from lockdown.parser.grammar.langParser import langParser
 from lockdown.parser.grammar.langVisitor import langVisitor
@@ -237,7 +237,9 @@ class RDHLang5Visitor(langVisitor):
             name, initial_value = self.visit(symbol_initialization)
 
             new_code_block = CodeBlockBuilder(
-                local_variable_type=object_type({ name: type }),
+                local_variable_type=object_type({
+                    name: type
+                }, wildcard_type=rich_type()),
                 local_initializer=object_template_op({ name: initial_value })
             )
             if remaining_code:
@@ -937,7 +939,7 @@ class CodeBlockBuilder(object):
         if self.local_variable_type is not MISSING:
             local_type = self.local_variable_type
         else:
-            local_type = object_type({}, wildcard_type=any_type())  # For future python local variables...
+            local_type = object_type({}, wildcard_type=rich_type())  # For future python local variables...
 
         if self.local_initializer is not MISSING:
             local_initializer = self.local_initializer
