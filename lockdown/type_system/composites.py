@@ -528,6 +528,15 @@ def unbind_key(manager, key_filter):
             enforce_safety_checks=False
         )
 
+class Network(object):
+    def __init__(self):
+        self.entries = []
+
+    def add(self, source_micro_op, new_type, target):
+        self.entries[( id(source_micro_op), id(new_type), id(target) )] = (source_micro_op, new_type, target)
+
+    def update(self, other_network):
+        self.entries.update(other_network.entries)
 
 def build_binding_map_for_type(source_micro_op, new_type, target, target_manager, key_filter, substitute_value, cache, types_to_bind, reasoner, enforce_safety_checks=True):
     """
@@ -638,9 +647,9 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
         cache[result_key] = False
         reasoner.attach_child_reasoners(child_reasoners, source_micro_op, new_type, target)
 
-    # if source_micro_op is None:
-    #     if types_to_bind and len(types_to_bind) > 1000:
-    #         print(len(types_to_bind))
+    if source_micro_op is None:
+        if types_to_bind and len(types_to_bind) > 1000:
+            print(len(types_to_bind))
 
     return atleast_one_sub_type_worked
 

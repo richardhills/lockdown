@@ -84,7 +84,7 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
         context, frame_manager, hooks
     )
 
-    get_manager(static).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+    #get_manager(static).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
 
     argument_type = enrich_type(static._get("argument"))
     outer_type = enrich_type(static._get("outer"))
@@ -153,7 +153,7 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
         ]) for mode, break_types in static._get("break_types")._items()
     })
 
-    get_manager(declared_break_types).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+    #get_manager(declared_break_types).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
 
     actual_local_type, local_other_break_types = get_expression_break_types(
         local_initializer,
@@ -230,11 +230,14 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
 
     for mode, actual_break_types in actual_break_types_factory.build().items():
         for actual_break_type in actual_break_types:
-            declared_break_types_for_mode = declared_break_types.get(mode, declared_break_types.get("infer-all", []))
+            declared_break_types_for_mode = declared_break_types._get(mode, declared_break_types._get("infer-all", None))
+            if declared_break_types_for_mode:
+                declared_break_types_for_mode = declared_break_types_for_mode._to_list()
+
             for declared_break_type_for_mode in declared_break_types_for_mode:
                 # Check if this declared_break_type_for_mode is enough to capture the actual_break_types
-                declared_out = declared_break_type_for_mode["out"]
-                declared_in = declared_break_type_for_mode.get("in", None)
+                declared_out = declared_break_type_for_mode._get("out")
+                declared_in = declared_break_type_for_mode._get("in", None)
                 actual_out = actual_break_type["out"]
                 actual_in = actual_break_type.get("in", None)
 
