@@ -154,11 +154,13 @@ def default_globals():
         Universal
     from lockdown.type_system.composites import bind_key, unbind_key
     from lockdown.type_system.composites import scoped_bind
+    from lockdown.executor.context import Context
 
     return {
         "__builtins": None,
         "PythonObject": PythonObject,
         "Universal": Universal,
+        "Context": Context,
         "BreakException": BreakException,
         "NoValue": NO_VALUE,
         "get_manager": get_manager,

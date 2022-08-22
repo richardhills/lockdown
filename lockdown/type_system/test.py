@@ -744,7 +744,8 @@ class TestNestedPythonTypes(TestCase):
         })
 
         get_manager(foo).add_composite_type(DEFAULT_COMPOSITE_TYPE)
-        foo.bar.insert(5, 2)
+        foo.bar.insert(2, 5)
+        self.assertListEqual([ 1, 2, 5, 3 ], foo._get("bar")._to_list())
 
     def test_python_constraints_work_with_lists3(self):
         foo = Universal(True, initial_wrapped={

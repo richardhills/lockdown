@@ -153,6 +153,7 @@ class MicroOpBinder(object):
 def get_context_type(context):
     if context is None:
         return NoValueType()
+    return get_manager(context)._context_type
     if context._contains("_types"):
         return context._get("_types")
     raise FatalError()

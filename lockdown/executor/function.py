@@ -5,6 +5,7 @@ import ast
 
 from lockdown.executor.ast_utils import build_and_compile_ast_function, compile_module, \
     compile_statement, DependencyBuilder, compile_ast_function_def
+from lockdown.executor.context import Context
 from lockdown.executor.exceptions import PreparationException
 from lockdown.executor.flow_control import BreakTypesFactory, FrameManager, \
     is_restartable
@@ -55,23 +56,29 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
     if not isinstance(data, Composite):
         raise FatalError()
 
-    get_manager(data).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
-
-    if not hasattr(data, "code"):
+    if not data._contains("code"):
         raise PreparationException("Code missing from function")
 
     actual_break_types_factory = BreakTypesFactory(None)
 
-    context = Universal(True, initial_wrapped={
-        "prepare": outer_context,
-        "_types": UniversalObjectType({
+    context = Context(
+        UniversalObjectType({
             "prepare": RICH_READONLY_TYPE
-        })
-    }, bind=DEFAULT_READONLY_COMPOSITE_TYPE, debug_reason="static-prepare-context")
+        }),
+        DEFAULT_READONLY_COMPOSITE_TYPE,
+        prepare=outer_context
+    )
+
+    # context = Universal(True, initial_wrapped={
+    #     "prepare": outer_context,
+    #     "_types": UniversalObjectType({
+    #         "prepare": RICH_READONLY_TYPE
+    #     })
+    # }, bind=DEFAULT_READONLY_COMPOSITE_TYPE, debug_reason="static-prepare-context")
 
     static = evaluate(
         enrich_opcode(
-            data.static,
+            data._get("static"),
             combine(type_conditional_converter, UnboundDereferenceBinder(context))
         ),
         context, frame_manager, hooks
@@ -102,19 +109,31 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
 
     declared_local_type = enrich_type(static._get("local"))
 
-    context = Universal(True, initial_wrapped={
-        "prepare": outer_context,
-        "static": static,
-        "_types": UniversalObjectType({
+    context = Context(
+        UniversalObjectType({
             "prepare": RICH_READONLY_TYPE,
             "static": RICH_READONLY_TYPE,
             "outer": outer_type,
             "argument": argument_type,
-        })
-    },
-        bind=DEFAULT_READONLY_COMPOSITE_TYPE,
-        debug_reason="local-prepare-context"
+        }),
+        DEFAULT_READONLY_COMPOSITE_TYPE,
+        prepare=outer_context,
+        static=static
     )
+
+    # context = Universal(True, initial_wrapped={
+    #     "prepare": outer_context,
+    #     "static": static,
+    #     "_types": UniversalObjectType({
+    #         "prepare": RICH_READONLY_TYPE,
+    #         "static": RICH_READONLY_TYPE,
+    #         "outer": outer_type,
+    #         "argument": argument_type,
+    #     })
+    # },
+    #     bind=DEFAULT_READONLY_COMPOSITE_TYPE,
+    #     debug_reason="local-prepare-context"
+    # )
 
 # optimization to avoid generating context_type lazily
     get_manager(context)._context_type = UniversalObjectType({
@@ -124,7 +143,7 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
     }, wildcard_type=AnyType(), name="local-prepare-context-type")
 
     local_initializer = enrich_opcode(
-        data.local_initializer,
+        data._get("local_initializer"),
         combine(type_conditional_converter, UnboundDereferenceBinder(context))
     )
 
@@ -162,20 +181,33 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
         if not local_type.is_copyable_from(actual_local_type, local_type_reasoner):
             raise PreparationException("Invalid local type: {} != {}: {}".format(local_type, actual_local_type, local_type_reasoner.to_message()))
 
-        context = Universal(True, initial_wrapped={
-            "prepare": outer_context,
-            "static": static,
-            "_types": UniversalObjectType({
+        context = Context(
+            UniversalObjectType({
                 "prepare": RICH_READONLY_TYPE,
                 "static": RICH_READONLY_TYPE,
                 "outer": outer_type,
                 "argument": argument_type,
                 "local": local_type
-            })
-        },
-            bind=DEFAULT_READONLY_COMPOSITE_TYPE,
-            debug_reason="code-prepare-context"
+            }),
+            DEFAULT_READONLY_COMPOSITE_TYPE,
+            prepare=outer_context,
+            static=static
         )
+
+        # context = Universal(True, initial_wrapped={
+        #     "prepare": outer_context,
+        #     "static": static,
+        #     "_types": UniversalObjectType({
+        #         "prepare": RICH_READONLY_TYPE,
+        #         "static": RICH_READONLY_TYPE,
+        #         "outer": outer_type,
+        #         "argument": argument_type,
+        #         "local": local_type
+        #     })
+        # },
+        #     bind=DEFAULT_READONLY_COMPOSITE_TYPE,
+        #     debug_reason="code-prepare-context"
+        # )
 
         get_manager(context)._context_type = UniversalObjectType({
             "outer": outer_type,
@@ -184,7 +216,7 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
         }, wildcard_type=AnyType(), name="code-prepare-context-type")
 
         code = enrich_opcode(
-            data.code,
+            data._get("code"),
             combine(type_conditional_converter, UnboundDereferenceBinder(context))
         )
     
@@ -247,7 +279,7 @@ class UnboundDereferenceBinder(ContextSearcher):
         debug_info = get_debug_info_from_opcode(expression)
 
         if expression._get("opcode", None) == "unbound_dereference":
-            reference = expression.reference
+            reference = expression._get("reference")
             context_links, is_static = self.search_for_reference(reference, debug_info)
 
             if context_links is not None:
@@ -263,44 +295,44 @@ class UnboundDereferenceBinder(ContextSearcher):
                 return new_dereference
 
         if expression._get("opcode", None) == "unbound_assignment":
-            reference = expression.reference
+            reference = expression._get("reference")
             context_links, _ = self.search_for_reference(reference, debug_info)
 
             if context_links is not None:
                 bound_context_op = dereference(*context_links)
-                new_assignment = assignment_op(bound_context_op, literal_op(reference), expression.rvalue, **debug_info)
-                get_manager(new_assignment).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+                new_assignment = assignment_op(bound_context_op, literal_op(reference), expression._get("rvalue"), **debug_info)
+                #get_manager(new_assignment).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
                 return new_assignment
             else:
-                new_assignment = dynamic_assignment_op(reference, expression.rvalue, **debug_info)
-                get_manager(new_assignment).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+                new_assignment = dynamic_assignment_op(reference, expression._get("rvalue"), **debug_info)
+                #get_manager(new_assignment).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
                 return new_assignment
 
         return expression
 
 def type_conditional_converter(expression):
-    is_conditional = expression.opcode == "conditional"
+    is_conditional = expression._get("opcode") == "conditional"
     if not is_conditional:
         return expression
-    condition_is_type_check = expression.condition.opcode == "is"
+    condition_is_type_check = expression._get_in("condition", "opcode") == "is"
     if not condition_is_type_check:
         return expression
-    lvalue_of_condition_is_dereference = expression.condition.expression.opcode == "unbound_dereference"
+    lvalue_of_condition_is_dereference = expression._get_in("condition", "expression", "opcode") == "unbound_dereference"
     if not lvalue_of_condition_is_dereference:
         return expression
 
-    shadow_name = expression.condition.expression.reference
+    shadow_name = expression._get_in("condition", "expression", "reference")
 
     new_match = match_op(
-        expression.condition.expression, [
+        expression._get_in("condition", "expression"), [
             prepared_function(
-                expression.condition.type,
+                expression._get_in("condition", "type"),
                 invoke_op(
                     prepared_function(
                         object_type({
-                            shadow_name: expression.condition.type
+                            shadow_name: expression._get_in("condition", "type")
                         }),
-                        expression.when_true
+                        expression._get("when_true")
                     ),
                     argument_expression=object_template_op({
                         shadow_name: dereference("argument")
@@ -309,7 +341,7 @@ def type_conditional_converter(expression):
             ),
             prepared_function(
                 inferred_type(),
-                expression.when_false
+                expression._get("when_false")
             )
         ]
     )
@@ -378,10 +410,10 @@ class OpenFunction(object):
         return ClosedFunction(self, outer_context)
 
     def get_start_and_end(self):
-        return (getattr(self.data, "start", None), getattr(self.data, "end", None))
+        return (self.data._get("start", None), self.data._get("end", None))
 
     def get_function_symbol_start_and_end(self):
-        return getattr(self.data, "function_symbol", None)
+        return self.data._get("function_symbol", None)
 
     def to_ast(self, dependency_builder):
         if is_restartable(self):
@@ -416,14 +448,22 @@ class {open_function_id}(object):
             self.outer_context = outer_context
 
         def invoke(self, {context_name}_argument, _frame_manager, _hooks):
-            {context_name} = Universal(True, initial_wrapped={{
-                "prepare": {prepare_context},
-                "outer": self.outer_context,
-                "argument": {context_name}_argument,
-                "static": {static},
-                "_types": {local_initialization_context_type}
-            }}, debug_reason="local-initialization-transpiled-context")
-    
+            {context_name} = Context(
+                {local_initialization_context_type},
+                prepare={prepare_context},
+                outer=self.outer_context,
+                argument={context_name}_argument,
+                static={static}
+            )
+
+#            {context_name} = Universal(True, initial_wrapped={{
+#                "prepare": {prepare_context},
+#                "outer": self.outer_context,
+#                "argument": {context_name}_argument,
+#                "static": {static},
+#                "_types": {local_initialization_context_type}
+#            }}, debug_reason="local-initialization-transpiled-context")
+
             local = None
     
             with scoped_bind(
@@ -432,15 +472,24 @@ class {open_function_id}(object):
                 bind=get_environment().rtti
             ):
                 local = {local_initializer}
-    
-            {context_name} = Universal(True, initial_wrapped={{
-                "prepare": {prepare_context},
-                "outer": self.outer_context,
-                "argument": {context_name}_argument,
-                "static": {static},
-                "local": local,
-                "_types": {execution_context_type}
-            }}, debug_reason="code-execution-transpiled-context")
+
+            {context_name} = Context(
+                {execution_context_type},
+                prepare={prepare_context},
+                outer=self.outer_context,
+                argument={context_name}_argument,
+                static={static},
+                local=local
+            )
+
+            # {context_name} = Universal(True, initial_wrapped={{
+            #     "prepare": {prepare_context},
+            #     "outer": self.outer_context,
+            #     "argument": {context_name}_argument,
+            #     "static": {static},
+            #     "local": local,
+            #     "_types": {execution_context_type}
+            # }}, debug_reason="code-execution-transpiled-context")
             """ \
             +(
                 """

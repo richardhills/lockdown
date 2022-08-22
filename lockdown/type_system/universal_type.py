@@ -22,9 +22,10 @@ from lockdown.utils.utils import MISSING, default, micro_op_repr, InternalMarker
 
 SPARSE_ELEMENT = InternalMarker("SPARSE_ELEMENT")
 CALCULATE_INITIAL_LENGTH = InternalMarker("CALCULATE_INITIAL_LENGTH")
+NO_DEFAULT = InternalMarker("NO_DEFAULT")
 
 class Universal(Composite):
-    def __init__(self, is_sparse, default_factory=None, bind=None, debug_reason=None, initial_wrapped=None, initial_length=0, reasoner=None):
+    def __init__(self, is_sparse, default_factory=None, bind=None, debug_reason=None, initial_wrapped=None, initial_length=0, reasoner=DUMMY_REASONER):
         self._wrapped = initial_wrapped or {}
 
         manager = get_manager(self, "Universal")
@@ -54,7 +55,7 @@ class Universal(Composite):
         if isinstance(key, int):
             self._length = max(self._length, key + 1)
 
-    def _get(self, key, default=MISSING):
+    def _get(self, key, default=NO_DEFAULT):
         manager = get_manager(self)
 
         if key in self._wrapped:
@@ -63,10 +64,20 @@ class Universal(Composite):
         if isinstance(key, int) and manager.is_sparse and self._is_key_within_range(key):
             return SPARSE_ELEMENT
 
-        if default != MISSING:
+        if default != NO_DEFAULT:
             return default
 
         raise IndexError()
+
+    def _get_in(self, *keys, default=NO_DEFAULT):
+        target = self
+        for key in keys:
+            target = target._get(key, default=MISSING)
+            if target is MISSING:
+                if default != NO_DEFAULT:
+                    return default
+                raise IndexError
+        return target
 
     def _is_key_within_range(self, key, for_insert=False):
         if for_insert:
@@ -163,7 +174,7 @@ class Universal(Composite):
     def __str__(self):
         return str(self._wrapped)
 
-UNIVERSAL_OBJECT_BUILTINS = set(["__dict__", "__class__", "_contains", "_get", "_set", "_items", "_delete", "_keys", "_values", "_wrapped", "_length", "_is_key_within_range", "_range", "_to_dict"])
+UNIVERSAL_OBJECT_BUILTINS = set(["__dict__", "__class__", "_contains", "_get", "_get_in", "_set", "_items", "_delete", "_keys", "_values", "_wrapped", "_length", "_is_key_within_range", "_range", "_to_dict", "_to_list"])
 
 class PythonObject(Universal):
     def __init__(self, initial_data, **kwargs):
@@ -1470,6 +1481,7 @@ DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("set-wildcard",), SetterWildcardMicroO
 DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("delete-wildcard",), DeletterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), True))
 DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("remove-wildcard",), RemoverWildcardMicroOpType(True, True))
 DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("insert-end",), InsertEndMicroOpType(RICH_TYPE, True))
+DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("insert-wildcard",), InserterWildcardMicroOpType(RICH_TYPE, True, True))
 DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("iter",), IterMicroOpType(OneOfType([ StringType(), IntegerType() ]), RICH_TYPE))
 
 # A Type that you can always set values on without any errors

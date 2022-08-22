@@ -638,6 +638,10 @@ def build_binding_map_for_type(source_micro_op, new_type, target, target_manager
         cache[result_key] = False
         reasoner.attach_child_reasoners(child_reasoners, source_micro_op, new_type, target)
 
+    # if source_micro_op is None:
+    #     if types_to_bind and len(types_to_bind) > 1000:
+    #         print(len(types_to_bind))
+
     return atleast_one_sub_type_worked
 
 @contextmanager
