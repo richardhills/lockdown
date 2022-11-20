@@ -5,7 +5,8 @@ from unittest import main
 from unittest.case import TestCase
 
 from lockdown.type_system.composites import CompositeType, InferredType, \
-    check_dangling_inferred_types, prepare_lhs_type, add_composite_type
+    check_dangling_inferred_types, prepare_lhs_type, add_composite_type,\
+    scoped_bind
 from lockdown.type_system.core_types import IntegerType, UnitType, StringType, \
     AnyType, Const, OneOfType, BooleanType, merge_types
 from lockdown.type_system.exceptions import CompositeTypeIncompatibleWithTarget, \
@@ -96,91 +97,83 @@ class TestBasicObject(TestCase):
     def test_composite_object_dereference(self):
         obj = PythonObject({ "foo": "hello" })
 
-        add_composite_type(get_manager(obj), CompositeType({
+        with scoped_bind(obj, CompositeType({
             ("get", "foo"): GetterMicroOpType("foo", StringType()),
             ("set", "foo"): SetterMicroOpType("foo", StringType())
-        }, name="test"))
-
-        self.assertEqual(obj.foo, "hello")
+        }, name="test")):
+            self.assertEqual(obj.foo, "hello")
 
     def test_composite_object_broad_dereference(self):
         obj = PythonObject({ "foo": "hello" })
 
-        add_composite_type(get_manager(obj), CompositeType({
+        with scoped_bind(obj, CompositeType({
             ("get", "foo"): GetterMicroOpType("foo", AnyType()),
             ("set", "foo"): SetterMicroOpType("foo", AnyType())
-        }, name="test"))
-
-        self.assertEqual(obj.foo, "hello")
+        }, name="test")):
+            self.assertEqual(obj.foo, "hello")
 
     def test_composite_object_assignment(self):
         obj = PythonObject({ "foo": "hello" })
 
-        add_composite_type(get_manager(obj), CompositeType({
+        with scoped_bind(obj, CompositeType({
             ("get", "foo"): GetterMicroOpType("foo", StringType()),
             ("set", "foo"): SetterMicroOpType("foo", StringType())
-        }, name="test"))
-
-        obj.foo = "what"
+        }, name="test")):
+            obj.foo = "what"
 
     def test_composite_object_invalid_assignment(self):
         obj = PythonObject({ "foo": "hello" })
 
-        add_composite_type(get_manager(obj), CompositeType({
+        with scoped_bind(obj, CompositeType({
             ("get", "foo"): GetterMicroOpType("foo", StringType()),
             ("set", "foo"): SetterMicroOpType("foo", StringType())
-        }, name="test"))
-
-        with self.assertRaises(TypeError):
-            obj.foo = 5
+        }, name="test")):
+            with self.assertRaises(TypeError):
+                obj.foo = 5
 
     def test_python_like_object(self):
         obj = PythonObject({ "foo": "hello" })
 
-        add_composite_type(get_manager(obj), CompositeType({
+        with scoped_bind(obj, CompositeType({
             ("get", "foo"): GetterMicroOpType("foo", AnyType()),
             ("set", "foo"): SetterMicroOpType("foo", AnyType())
-        }, name="test"))
-
-        self.assertEqual(obj.foo, "hello")
-        obj.foo = "what"
-        self.assertEqual(obj.foo, "what")
+        }, name="test")):
+            self.assertEqual(obj.foo, "hello")
+            obj.foo = "what"
+            self.assertEqual(obj.foo, "what")
 
     def test_java_like_object(self):
         obj = PythonObject({ "foo": "hello" })
 
-        add_composite_type(get_manager(obj), CompositeType({
-            ("get", "foo"): GetterMicroOpType("foo", StringType()),
-            ("set", "foo"): SetterMicroOpType("foo", StringType())
-        }, name="test"))
+        with scoped_bind(obj, CompositeType({
+                ("get", "foo"): GetterMicroOpType("foo", StringType()),
+                ("set", "foo"): SetterMicroOpType("foo", StringType())
+        }, name="test")):
+            self.assertEqual(obj.foo, "hello")
+            obj.foo = "what"
+            self.assertEqual(obj.foo, "what")
 
-        self.assertEqual(obj.foo, "hello")
-        obj.foo = "what"
-        self.assertEqual(obj.foo, "what")
-
-        with self.assertRaises(AttributeError):
-            obj.bar = "hello"
+            with self.assertRaises(AttributeError):
+                obj.bar = "hello"
 
     def test_const_property(self):
         obj = PythonObject({ "foo": "hello" })
 
-        add_composite_type(get_manager(obj), CompositeType({
+        with scoped_bind(obj, CompositeType({
             ("get", "foo"): GetterMicroOpType("foo", StringType())
-        }, name="test"))
-
-        self.assertEqual(obj.foo, "hello")
-        with self.assertRaises(AttributeError):
-            obj.foo = "what"
+        }, name="test")):
+            self.assertEqual(obj.foo, "hello")
+            with self.assertRaises(AttributeError):
+                obj.foo = "what"
 
     def test_delete_property(self):
         obj = PythonObject({ "foo": "hello" })
 
-        add_composite_type(get_manager(obj), CompositeType({
+        with scoped_bind(obj, CompositeType({
             ("delete-wildcard", ): DeletterWildcardMicroOpType(StringType(), True)
-        }, name="test"))
-
-        del obj.foo
-        self.assertFalse(hasattr(obj, "foo"))
+        }, name="test")):
+            del obj.foo
+            self.assertFalse(hasattr(obj, "foo"))
 
 
 class TestRevConstType(TestCase):

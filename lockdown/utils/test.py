@@ -18,6 +18,28 @@ class TestWeakIdentityKeyDictionary(TestCase):
         self.assertEqual(len(foo), 1)
         self.assertEqual(foo[key], 10)
 
+    def test_iter(self):
+        key = Key()
+        foo = WeakIdentityKeyDictionary({ key: 10 })
+
+        for k in foo:
+            self.assertEquals(k, key)
+
+    def test_iter_values(self):
+        key = Key()
+        foo = WeakIdentityKeyDictionary({ key: 10 })
+
+        for v in foo.values():
+            self.assertEquals(v, 10)
+
+    def test_iter_items(self):
+        key = Key()
+        foo = WeakIdentityKeyDictionary({ key: 10 })
+
+        for k, v in foo.items():
+            self.assertEquals(k, key)
+            self.assertEquals(v, 10)
+
     def test_init_with_multi_data(self):
         key1 = Key()
         key2 = Key()
@@ -30,6 +52,13 @@ class TestWeakIdentityKeyDictionary(TestCase):
         self.assertEqual(foo[key2], 4)
         self.assertEqual(foo[key3], 123)
         self.assertEqual(foo[key4], 31)
+
+    def test_getter(self):
+        key1 = Key()
+
+        foo = WeakIdentityKeyDictionary()
+        foo[key1] = 4
+        self.assertEqual(foo.get(key1), 4)
 
     def test_setter(self):
         key1 = Key()

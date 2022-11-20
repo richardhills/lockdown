@@ -40,11 +40,10 @@ def build_closed_function_type(data, cache):
                 raise FatalError()
 
     return ClosedFunctionType(
-        enrich_type(data._get("argument")),
-        PythonDict({
-            mode: PythonList([ enrich_break_type(b) for b in break_types._values() ])
+        enrich_type(data._get("argument")), {
+            mode: [ enrich_break_type(b) for b in break_types._values() ]
             for mode, break_types in data._get("break_types")._items()
-        }, bind=DEFAULT_READONLY_COMPOSITE_TYPE, debug_reason="type")
+        }
     )
 
 def build_unit_type(data, cache):

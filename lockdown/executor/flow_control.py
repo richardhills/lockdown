@@ -5,11 +5,13 @@ from _collections import defaultdict
 
 from lockdown.type_system.composites import is_type_bindable_to_value, \
     CompositeType, does_value_fit_through_type
+from lockdown.type_system.core_types import Type
 from lockdown.type_system.exceptions import FatalError
 from lockdown.type_system.reasoner import DUMMY_REASONER, Reasoner
-from lockdown.utils.utils import MISSING, InternalMarker, get_environment,\
+from lockdown.type_system.universal_type import PythonDict
+from lockdown.utils.utils import MISSING, InternalMarker, get_environment, \
     default
-from lockdown.type_system.core_types import Type
+
 
 class BreakException(Exception):
     """

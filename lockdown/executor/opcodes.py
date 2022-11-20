@@ -31,7 +31,8 @@ from lockdown.type_system.universal_type import UniversalObjectType, \
     GetterMicroOpType, SetterMicroOpType, GetterWildcardMicroOpType, \
     SetterWildcardMicroOpType, InsertStartMicroOpType, InsertEndMicroOpType, DeletterWildcardMicroOpType, \
     IterMicroOpType, RemoverWildcardMicroOpType, InserterWildcardMicroOpType, \
-    UniversalTupleType, Universal, SPARSE_ELEMENT, RICH_TYPE, RICH_READONLY_TYPE
+    UniversalTupleType, Universal, SPARSE_ELEMENT, RICH_TYPE, RICH_READONLY_TYPE, \
+    PythonDict
 from lockdown.utils.utils import MISSING, NO_VALUE, InternalMarker, get_environment, \
     spread_dict
 
@@ -348,7 +349,7 @@ class DereferenceOp(OpcodeOperandMixin, Opcode):
 
                 if micro_op is None:
                     # Runtime dynamic behaviour! We weren't even able to bind to the
-                    # wildcard microop at verification time (maybe we dind't know whether
+                    # wildcard microop at verification time (maybe we didn't know whether
                     # the target would be a CompositeType). No harm though - we get the
                     # microop at runtime instead.
                     tag, micro_op = get_best_micro_op([

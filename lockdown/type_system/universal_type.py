@@ -6,8 +6,8 @@ from collections.abc import MutableSequence, MutableMapping
 from lockdown.executor.ast_utils import compile_statement, compile_expression, \
     compile_module
 from lockdown.type_system.composites import Composite, CompositeType, \
-    does_value_fit_through_type, can_add_composite_type_with_filter, rebind_networks,\
-    add_composite_type
+    does_value_fit_through_type, can_add_composite_type_with_filter, \
+    add_composite_type, bind_key
 from lockdown.type_system.core_types import merge_types, Const, Type, StringType, \
     IntegerType, OneOfType, AnyType, BottomType
 from lockdown.type_system.exceptions import FatalError, MissingMicroOp, \
@@ -42,7 +42,10 @@ class Universal(Composite):
             self._length = initial_length
 
         if bind:
-            add_composite_type(manager, bind, reasoner)
+            # Create a strong (not weak) type reference so that this
+            # object *always* has this type (like in a Normative type
+            # system).
+            manager.normative_type_node = add_composite_type(manager, bind, reasoner=reasoner)
 
     def _set(self, key, value):
         manager = get_manager(self)
@@ -500,17 +503,17 @@ class GetterMicroOpType(MicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         if key_filter is MISSING or key_filter == self.key:
             if substitute_value is not MISSING:
-                values = [ substitute_value ]
+                items = ( (key_filter, substitute_value), )
             elif target._contains(self.key):
-                values = [ target._get(self.key) ]
+                items = ( (key_filter, target._get(self.key)), )
             else:
-                values = []
+                items = []
         else:
-            values = []
+            items = []
 
-        values = ( v for v in values if v is not SPARSE_ELEMENT )
+        items = { k: v for k, v in items if v is not SPARSE_ELEMENT }
 
-        return ( values, self.value_type )
+        return ( items, self.value_type )
 
     def to_ast(self, dependency_builder, target, *args):
         # Doesn't support default factories...
@@ -550,13 +553,10 @@ class SetterMicroOpType(MicroOpType):
 
     def invoke(self, target_manager, value, *args, **kwargs):
         try:
-#            unbind_key(target_manager, self.key)
-
             obj = target_manager.get_obj()
             obj._set(self.key, value)
 
-#            bind_key(target_manager, self.key)
-            rebind_networks(target_manager)
+            bind_key(target_manager, self.key)
         except KeyError:
             raise FatalError()
         except TypeError:
@@ -596,7 +596,7 @@ class SetterMicroOpType(MicroOpType):
         return False
 
     def prepare_bind(self, target, key_filter, substitute_value):
-        return ([], None)
+        return ({}, None)
 
     def to_ast(self, dependency_builder, target, new_value):
         # Doesn't support default factories...
@@ -662,9 +662,8 @@ class InsertStartMicroOpType(MicroOpType):
             obj = target_manager.get_obj()
             obj._insert(0, new_value)
 
-#            for i in obj._range():
-#                bind_key(target_manager, i)
-            rebind_networks(target_manager)
+            for i in obj._range():
+                bind_key(target_manager, i)
         except KeyError:
             raise FatalError()
         except TypeError:
@@ -711,7 +710,7 @@ class InsertStartMicroOpType(MicroOpType):
         return False
 
     def prepare_bind(self, target, key_filter, substitute_value):
-        return ([], None)
+        return ({}, None)
 
     def merge(self, other_micro_op_type):
         return InsertStartMicroOpType(
@@ -742,8 +741,7 @@ class InsertEndMicroOpType(MicroOpType):
 
             obj = target_manager.get_obj()
             obj._insert(obj._length, new_value)
-#            bind_key(target_manager, obj._length)
-            rebind_networks(target_manager)
+            bind_key(target_manager, obj._length)
         except KeyError:
             raise FatalError()
         except TypeError:
@@ -771,7 +769,7 @@ class InsertEndMicroOpType(MicroOpType):
         return False
 
     def prepare_bind(self, target, key_filter, substitute_value):
-        return ([], None)
+        return ({}, None)
 
     def merge(self, other_micro_op_type):
         return InsertEndMicroOpType(
@@ -872,17 +870,17 @@ class GetterWildcardMicroOpType(MicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         if key_filter is not MISSING:
             if substitute_value is not MISSING:
-                values = [ substitute_value ]
+                items = { key_filter: substitute_value }
             elif target._contains(key_filter):
-                values = [ target._get(key_filter) ]
+                items = { key_filter: target._get(key_filter) }
             else:
-                values = []
+                items = {}
         else:
-            values = target._values()
+            items = target._to_dict()
 
-        values = ( v for v in values if v is not SPARSE_ELEMENT )
+        items = { k: v for k, v in items.items() if v is not SPARSE_ELEMENT }
 
-        return ( values, self.value_type )
+        return ( items, self.value_type )
 
     def merge(self, other_micro_op_type):
         return GetterWildcardMicroOpType(
@@ -915,13 +913,10 @@ class SetterWildcardMicroOpType(MicroOpType):
             if not does_value_fit_through_type(new_value, self.value_type):
                 raise InvalidAssignmentType()
 
-#            unbind_key(target_manager, key)
-
             obj = target_manager.get_obj()
             obj._set(key, new_value)
 
-#            bind_key(target_manager, key)
-            rebind_networks(target_manager)
+            bind_key(target_manager, key)
         except KeyError:
             raise FatalError()
         except TypeError:
@@ -972,7 +967,7 @@ class SetterWildcardMicroOpType(MicroOpType):
         return False
 
     def prepare_bind(self, target, key_filter, substitute_value):
-        return ([], None)
+        return ({}, None)
 
     def merge(self, other_micro_op_type):
         return SetterWildcardMicroOpType(
@@ -1001,12 +996,10 @@ class DeletterWildcardMicroOpType(MicroOpType):
 
     def invoke(self, target_manager, key, *args, **kwargs):
         try:
-#            unbind_key(target_manager, key)
-
             obj = target_manager.get_obj()
             obj._delete(key)
 
-            rebind_networks(target_manager)
+            bind_key(target_manager, key)
         except KeyError:
             raise FatalError()
         except TypeError:
@@ -1040,7 +1033,7 @@ class DeletterWildcardMicroOpType(MicroOpType):
         return False
 
     def prepare_bind(self, target, key_filter, substitute_value):
-        return ([], None)
+        return ({}, None)
 
     def merge(self, other_micro_op_type):
         return DeletterWildcardMicroOpType(
@@ -1072,16 +1065,10 @@ class RemoverWildcardMicroOpType(MicroOpType):
                     ):
                         raise InvalidAssignmentType()
 
-            rebind_networks(target_manager)
-
-#            for i in range(key, obj._length):
-#                unbind_key(target_manager, i)
-
             obj._remove(key)
 
-#            for i in range(key, obj._length):
-#                bind_key(target_manager, i)
-            rebind_networks(target_manager)
+            for i in range(key, obj._length):
+                bind_key(target_manager, i)
         except KeyError:
             raise FatalError()
         except TypeError:
@@ -1118,7 +1105,7 @@ class RemoverWildcardMicroOpType(MicroOpType):
         return False
 
     def prepare_bind(self, target, key_filter, substitute_value):
-        return ([], None)
+        return ({}, None)
 
     def merge(self, other_micro_op_type):
         return RemoverWildcardMicroOpType(
@@ -1157,16 +1144,10 @@ class InserterWildcardMicroOpType(MicroOpType):
                     ):
                         raise InvalidAssignmentType()
 
-            rebind_networks(target_manager)
-
-#            for i in range(key, obj._length):
-#                unbind_key(target_manager, i)
-
             obj._insert(key, new_value)
 
-#            for i in range(key, obj._length):
-#                bind_key(target_manager, i)
-            rebind_networks(target_manager)
+            for i in range(key, obj._length):
+                bind_key(target_manager, i)
         except KeyError:
             raise FatalError()
         except TypeError:
@@ -1216,7 +1197,7 @@ class InserterWildcardMicroOpType(MicroOpType):
         return False
 
     def prepare_bind(self, target, key_filter, substitute_value):
-        return ([], None)
+        return ({}, None)
 
     def merge(self, other_micro_op_type):
         return InserterWildcardMicroOpType(
@@ -1303,17 +1284,17 @@ class IterMicroOpType(MicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         if key_filter is not MISSING:
             if substitute_value is not MISSING:
-                values = [ substitute_value ]
+                items = ( (key_filter, substitute_value), )
             elif target._contains(key_filter):
-                values = [ target._get(key_filter) ]
+                items = ( (key_filter, target._get(key_filter)), )
             else:
-                values = []
+                items = []
         else:
-            values = target._values()
+            items = target._items()
 
-        values = ( v for v in values if v is not SPARSE_ELEMENT )
+        items = { k: v for k, v in items if v is not SPARSE_ELEMENT }
 
-        return ( values, self.value_type )
+        return ( items, self.value_type )
 
     def merge(self, other_micro_op_type):
         return IterMicroOpType(

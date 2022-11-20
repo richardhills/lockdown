@@ -20,7 +20,7 @@ def enrich_break_type(data):
     }
     if data._contains("in"):
         result["in"] = enrich_type(data._get("in"))
-    return PythonDict(result)
+    return result
 
 def are_break_types_a_subset(self, other, reasoner):
     if other is None or other.break_types is None:
@@ -31,12 +31,18 @@ def are_break_types_a_subset(self, other, reasoner):
             if our_break_types_for_mode is None:
                 return False
 
+            if not isinstance(our_break_types_for_mode, list):
+                raise FatalError()
+
             for our_break_type_for_mode in our_break_types_for_mode:
+                if not isinstance(our_break_type_for_mode, dict):
+                    raise FatalError()
+
                 our_out = our_break_type_for_mode["out"]
-                our_in = our_break_type_for_mode.get("in", None)
+                our_in = our_break_type_for_mode.get("in")
 
                 other_out = other_break_type_for_mode["out"]
-                other_in = other_break_type_for_mode.get("in", None)
+                other_in = other_break_type_for_mode.get("in")
 
                 if our_in is not None and other_in is None:
                     continue
@@ -71,10 +77,19 @@ class ClosedFunctionType(Type):
     def __init__(self, argument_type, break_types):
         self.argument_type = argument_type
         self.break_types = break_types
+
         if argument_type is None:
             raise FatalError()
         if break_types is None:
             raise FatalError()
+        if not isinstance(break_types, dict):
+            raise FatalError(break_types)
+        for break_types_for_mode in break_types.values():
+            if not isinstance(break_types_for_mode, list):
+                raise FatalError(break_types_for_mode)
+            for break_type in break_types_for_mode:
+                if not isinstance(break_type, dict):
+                    raise FatalError(break_type)
 
     def is_copyable_from(self, other, reasoner):
         if not isinstance(other, ClosedFunctionType):

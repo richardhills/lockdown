@@ -227,8 +227,7 @@ class WeakIdentityKeyDictionary(MutableMapping):
         return len(self.keys())
 
     def __iter__(self):
-        for i in self.values_by_key_id:
-            yield i
+        return iter([ w() for w in self.weak_refs_by_id.values() if w() ])
 
     def __setitem__(self, key, value):
         if id(key) in self.weak_ref_ids_by_key_id:

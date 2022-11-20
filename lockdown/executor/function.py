@@ -239,8 +239,8 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
 
             for declared_break_type_for_mode in declared_break_types_for_mode:
                 # Check if this declared_break_type_for_mode is enough to capture the actual_break_types
-                declared_out = declared_break_type_for_mode._get("out")
-                declared_in = declared_break_type_for_mode._get("in", None)
+                declared_out = declared_break_type_for_mode["out"]
+                declared_in = declared_break_type_for_mode.get("in", None)
                 actual_out = actual_break_type["out"]
                 actual_in = actual_break_type.get("in", None)
 
@@ -260,6 +260,9 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
                     final_declared_break_types.add(None, mode, final_out, final_in)
                     break
             else:
+                print("STOP")
+                result = final_out.is_copyable_from(actual_out, DUMMY_REASONER)
+                print("STOP")
                 raise PreparationException("""Nothing declared for {}, {}.\nFunction declares break types {}.\nBut local_initialization breaks {}, code breaks {}""".format(
                     mode, actual_break_type, declared_break_types, local_other_break_types, code_break_types
                 ))
@@ -375,6 +378,9 @@ class LockdownFunction(object):
 
 class OpenFunction(object):
     def __init__(self, data, code, prepare_context, static, argument_type, outer_type, local_type, local_initializer, break_types):
+        if not isinstance(break_types, dict):
+            raise FatalError()
+
         self.data = data
         self.code = code
         self.prepare_context = prepare_context

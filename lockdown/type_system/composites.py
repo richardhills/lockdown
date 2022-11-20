@@ -187,9 +187,8 @@ class CompositeObjectManager(object):
         self.obj_ref = weakref.ref(obj, self.obj_gced)
         self.obj_id = id(obj)
 
-        self.attached_networks = {}
-        self.attached_network_counts = defaultdict(int)
-        self.attached_nodes = {}
+        self.attached_nodes = WeakIdentityKeyDictionary()
+        self.attached_nodes_by_type = WeakIdentityKeyDictionary()
 
         self.on_gc_callback = on_gc_callback
 
@@ -238,10 +237,17 @@ class CompositeObjectManager(object):
     #     return False
 
     def get_attached_nodes(self):
-        attached_nodes = [ n() for n in self.attached_nodes.values() ]
+        try:
+            attached_nodes = [ n() for n in self.attached_nodes.values() ]
+        except KeyError:
+            pass
         attached_nodes = [ n for n in attached_nodes if n ]
-        attached_nodes = list(set(attached_nodes))
         return attached_nodes
+
+    def get_attached_node_for_type(self, type):
+        ref = self.attached_nodes_by_type.get(type)
+        if ref:
+            return ref()
 
     def attach_node(self, new_node):
         """
@@ -254,21 +260,19 @@ class CompositeObjectManager(object):
 
         lockdown.type_system.composites.add_composite_type
         """
-        # TODO clean up the refs
-        self.cached_effective_composite_type = None
-        self.attached_nodes[id(new_node)] = weakref.ref(new_node)
-
-    def detach_node(self, old_node):
-        self.cached_effective_composite_type = None
-        if id(old_node) not in self.attached_nodes:
+        if not new_node or not isinstance(new_node, Node):
             raise FatalError()
-        del self.attached_nodes[id(old_node)]
+        self.cached_effective_composite_type = None
+        # TODO handle GCs on the weakrefs
+        weakref_to_node = weakref.ref(new_node)
+        self.attached_nodes[new_node] = weakref_to_node
+        self.attached_nodes_by_type[new_node.type] = weakref_to_node
 
     def get_micro_op_type(self, tag):
         if not isinstance(tag, tuple):
             raise FatalError()
         effective_composite_type = self.get_effective_composite_type()
-        return effective_composite_type.get_micro_op_type(tag)
+        return effective_composite_type.get_micro_op_type(tag)    
 
 class InferredType(Type):
     """
@@ -472,11 +476,7 @@ def replace_setter_value_type_with_getter(setter, getter):
         return not setter.value_type.is_nominally_the_same(getter.value_type)
     return True
 
-class NetworkBindContext(object):
-    def __init__(self, network):
-        self.network = network
-
-def add_composite_type(target_manager, new_type, reasoner=DUMMY_REASONER):
+def add_composite_type(target_manager, new_type, key_filter=MISSING, reasoner=DUMMY_REASONER):
     """
     Safely adds a new CompositeType to a CompositeObjectManager, so that run time verification
     of mutations to the object owned by the CompositeObjectManager can be enforced.
@@ -485,136 +485,157 @@ def add_composite_type(target_manager, new_type, reasoner=DUMMY_REASONER):
     have been added previously. If it is found to conflict, this function raises a
     CompositeTypeIncompatibleWithTarget exception.
     """
+    if not isinstance(target_manager, CompositeObjectManager):
+        raise FatalError()
+    if not isinstance(new_type, Type):
+        raise FatalError()
+    if key_filter is not MISSING and not isinstance(key_filter, (str, int)):
+        raise FatalError()
+
     builder = NetworkVerifierAndBuilder(True)
-    succeeded = verify_and_or_build_network(new_type, target_manager.get_obj(), target_manager, None, None, MISSING, MISSING, builder, reasoner)
+    succeeded = verify_and_or_build_network(new_type, target_manager.get_obj(), target_manager, None, None, None, key_filter, MISSING, builder, reasoner)
 
     if not succeeded:
         raise CompositeTypeIncompatibleWithTarget()
 
-    network = builder.build()
+    top_node = builder.build()
+    existing_node = target_manager.get_attached_node_for_type(new_type)
 
-    network.attach()
+    if existing_node:
+        existing_node.update(top_node)
+        existing_node.attach()
+    else:
+        top_node.attach()
 
-    return network.bind_context
+    return top_node
+
+def bind_key(target_manager, key):
+    for attached_node in target_manager.get_attached_nodes():
+        add_composite_type(target_manager, attached_node.type, key)
 
 def can_add_composite_type_with_filter(target, new_type, key_filter, substitute_value):
     builder = NetworkVerifierAndBuilder(False)
-    return verify_and_or_build_network(new_type, target, get_manager(target), None, None, key_filter, substitute_value, builder, DUMMY_REASONER)
+    return verify_and_or_build_network(new_type, target, get_manager(target), None, None, None, key_filter, substitute_value, builder, DUMMY_REASONER)
 
 def is_type_bindable_to_value(value, type, reasoner=DUMMY_REASONER):
     builder = NetworkVerifierAndBuilder(True)
-    return verify_and_or_build_network(type, value, get_manager(value), None, None, MISSING, MISSING, builder, DUMMY_REASONER)
+    return verify_and_or_build_network(type, value, get_manager(value), None, None, None, MISSING, MISSING, builder, DUMMY_REASONER)
 
 def does_value_fit_through_type(value, type, reasoner=DUMMY_REASONER):
     builder = NetworkVerifierAndBuilder(False)
-    return verify_and_or_build_network(type, value, get_manager(value), None, None, MISSING, MISSING, builder, DUMMY_REASONER)
+    return verify_and_or_build_network(type, value, get_manager(value), None, None, None, MISSING, MISSING, builder, DUMMY_REASONER)
 
-def rebind_networks(manager):
-    for attached_node in manager.get_attached_nodes():
-        old_network = attached_node.network
-        old_network.detach()
-
-        builder = NetworkVerifierAndBuilder(True)
-        succeeded = verify_and_or_build_network(
-            old_network.top_node.type,
-            old_network.top_node.target_manager().get_obj(),
-            old_network.top_node.target_manager(),
-            None, None,
-            MISSING, MISSING, builder, DUMMY_REASONER
-        )
-
-        if not succeeded:
-            raise CompositeTypeIncompatibleWithTarget()
-
-        new_network = builder.build()
-        print("Rebinding {} to {} on {}".format(id(old_network), id(new_network), id(old_network.top_node.target_manager())))
-        new_network.attach()
-
-        old_network.bind_context.network = new_network
-        new_network.bind_context = old_network.bind_context
-
-class Network(object):
-    def __init__(self):
-        self.top_node = None
-        self.bind_context = NetworkBindContext(self)
-
-    def walk(self):
-        yield from self.top_node.walk()
-
-    def attach(self):
-        target_manager = self.top_node.target_manager()
-        if target_manager:
-            nodes = list(self.walk())
-            print("attaching {} nodes".format(len(nodes)))
-            for node in nodes:
-                node.attach()
-
-    def detach(self):
-        target_manager = self.top_node.target_manager()
-        if target_manager:
-            for node in self.walk():
-                node.detach()
+# def rebind_networks(manager):
+#     for attached_node in manager.get_attached_nodes():
+#         old_network = attached_node.network
+#         old_network.detach()
+#
+#         builder = NetworkVerifierAndBuilder(True)
+#         succeeded = verify_and_or_build_network(
+#             old_network.top_node.type,
+#             old_network.top_node.target_manager().get_obj(),
+#             old_network.top_node.target_manager(),
+#             None, None,
+#             MISSING, MISSING, builder, DUMMY_REASONER
+#         )
+#
+#         if not succeeded:
+#             raise CompositeTypeIncompatibleWithTarget()
+#
+#         new_network = builder.build()
+#         print("Rebinding {} to {} on {}".format(id(old_network), id(new_network), id(old_network.top_node.target_manager())))
+#         new_network.attach()
+#
+#         old_network.bind_context.network = new_network
+#         new_network.bind_context = old_network.bind_context
+#
+# class Network(object):
+#     def __init__(self):
+#         self.top_node = None
+#         self.bind_context = NetworkBindContext(self)
+#
+#     def walk(self):
+#         yield from self.top_node.walk()
+#
+#     def attach(self):
+#         target_manager = self.top_node.target_manager()
+#         if target_manager:
+#             nodes = list(self.walk())
+#             print("attaching {} nodes".format(len(nodes)))
+#             for node in nodes:
+#                 node.attach()
+#
+#     def detach(self):
+#         target_manager = self.top_node.target_manager()
+#         if target_manager:
+#             for node in self.walk():
+#                 node.detach()
 
 class Node(object):
-    def __init__(self, target_manager, type, network):
+    def __init__(self, target_manager, type):
         self.target_manager = target_manager
         self.type = type
-        self.network = network
-        self.child_nodes = []
-
-    def walk(self):
-        yield self
-        for child_node in self.child_nodes:
-            yield from child_node.walk()
+        self.child_nodes = {}
+        self.attached = False
 
     def attach(self):
+        if self.attached:
+            return
+        self.attached = True
         self.target_manager.attach_node(self)
+        for child_node in self.child_nodes.values():
+            child_node.attach()
 
-    def detach(self):
-        self.target_manager.detach_node(self)
+    def add_child_node(self, micro_op, key, child_node):
+        self.child_nodes[(id(micro_op), key)] = child_node
 
-    def add_child_node(self, child_node):
-        self.child_nodes.append(child_node)
-
-#    def remove_child_node(self, micro_op, key):
-#        del self.child_nodes[(id(micro_op), key)]
-
+    def update(self, other_node):
+        self.attached = False
+        if other_node.target_manager is not self.target_manager:
+            raise FatalError()
+        if other_node.type is not self.type:
+            raise FatalError()
+        self.child_nodes.update(other_node.child_nodes)
 
 class NetworkVerifierAndBuilder(object):
     def __init__(self, binding):
         self.binding = binding
-        self.network = Network()
         self.nodes = {}
+        self.top_node = None
 
     def build(self):
-        if self.network.top_node is None:
+        if self.top_node is None:
             raise FatalError()
-        return self.network
+        return self.top_node
 
     def get_node(self, target_manager, type):
         result_key = (id(target_manager), id(type))
-        node_and_whether_accepted = self.nodes.get(result_key)
+        node_and_accepted_from_builder = self.nodes.get(result_key)
 
-        if node_and_whether_accepted:
-            node, accepted = node_and_whether_accepted
-        else:
-            node = Node(target_manager, type, self.network)
-            accepted = None
-            self.nodes[result_key] = (node, True)
+        if node_and_accepted_from_builder:
+            return node_and_accepted_from_builder
 
-        return node, accepted
+        if self.top_node is not None:
+            node_from_existing_type = target_manager.get_attached_node_for_type(type)
+            if node_from_existing_type:
+                return node_from_existing_type, True
 
-    def accept_node(self, node, parent_node):
+        node = Node(target_manager, type)
+        self.nodes[result_key] = (node, True)
+
+        return node, None
+
+    def accept_node(self, node, parent_node, parent_micro_op, parent_key):
         if parent_node:
-            parent_node.add_child_node(node)
+            parent_node.add_child_node(parent_micro_op, parent_key, node)
         else:
-            self.network.top_node = node
+            self.top_node = node
 
     def reject_node(self, node):
         result_key = (id(node.target_manager), id(node.type))
         self.nodes[result_key] = (node, False)
 
-def verify_and_or_build_network(new_type, target, target_manager, parent_node, parent_micro_op, key_filter, substitute_value, builder, reasoner):
+def verify_and_or_build_network(new_type, target, target_manager, parent_node, parent_micro_op, parent_key, key_filter, substitute_value, builder, reasoner):
     target_is_composite = isinstance(target, Composite)
 
     target_effective_type = None
@@ -661,15 +682,16 @@ def verify_and_or_build_network(new_type, target, target_manager, parent_node, p
                     break
 
                 # Have prepare_bind return keys to be used for building the network
-                next_targets, next_new_type = micro_op.prepare_bind(target, key_filter, substitute_value)
+                next_keys_and_targets, next_new_type = micro_op.prepare_bind(target, key_filter, substitute_value)
 
-                for next_target in next_targets:
+                for next_key, next_target in next_keys_and_targets.items():
                     if not verify_and_or_build_network(
                         next_new_type,
                         next_target,
                         get_manager(next_target),
                         potential_target_node,
                         micro_op,
+                        next_key,
                         MISSING,
                         MISSING,
                         builder,
@@ -679,7 +701,7 @@ def verify_and_or_build_network(new_type, target, target_manager, parent_node, p
                         break
 
             if micro_ops_checks_worked:
-                builder.accept_node(potential_target_node, parent_node)
+                builder.accept_node(potential_target_node, parent_node, parent_micro_op, parent_key)
                 atleast_one_sub_type_worked = True
             else:
                 builder.reject_node(potential_target_node)
@@ -707,17 +729,11 @@ def scoped_bind(value, composite_type, bind=True, reasoner=DUMMY_REASONER):
     if not isinstance(composite_type, CompositeType):
         raise FatalError()
 
-    network_bind_context = None
-
     try:
         if bind:
             manager = get_manager(value)
-            network_bind_context = add_composite_type(manager, composite_type, reasoner=reasoner)
-            print("scoped bind {}".format(id(network_bind_context.network)))
+            top_node = add_composite_type(manager, composite_type, reasoner=reasoner)
         yield
     finally:
-        if network_bind_context:
-            print("scoped unbind {}".format(id(network_bind_context.network)))
-            network_bind_context.network.detach()
-#            remove_composite_type(manager, composite_type, reasoner=reasoner, enforce_safety_checks=get_environment().opcode_bindings)
-
+        # Wait for GC to unbind everything
+        pass
