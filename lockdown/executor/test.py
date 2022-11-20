@@ -17,6 +17,7 @@ from lockdown.executor.raw_code_factories import function_lit, no_value_type, \
     string_type, bool_type, try_catch_op, throw_op, const_string_type, \
     function_type, close_op, shift_op, transform_op, \
     rich_type
+from lockdown.type_system.composites import add_composite_type
 from lockdown.type_system.core_types import IntegerType, StringType
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.reasoner import DUMMY_REASONER
@@ -332,7 +333,7 @@ class TestTemplates(TestCase):
 
         self.assertEqual(result.caught_break_mode, "return")
         self.assertTrue(isinstance(result.value, Universal))
-        get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+        add_composite_type(get_manager(result.value), DEFAULT_READONLY_COMPOSITE_TYPE)
         self.assertEqual(result.value._get("foo"), 42)
 
     def test_nested_return(self):
@@ -348,7 +349,7 @@ class TestTemplates(TestCase):
 
         self.assertEqual(result.caught_break_mode, "return")
         self.assertTrue(isinstance(result.value, Universal))
-        get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+        add_composite_type(get_manager(result.value), DEFAULT_READONLY_COMPOSITE_TYPE)
         self.assertEqual(result.value._get("foo")._get("bar"), 42)
 
     def test_return_with_dereference1(self):
@@ -365,7 +366,7 @@ class TestTemplates(TestCase):
 
         self.assertEqual(result.caught_break_mode, "return")
         self.assertTrue(isinstance(result.value, Universal))
-        get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+        add_composite_type(get_manager(result.value), DEFAULT_READONLY_COMPOSITE_TYPE)
         self.assertEqual(result.value._get("foo"), 42)
         self.assertEqual(result.value._get("bar"), 42)
 
@@ -383,7 +384,7 @@ class TestTemplates(TestCase):
 
         self.assertEqual(result.caught_break_mode, "return")
         self.assertTrue(isinstance(result.value, Universal))
-        get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+        add_composite_type(get_manager(result.value), DEFAULT_READONLY_COMPOSITE_TYPE)
         self.assertEqual(result.value._get("foo"), 42)
         self.assertEqual(result.value._get("bar"), 42)
 
@@ -401,7 +402,7 @@ class TestTemplates(TestCase):
 
         self.assertEqual(result.caught_break_mode, "return")
         self.assertTrue(isinstance(result.value, Universal))
-        get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+        add_composite_type(get_manager(result.value), DEFAULT_READONLY_COMPOSITE_TYPE)
         self.assertEqual(result.value._get("foo"), 42)
         self.assertEqual(result.value._get("bar"), 42)
 
@@ -419,7 +420,7 @@ class TestTemplates(TestCase):
 
         self.assertEqual(result.caught_break_mode, "return")
         self.assertTrue(isinstance(result.value, Universal))
-        get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+        add_composite_type(get_manager(result.value), DEFAULT_READONLY_COMPOSITE_TYPE)
         self.assertEqual(result.value._get("foo"), 42)
         self.assertEqual(result.value._get("bar"), 42)
 
@@ -447,7 +448,7 @@ class TestTemplates(TestCase):
 
         self.assertEqual(result.caught_break_mode, "return")
         self.assertTrue(isinstance(result.value, Universal))
-        get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+        add_composite_type(get_manager(result.value), DEFAULT_READONLY_COMPOSITE_TYPE)
         self.assertEqual(result.value._get("foo")._get("bar"), 42)
 
 

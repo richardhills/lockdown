@@ -26,6 +26,7 @@ from lockdown.type_system.universal_type import PythonObject, \
     RICH_READONLY_TYPE, Universal
 from lockdown.utils.utils import NO_VALUE, print_code, MISSING, get_environment, \
     spread_dict
+from lockdown.type_system.composites import add_composite_type
 
 
 class ObjectDictWrapper(object):
@@ -145,7 +146,8 @@ def bootstrap_function(data, argument=None, outer_context=None, check_safe_exit=
     if outer_context is None:
         outer_context = get_default_global_context()
 
-    get_manager(outer_context).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+#    get_manager(outer_context).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+    add_composite_type(get_manager(outer_context), DEFAULT_READONLY_COMPOSITE_TYPE)
 
     frame_manager = FrameManager()
 

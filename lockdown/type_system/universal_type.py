@@ -6,8 +6,8 @@ from collections.abc import MutableSequence, MutableMapping
 from lockdown.executor.ast_utils import compile_statement, compile_expression, \
     compile_module
 from lockdown.type_system.composites import Composite, CompositeType, \
-    does_value_fit_through_type, unbind_key, bind_key, \
-    can_add_composite_type_with_filter
+    does_value_fit_through_type, can_add_composite_type_with_filter, rebind_networks,\
+    add_composite_type
 from lockdown.type_system.core_types import merge_types, Const, Type, StringType, \
     IntegerType, OneOfType, AnyType, BottomType
 from lockdown.type_system.exceptions import FatalError, MissingMicroOp, \
@@ -42,7 +42,7 @@ class Universal(Composite):
             self._length = initial_length
 
         if bind:
-            manager.add_composite_type(bind, reasoner=reasoner)
+            add_composite_type(manager, bind, reasoner)
 
     def _set(self, key, value):
         manager = get_manager(self)
@@ -498,7 +498,7 @@ class GetterMicroOpType(MicroOpType):
         return False
 
     def prepare_bind(self, target, key_filter, substitute_value):
-        if key_filter is None or key_filter == self.key:
+        if key_filter is MISSING or key_filter == self.key:
             if substitute_value is not MISSING:
                 values = [ substitute_value ]
             elif target._contains(self.key):
@@ -550,12 +550,13 @@ class SetterMicroOpType(MicroOpType):
 
     def invoke(self, target_manager, value, *args, **kwargs):
         try:
-            unbind_key(target_manager, self.key)
+#            unbind_key(target_manager, self.key)
 
             obj = target_manager.get_obj()
             obj._set(self.key, value)
 
-            bind_key(target_manager, self.key)
+#            bind_key(target_manager, self.key)
+            rebind_networks(target_manager)
         except KeyError:
             raise FatalError()
         except TypeError:
@@ -605,9 +606,10 @@ class SetterMicroOpType(MicroOpType):
         return compile_module(
             """
 {temp} = get_manager({target})
-unbind_key({temp}, {key})
+#unbind_key({temp}, {key})
 {temp}.get_obj()._set({key}, {new_value})
-bind_key({temp}, {key})
+#bind_key({temp}, {key})
+rebind_networks({temp})
             """,
             None, dependency_builder,
             target=target, key=key, new_value=new_value, temp="s_{}".format(dependency_builder.get_next_id())
@@ -654,14 +656,15 @@ class InsertStartMicroOpType(MicroOpType):
                     ):
                         raise InvalidAssignmentType()
 
-            for i in obj._range():
-                unbind_key(target_manager, i)
+#            for i in obj._range():
+#                unbind_key(target_manager, i)
 
             obj = target_manager.get_obj()
             obj._insert(0, new_value)
 
-            for i in obj._range():
-                bind_key(target_manager, i)
+#            for i in obj._range():
+#                bind_key(target_manager, i)
+            rebind_networks(target_manager)
         except KeyError:
             raise FatalError()
         except TypeError:
@@ -739,7 +742,8 @@ class InsertEndMicroOpType(MicroOpType):
 
             obj = target_manager.get_obj()
             obj._insert(obj._length, new_value)
-            bind_key(target_manager, obj._length)
+#            bind_key(target_manager, obj._length)
+            rebind_networks(target_manager)
         except KeyError:
             raise FatalError()
         except TypeError:
@@ -866,7 +870,7 @@ class GetterWildcardMicroOpType(MicroOpType):
                     return True
 
     def prepare_bind(self, target, key_filter, substitute_value):
-        if key_filter is not None:
+        if key_filter is not MISSING:
             if substitute_value is not MISSING:
                 values = [ substitute_value ]
             elif target._contains(key_filter):
@@ -911,12 +915,13 @@ class SetterWildcardMicroOpType(MicroOpType):
             if not does_value_fit_through_type(new_value, self.value_type):
                 raise InvalidAssignmentType()
 
-            unbind_key(target_manager, key)
+#            unbind_key(target_manager, key)
 
             obj = target_manager.get_obj()
             obj._set(key, new_value)
 
-            bind_key(target_manager, key)
+#            bind_key(target_manager, key)
+            rebind_networks(target_manager)
         except KeyError:
             raise FatalError()
         except TypeError:
@@ -996,10 +1001,12 @@ class DeletterWildcardMicroOpType(MicroOpType):
 
     def invoke(self, target_manager, key, *args, **kwargs):
         try:
-            unbind_key(target_manager, key)
+#            unbind_key(target_manager, key)
 
             obj = target_manager.get_obj()
             obj._delete(key)
+
+            rebind_networks(target_manager)
         except KeyError:
             raise FatalError()
         except TypeError:
@@ -1065,13 +1072,16 @@ class RemoverWildcardMicroOpType(MicroOpType):
                     ):
                         raise InvalidAssignmentType()
 
-            for i in range(key, obj._length):
-                unbind_key(target_manager, i)
+            rebind_networks(target_manager)
+
+#            for i in range(key, obj._length):
+#                unbind_key(target_manager, i)
 
             obj._remove(key)
 
-            for i in range(key, obj._length):
-                bind_key(target_manager, i)
+#            for i in range(key, obj._length):
+#                bind_key(target_manager, i)
+            rebind_networks(target_manager)
         except KeyError:
             raise FatalError()
         except TypeError:
@@ -1147,13 +1157,16 @@ class InserterWildcardMicroOpType(MicroOpType):
                     ):
                         raise InvalidAssignmentType()
 
-            for i in range(key, obj._length):
-                unbind_key(target_manager, i)
+            rebind_networks(target_manager)
+
+#            for i in range(key, obj._length):
+#                unbind_key(target_manager, i)
 
             obj._insert(key, new_value)
 
-            for i in range(key, obj._length):
-                bind_key(target_manager, i)
+#            for i in range(key, obj._length):
+#                bind_key(target_manager, i)
+            rebind_networks(target_manager)
         except KeyError:
             raise FatalError()
         except TypeError:
@@ -1187,17 +1200,18 @@ class InserterWildcardMicroOpType(MicroOpType):
         return True
 
     def conflicts_with(self, our_type, other_type, reasoner):
-        wildcard_getter = other_type.get_micro_op_type(("get-wildcard",))
-        if wildcard_getter and not wildcard_getter.value_type.is_copyable_from(self.value_type, reasoner):
-            reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_getter)
-            return True
-
         if not self.type_error:
-            for tag, getter in other_type.get_micro_op_types().items():
-                if len(tag) == 2 and tag[0] == "get" and isinstance(tag[1], int):
-                    if not getter.value_type.is_copyable_from(self.value_type, reasoner):
-                        reasoner.push_micro_op_conflicts_with_micro_op(self, getter)
-                        return True
+            wildcard_getter = other_type.get_micro_op_type(("get-wildcard",))
+            if wildcard_getter and not wildcard_getter.value_type.is_copyable_from(self.value_type, reasoner):
+                reasoner.push_micro_op_conflicts_with_micro_op(self, wildcard_getter)
+                return True
+
+            if not self.type_error:
+                for tag, getter in other_type.get_micro_op_types().items():
+                    if len(tag) == 2 and tag[0] == "get" and isinstance(tag[1], int):
+                        if not getter.value_type.is_copyable_from(self.value_type, reasoner):
+                            reasoner.push_micro_op_conflicts_with_micro_op(self, getter)
+                            return True
 
         return False
 
@@ -1287,7 +1301,7 @@ class IterMicroOpType(MicroOpType):
         return False
 
     def prepare_bind(self, target, key_filter, substitute_value):
-        if key_filter is not None:
+        if key_filter is not MISSING:
             if substitute_value is not MISSING:
                 values = [ substitute_value ]
             elif target._contains(key_filter):

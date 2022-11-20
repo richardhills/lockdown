@@ -66,7 +66,8 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
             "prepare": RICH_READONLY_TYPE
         }),
         DEFAULT_READONLY_COMPOSITE_TYPE,
-        prepare=outer_context
+        prepare=outer_context,
+        debug_reason="static-evaluation-context"
     )
 
     # context = Universal(True, initial_wrapped={
@@ -118,7 +119,8 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
         }),
         DEFAULT_READONLY_COMPOSITE_TYPE,
         prepare=outer_context,
-        static=static
+        static=static,
+        debug_reason="local-enrichment-context"
     )
 
     # context = Universal(True, initial_wrapped={
@@ -162,7 +164,7 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
         hooks
     )
 
-    get_manager(context).remove_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+    #get_manager(context).remove_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
 
     actual_break_types_factory.merge(local_other_break_types)
 
@@ -191,7 +193,8 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
             }),
             DEFAULT_READONLY_COMPOSITE_TYPE,
             prepare=outer_context,
-            static=static
+            static=static,
+            debug_reason="code-enrichment-context"
         )
 
         # context = Universal(True, initial_wrapped={
@@ -222,7 +225,7 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
     
         code_break_types = code.get_break_types(context, frame_manager, hooks)
     
-        get_manager(context).remove_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+        #get_manager(context).remove_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
     
         actual_break_types_factory.merge(code_break_types)
 
@@ -290,11 +293,11 @@ class UnboundDereferenceBinder(ContextSearcher):
                 new_dereference = dereference_op(bound_context_op, literal_op(reference), **debug_info)
                 if is_static:
                     new_dereference = static_op(new_dereference)
-                get_manager(new_dereference).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+#                get_manager(new_dereference).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
                 return new_dereference
             else:
                 new_dereference = dynamic_dereference_op(reference, **debug_info)
-                get_manager(new_dereference).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+#                get_manager(new_dereference).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
                 return new_dereference
 
         if expression._get("opcode", None) == "unbound_assignment":

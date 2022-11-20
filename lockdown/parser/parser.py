@@ -38,7 +38,7 @@ class RDHLang5Visitor(langVisitor):
             pair = self.visit(pair)
             result[pair[0]] = pair[1]
 
-        return PythonObject(result, bind=DEFAULT_READONLY_COMPOSITE_TYPE)
+        return PythonObject(result)
 
     def visitPair(self, ctx):
         return [ ctx.STRING().getText()[1:-1], self.visit(ctx.value()) ]

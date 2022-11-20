@@ -16,7 +16,8 @@ class Context(Universal):
         static=MISSING,
         outer=MISSING,
         argument=MISSING,
-        local=MISSING
+        local=MISSING,
+        debug_reason=MISSING
     ):
         if not isinstance(static_type, Type):
             raise FatalError()
@@ -42,5 +43,6 @@ class Context(Universal):
         super(Context, self).__init__(
             True,
             initial_wrapped=initial,
-            bind=dynamic_type
+            bind=dynamic_type,
+            debug_reason=debug_reason
         )
