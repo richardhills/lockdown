@@ -191,7 +191,7 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
                 "argument": argument_type,
                 "local": local_type
             }),
-            DEFAULT_READONLY_COMPOSITE_TYPE,
+            dynamic_type=DEFAULT_READONLY_COMPOSITE_TYPE,
             prepare=outer_context,
             static=static,
             debug_reason="code-enrichment-context"
@@ -222,7 +222,12 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
             data._get("code"),
             combine(type_conditional_converter, UnboundDereferenceBinder(context))
         )
-    
+
+        if len(get_manager(context).get_attached_nodes()[0].child_nodes) == 0:
+            print("hello")
+        if len(get_manager(static).get_attached_nodes()) == 0:
+            print("Wot")
+
         code_break_types = code.get_break_types(context, frame_manager, hooks)
     
         #get_manager(context).remove_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)

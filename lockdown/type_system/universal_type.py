@@ -606,10 +606,8 @@ class SetterMicroOpType(MicroOpType):
         return compile_module(
             """
 {temp} = get_manager({target})
-#unbind_key({temp}, {key})
 {temp}.get_obj()._set({key}, {new_value})
-#bind_key({temp}, {key})
-rebind_networks({temp})
+bind_key({temp}, {key})
             """,
             None, dependency_builder,
             target=target, key=key, new_value=new_value, temp="s_{}".format(dependency_builder.get_next_id())

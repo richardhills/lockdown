@@ -94,3 +94,6 @@ class BoundOperand(object):
             return frame.exception(self.opcode, self.invalid_type_exception_factory())
 
         return value
+
+    def __str__(self):
+        return str(self.expression)

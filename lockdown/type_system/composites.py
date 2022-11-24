@@ -492,20 +492,30 @@ def add_composite_type(target_manager, new_type, key_filter=MISSING, reasoner=DU
     if key_filter is not MISSING and not isinstance(key_filter, (str, int)):
         raise FatalError()
 
-    builder = NetworkVerifierAndBuilder(True)
-    succeeded = verify_and_or_build_network(new_type, target_manager.get_obj(), target_manager, None, None, None, key_filter, MISSING, builder, reasoner)
+    builder = NetworkVerifierAndBuilder(target_manager.get_obj(), new_type, True)
+    succeeded, top_nodes = builder.build(key_filter, MISSING, reasoner)
 
     if not succeeded:
         raise CompositeTypeIncompatibleWithTarget()
 
-    top_node = builder.build()
+    if len(top_nodes) > 1:
+        raise FatalError()
+
+    top_node = top_nodes[0]
+
     existing_node = target_manager.get_attached_node_for_type(new_type)
 
     if existing_node:
         existing_node.update(top_node)
-        existing_node.attach()
+        stack = list(existing_node.get_stack())
+#        print(len(stack))
+        for n in existing_node.get_stack():
+            n.attach()
     else:
-        top_node.attach()
+        stack = list(top_node.get_stack())
+#        print(len(stack))
+        for n in stack:
+            n.attach()
 
     return top_node
 
@@ -514,16 +524,19 @@ def bind_key(target_manager, key):
         add_composite_type(target_manager, attached_node.type, key)
 
 def can_add_composite_type_with_filter(target, new_type, key_filter, substitute_value):
-    builder = NetworkVerifierAndBuilder(False)
-    return verify_and_or_build_network(new_type, target, get_manager(target), None, None, None, key_filter, substitute_value, builder, DUMMY_REASONER)
+    builder = NetworkVerifierAndBuilder(target.get_obj(), new_type, False)
+    succeeded, _ = builder.build(key_filter, substitute_value, DUMMY_REASONER)
+    return succeeded
 
 def is_type_bindable_to_value(value, type, reasoner=DUMMY_REASONER):
-    builder = NetworkVerifierAndBuilder(True)
-    return verify_and_or_build_network(type, value, get_manager(value), None, None, None, MISSING, MISSING, builder, DUMMY_REASONER)
+    builder = NetworkVerifierAndBuilder(value, type, True)
+    succeeded, _ = builder.build(MISSING, MISSING, DUMMY_REASONER)
+    return succeeded
 
 def does_value_fit_through_type(value, type, reasoner=DUMMY_REASONER):
-    builder = NetworkVerifierAndBuilder(False)
-    return verify_and_or_build_network(type, value, get_manager(value), None, None, None, MISSING, MISSING, builder, DUMMY_REASONER)
+    builder = NetworkVerifierAndBuilder(value, type, False)
+    succeeded, _ = builder.build(MISSING, MISSING, DUMMY_REASONER)
+    return succeeded
 
 # def rebind_networks(manager):
 #     for attached_node in manager.get_attached_nodes():
@@ -579,12 +592,15 @@ class Node(object):
         self.attached = False
 
     def attach(self):
-        if self.attached:
-            return
+#        if self.attached:
+#            return
         self.attached = True
         self.target_manager.attach_node(self)
-        for child_node in self.child_nodes.values():
-            child_node.attach()
+
+    def get_stack(self):
+        yield self
+        for child in self.child_nodes.values():
+            yield from child.get_stack()
 
     def add_child_node(self, micro_op, key, child_node):
         self.child_nodes[(id(micro_op), key)] = child_node
@@ -598,15 +614,31 @@ class Node(object):
         self.child_nodes.update(other_node.child_nodes)
 
 class NetworkVerifierAndBuilder(object):
-    def __init__(self, binding):
+    def __init__(self, target, type, binding):
+        self.target = target
+        self.type = type
         self.binding = binding
         self.nodes = {}
-        self.top_node = None
 
-    def build(self):
-        if self.top_node is None:
-            raise FatalError()
-        return self.top_node
+    def build(self, key_filter, substitute_value, reasoner):
+        target_manager = get_manager(self.target)
+        result = self.visit(
+            self.type,
+            self.target,
+            target_manager,
+            None, None, None,
+            key_filter,
+            substitute_value,
+            reasoner
+        )
+
+        top_nodes = []
+
+        if target_manager:
+            top_nodes_and_acceptances = [ self.get_node(target_manager, t) for t in unwrap_types(self.type) ]
+            top_nodes = [ n for n, a in top_nodes_and_acceptances if a ]
+
+        return result, top_nodes
 
     def get_node(self, target_manager, type):
         result_key = (id(target_manager), id(type))
@@ -615,7 +647,7 @@ class NetworkVerifierAndBuilder(object):
         if node_and_accepted_from_builder:
             return node_and_accepted_from_builder
 
-        if self.top_node is not None:
+        if target_manager.get_obj() is not self.target:
             node_from_existing_type = target_manager.get_attached_node_for_type(type)
             if node_from_existing_type:
                 return node_from_existing_type, True
@@ -626,103 +658,100 @@ class NetworkVerifierAndBuilder(object):
         return node, None
 
     def accept_node(self, node, parent_node, parent_micro_op, parent_key):
-        if parent_node:
-            parent_node.add_child_node(parent_micro_op, parent_key, node)
-        else:
-            self.top_node = node
+        parent_node.add_child_node(parent_micro_op, parent_key, node)
 
     def reject_node(self, node):
         result_key = (id(node.target_manager), id(node.type))
         self.nodes[result_key] = (node, False)
 
-def verify_and_or_build_network(new_type, target, target_manager, parent_node, parent_micro_op, parent_key, key_filter, substitute_value, builder, reasoner):
-    target_is_composite = isinstance(target, Composite)
+    def visit(self, new_type, target, target_manager, parent_node, parent_micro_op, parent_key, key_filter, substitute_value, reasoner):
+        target_is_composite = isinstance(target, Composite)
 
-    target_effective_type = None
-    if target_manager:
-        target_effective_type = target_manager.get_effective_composite_type()
+        target_effective_type = None
+        if target_manager:
+            target_effective_type = target_manager.get_effective_composite_type()
 
-    child_reasoners = []
+        child_reasoners = []
 
-    atleast_one_sub_type_worked = False
-    for sub_type in unwrap_types(new_type):
-        child_reasoner = Reasoner()
-        child_reasoners.append(child_reasoner)
+        atleast_one_sub_type_worked = False
+        for sub_type in unwrap_types(new_type):
+            child_reasoner = Reasoner()
+            child_reasoners.append(child_reasoner)
 
-        if isinstance(sub_type, CompositeType) and target_is_composite:
-            potential_target_node, previously_accepted = builder.get_node(target_manager, sub_type)
+            if isinstance(sub_type, CompositeType) and target_is_composite:
+                potential_target_node, previously_accepted = self.get_node(target_manager, sub_type)
 
-            if previously_accepted is True:
-                atleast_one_sub_type_worked = True
-                continue
-            if previously_accepted is False:
-                continue
+                if previously_accepted is True:
+                    self.accept_node(potential_target_node, parent_node, parent_micro_op, parent_key)
+                    atleast_one_sub_type_worked = True
+                    continue
+                if previously_accepted is False:
+                    continue
 
-            if builder.binding:
-                # It only matters that the subtype is consistent if we intend to actually bind the types
-                # at the end, since inconsistent types can't be bound to runtime objects. But if we're
-                # simply testing that the data structure has the right shape to fit an inconsistent type
-                # that's absolutely fine
-                sub_type_consistent_reasoner = Reasoner()
-                if not sub_type.is_self_consistent(sub_type_consistent_reasoner):
-                    child_reasoner.push_inconsistent_type(sub_type)
-                    raise CompositeTypeIsInconsistent(sub_type_consistent_reasoner.to_message())
+                if self.binding:
+                    # It only matters that the subtype is consistent if we intend to actually bind the types
+                    # at the end, since inconsistent types can't be bound to runtime objects. But if we're
+                    # simply testing that the data structure has the right shape to fit an inconsistent type
+                    # that's absolutely fine
+                    sub_type_consistent_reasoner = Reasoner()
+                    if not sub_type.is_self_consistent(sub_type_consistent_reasoner):
+                        child_reasoner.push_inconsistent_type(sub_type)
+                        raise CompositeTypeIsInconsistent(sub_type_consistent_reasoner.to_message())
 
-            micro_ops_checks_worked = True
+                micro_ops_checks_worked = True
 
-            for micro_op in sub_type.get_micro_op_types().values():
-                if not micro_op.is_bindable_to(sub_type, target):
-                    child_reasoner.push_micro_op_not_bindable_to(micro_op, sub_type, target)
-                    micro_ops_checks_worked = False
-                    break
-
-                if micro_op.conflicts_with(sub_type, target_effective_type, child_reasoner):
-                    micro_op.conflicts_with(sub_type, target_effective_type, child_reasoner)
-                    micro_ops_checks_worked = False
-                    break
-
-                # Have prepare_bind return keys to be used for building the network
-                next_keys_and_targets, next_new_type = micro_op.prepare_bind(target, key_filter, substitute_value)
-
-                for next_key, next_target in next_keys_and_targets.items():
-                    if not verify_and_or_build_network(
-                        next_new_type,
-                        next_target,
-                        get_manager(next_target),
-                        potential_target_node,
-                        micro_op,
-                        next_key,
-                        MISSING,
-                        MISSING,
-                        builder,
-                        child_reasoner,
-                    ):
+                for micro_op in sub_type.get_micro_op_types().values():
+                    if not micro_op.is_bindable_to(sub_type, target):
+                        child_reasoner.push_micro_op_not_bindable_to(micro_op, sub_type, target)
                         micro_ops_checks_worked = False
                         break
 
-            if micro_ops_checks_worked:
-                builder.accept_node(potential_target_node, parent_node, parent_micro_op, parent_key)
+                    if micro_op.conflicts_with(sub_type, target_effective_type, child_reasoner):
+                        micro_op.conflicts_with(sub_type, target_effective_type, child_reasoner)
+                        micro_ops_checks_worked = False
+                        break
+
+                    # Have prepare_bind return keys to be used for building the network
+                    next_keys_and_targets, next_new_type = micro_op.prepare_bind(target, key_filter, substitute_value)
+
+                    for next_key, next_target in next_keys_and_targets.items():
+                        if not self.visit(
+                            next_new_type,
+                            next_target,
+                            get_manager(next_target),
+                            potential_target_node,
+                            micro_op,
+                            next_key,
+                            MISSING,
+                            MISSING,
+                            child_reasoner,
+                        ):
+                            micro_ops_checks_worked = False
+                            break
+
+                if micro_ops_checks_worked:
+                    self.accept_node(potential_target_node, parent_node, parent_micro_op, parent_key)
+                    atleast_one_sub_type_worked = True
+                else:
+                    self.reject_node(potential_target_node)
+
+            if isinstance(sub_type, CompositeType) and not target_is_composite:
+                child_reasoner.push_target_should_be_composite(sub_type, target)
+
+            if not isinstance(sub_type, CompositeType) and target_is_composite:
+                child_reasoner.push_target_should_not_be_composite(sub_type, target)
+
+            if isinstance(sub_type, (AnyType, ValueType)):
                 atleast_one_sub_type_worked = True
-            else:
-                builder.reject_node(potential_target_node)
 
-        if isinstance(sub_type, CompositeType) and not target_is_composite:
-            child_reasoner.push_target_should_be_composite(sub_type, target)
+            if not isinstance(sub_type, CompositeType) and not target_is_composite:
+                if sub_type.is_copyable_from(get_type_of_value(target), child_reasoner):
+                    atleast_one_sub_type_worked = True
 
-        if not isinstance(sub_type, CompositeType) and target_is_composite:
-            child_reasoner.push_target_should_not_be_composite(sub_type, target)
+        if not atleast_one_sub_type_worked:
+            reasoner.attach_child_reasoners(child_reasoners, parent_micro_op, new_type, target)
 
-        if isinstance(sub_type, (AnyType, ValueType)):
-            atleast_one_sub_type_worked = True
-
-        if not isinstance(sub_type, CompositeType) and not target_is_composite:
-            if sub_type.is_copyable_from(get_type_of_value(target), child_reasoner):
-                atleast_one_sub_type_worked = True
-
-    if not atleast_one_sub_type_worked:
-        reasoner.attach_child_reasoners(child_reasoners, parent_micro_op, new_type, target)
-
-    return atleast_one_sub_type_worked
+        return atleast_one_sub_type_worked
 
 @contextmanager
 def scoped_bind(value, composite_type, bind=True, reasoner=DUMMY_REASONER):

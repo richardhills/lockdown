@@ -154,7 +154,7 @@ def default_globals():
         Universal
     from lockdown.type_system.composites import scoped_bind
     from lockdown.executor.context import Context
-    from lockdown.type_system.composites import rebind_networks
+    from lockdown.type_system.composites import bind_key
 
     return {
         "__builtins": None,
@@ -167,7 +167,7 @@ def default_globals():
         "get_environment": get_environment,
         "CALCULATE_INITIAL_LENGTH": CALCULATE_INITIAL_LENGTH,
         "scoped_bind": scoped_bind,
-        "rebind_networks": rebind_networks,
+        "bind_key": bind_key,
         "FatalError": FatalError,
         "LockdownFunction": LockdownFunction,
         "ClosedFunctionType": ClosedFunctionType,
