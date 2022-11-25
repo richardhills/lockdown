@@ -359,7 +359,7 @@ def type_conditional_converter(expression):
             )
         ]
     )
-    get_manager(new_match).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+#    get_manager(new_match).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
     return new_match
 
 

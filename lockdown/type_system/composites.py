@@ -216,26 +216,6 @@ class CompositeObjectManager(object):
             )
         return self.cached_effective_composite_type
 
-    # def attach_network(self, network):
-    #     print("Attaching {} to {} {}".format(id(network), id(self), self.debug_reason))
-    #     already_here = self.attached_network_counts[id(network)] > 0
-    #
-    #     self.attached_networks[id(network)] = network
-    #     self.attached_network_counts[id(network)] = self.attached_network_counts[id(network)] + 1
-    #
-    #     return not already_here
-    #
-    # def detach_network(self, network):
-    #     print("Detaching {} to {} {}".format(id(network), id(self), self.debug_reason))
-    #     if id(network) not in self.attached_networks:
-    #         raise FatalError
-    #     self.attached_network_counts[id(network)] = self.attached_network_counts[id(network)] - 1
-    #     if self.attached_network_counts[id(network)] <= 0:
-    #         del self.attached_networks[id(network)]
-    #         return True
-    #     exit()
-    #     return False
-
     def get_attached_nodes(self):
         try:
             attached_nodes = [ n() for n in self.attached_nodes.values() ]
@@ -264,9 +244,12 @@ class CompositeObjectManager(object):
             raise FatalError()
         self.cached_effective_composite_type = None
         # TODO handle GCs on the weakrefs
-        weakref_to_node = weakref.ref(new_node)
+        weakref_to_node = weakref.ref(new_node, self.node_gced)
         self.attached_nodes[new_node] = weakref_to_node
         self.attached_nodes_by_type[new_node.type] = weakref_to_node
+
+    def node_gced(self, weakref_to_node):
+        self.cached_effective_composite_type = None
 
     def get_micro_op_type(self, tag):
         if not isinstance(tag, tuple):
@@ -507,15 +490,9 @@ def add_composite_type(target_manager, new_type, key_filter=MISSING, reasoner=DU
 
     if existing_node:
         existing_node.update(top_node)
-        stack = list(existing_node.get_stack())
-#        print(len(stack))
-        for n in existing_node.get_stack():
-            n.attach()
+        existing_node.attach()
     else:
-        stack = list(top_node.get_stack())
-#        print(len(stack))
-        for n in stack:
-            n.attach()
+        top_node.attach()
 
     return top_node
 
@@ -524,7 +501,7 @@ def bind_key(target_manager, key):
         add_composite_type(target_manager, attached_node.type, key)
 
 def can_add_composite_type_with_filter(target, new_type, key_filter, substitute_value):
-    builder = NetworkVerifierAndBuilder(target.get_obj(), new_type, False)
+    builder = NetworkVerifierAndBuilder(target, new_type, False)
     succeeded, _ = builder.build(key_filter, substitute_value, DUMMY_REASONER)
     return succeeded
 
@@ -592,17 +569,25 @@ class Node(object):
         self.attached = False
 
     def attach(self):
-#        if self.attached:
-#            return
+        count = 0
+        if self.attached:
+            return count
+        count += 1
         self.attached = True
         self.target_manager.attach_node(self)
+        for child in self.child_nodes.values():
+            count += child.attach()
+        return count
 
     def get_stack(self):
-        yield self
+        result = [ self ]
         for child in self.child_nodes.values():
-            yield from child.get_stack()
+            result.extend(child.get_stack())
+        return result
 
     def add_child_node(self, micro_op, key, child_node):
+        if not isinstance(key, (str, int)):
+            raise FatalError()
         self.child_nodes[(id(micro_op), key)] = child_node
 
     def update(self, other_node):
@@ -658,7 +643,8 @@ class NetworkVerifierAndBuilder(object):
         return node, None
 
     def accept_node(self, node, parent_node, parent_micro_op, parent_key):
-        parent_node.add_child_node(parent_micro_op, parent_key, node)
+        if node.target_manager.get_obj() is not self.target:
+            parent_node.add_child_node(parent_micro_op, parent_key, node)
 
     def reject_node(self, node):
         result_key = (id(node.target_manager), id(node.type))
@@ -764,5 +750,6 @@ def scoped_bind(value, composite_type, bind=True, reasoner=DUMMY_REASONER):
             top_node = add_composite_type(manager, composite_type, reasoner=reasoner)
         yield
     finally:
+        top_node = None
         # Wait for GC to unbind everything
         pass

@@ -65,7 +65,7 @@ class TestJSONParsing(TestCase):
                 "bar": 42
             } }
         """)
-        self.assertEqual(ast.foo.bar, 42)
+        self.assertEqual(ast._get_in("foo", "bar"), 42)
 
 
 class TestBasicFunction(TestCase):
@@ -319,9 +319,9 @@ class TestBuiltIns(TestCase):
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertIsInstance(result.value, PythonList)
-        get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
-        self.assertEqual(len(result.value), 4)
-        self.assertEqual(list(result.value), [ 1, 2, 3, 4 ])
+        result = result.value._to_list()
+        self.assertEqual(len(result), 4)
+        self.assertEqual(result, [ 1, 2, 3, 4 ])
 
     def test_irange(self):
         code = parse("""

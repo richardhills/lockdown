@@ -381,12 +381,11 @@ class TestUniversalObjectType(TestCase):
             "bar": "hello"
         })
 
-        add_composite_type(get_manager(foo),
+        with scoped_bind(foo,
             UniversalObjectType({ "foo": Const(IntegerType()) })
-        )
-
-        with self.assertRaises(Exception):
-            foo.foo = "hello"
+        ):
+            with self.assertRaises(Exception):
+                foo.foo = "hello"
 
     def test_const_is_enforced(self):
         return  # test doesn't work because the assignment uses the set-wildcard
@@ -407,19 +406,18 @@ class TestUniversalObjectType(TestCase):
             "foo": 5,
             "bar": "hello"
         })
-        add_composite_type(get_manager(foo),
+        with scoped_bind(foo,
             UniversalObjectType({ "foo": IntegerType() })
-        )
-        add_composite_type(get_manager(foo),
-            UniversalObjectType({ "bar": StringType() })
-        )
+        ):
+            with scoped_bind(foo,
+                UniversalObjectType({ "bar": StringType() })
+            ):
+                object_type = get_manager(foo).get_effective_composite_type()
 
-        object_type = get_manager(foo).get_effective_composite_type()
-
-        UniversalObjectType({
-            "foo": IntegerType(),
-            "bar": StringType()
-        }).is_copyable_from(object_type, DUMMY_REASONER)
+                UniversalObjectType({
+                    "foo": IntegerType(),
+                    "bar": StringType()
+                }).is_copyable_from(object_type, DUMMY_REASONER)
 
 
 class TestUnitTypes(TestCase):
@@ -427,47 +425,46 @@ class TestUnitTypes(TestCase):
         foo = PythonObject({
             "bar": 42
         })
-        add_composite_type(get_manager(foo), UniversalObjectType({
+        with scoped_bind(foo, UniversalObjectType({
             "bar": UnitType(42)
-        }))
-        self.assertEqual(foo.bar, 42)
+        })):
+            self.assertEqual(foo.bar, 42)
 
     def test_broadening_blocked(self):
         foo = PythonObject({
             "bar": 42
         })
-        add_composite_type(get_manager(foo), UniversalObjectType({
+        with scoped_bind(foo, UniversalObjectType({
             "bar": UnitType(42)
-        }))
-
-        with self.assertRaises(CompositeTypeIncompatibleWithTarget):
-            add_composite_type(get_manager(foo), UniversalObjectType({
-                "bar": IntegerType()
-            }))
+        })):
+            with self.assertRaises(CompositeTypeIncompatibleWithTarget):
+                add_composite_type(get_manager(foo), UniversalObjectType({
+                    "bar": IntegerType()
+                }))
 
     def test_narrowing_blocked(self):
         foo = PythonObject({
             "bar": 42
         })
-        add_composite_type(get_manager(foo), UniversalObjectType({
-            "bar": IntegerType()
-        }))
-        with self.assertRaises(CompositeTypeIncompatibleWithTarget):
-            add_composite_type(get_manager(foo), UniversalObjectType({
-                "bar": UnitType(42)
-            }))
+        with scoped_bind(foo, UniversalObjectType({
+                "bar": IntegerType()
+            })):
+            with self.assertRaises(CompositeTypeIncompatibleWithTarget):
+                add_composite_type(get_manager(foo), UniversalObjectType({
+                    "bar": UnitType(42)
+                }))
 
     def test_broadening_with_const_is_ok(self):
         foo = PythonObject({
             "bar": 42
         })
-        add_composite_type(get_manager(foo), UniversalObjectType({
+        with scoped_bind(foo, UniversalObjectType({
             "bar": UnitType(42)
-        }))
-
-        add_composite_type(get_manager(foo), UniversalObjectType({
-            "bar": Const(IntegerType())
-        }))
+        })):
+            with scoped_bind(foo, UniversalObjectType({
+                "bar": Const(IntegerType())
+            })):
+                pass
 
 
 class TestNestedUniversalObjectTypes(TestCase):
@@ -481,15 +478,14 @@ class TestNestedUniversalObjectTypes(TestCase):
             })
         })
 
-        add_composite_type(get_manager(foo),
+        with scoped_bind(foo,
             UniversalObjectType({
                 "bar": Bar
             })
-        )
+        ):
+            foo.bar = PythonObject({ "baz": 42 }, bind=Bar)
 
-        foo.bar = PythonObject({ "baz": 42 }, bind=Bar)
-
-        self.assertEqual(foo.bar.baz, 42)
+            self.assertEqual(foo.bar.baz, 42)
 
     def test_blocked_basic_assignment(self):
         foo = PythonObject({
@@ -498,16 +494,15 @@ class TestNestedUniversalObjectTypes(TestCase):
             })
         })
 
-        add_composite_type(get_manager(foo),
+        with scoped_bind(foo,
             UniversalObjectType({
                 "bar": UniversalObjectType({
                     "baz": IntegerType()
                 })
             })
-        )
-
-        with self.assertRaises(Exception):
-            foo.bar = PythonObject({ "baz": "hello" })
+        ):
+            with self.assertRaises(Exception):
+                foo.bar = PythonObject({ "baz": "hello" })
 
     def test_deletion_blocked(self):
         foo = PythonObject({
@@ -516,16 +511,15 @@ class TestNestedUniversalObjectTypes(TestCase):
             })
         })
 
-        add_composite_type(get_manager(foo),
+        with scoped_bind(foo,
             UniversalObjectType({
                 "bar": UniversalObjectType({
                     "baz": IntegerType()
                 })
             })
-        )
-
-        with self.assertRaises(Exception):
-            del foo.bar
+        ):
+            with self.assertRaises(Exception):
+                del foo.bar
 
     def test_broad_assignment(self):
         foo = PythonObject({
@@ -538,15 +532,14 @@ class TestNestedUniversalObjectTypes(TestCase):
             "baz": AnyType()
         })
 
-        add_composite_type(get_manager(foo),
+        with scoped_bind(foo,
             UniversalObjectType({
                 "bar": Bar
             })
-        )
+        ):
+            foo.bar = PythonObject({ "baz": "hello" }, bind=Bar)
 
-        foo.bar = PythonObject({ "baz": "hello" }, bind=Bar)
-
-        self.assertEqual(foo.bar.baz, "hello")
+            self.assertEqual(foo.bar.baz, "hello")
 
     def test_double_deep_assignment(self):
         foo = PythonObject({
@@ -565,17 +558,16 @@ class TestNestedUniversalObjectTypes(TestCase):
             "baz": Baz
         })
 
-        add_composite_type(get_manager(foo),
+        with scoped_bind(foo,
             UniversalObjectType({
                 "bar": Bar
             })
-        )
+        ):
+            self.assertEqual(foo.bar.baz.bam, 10)
 
-        self.assertEqual(foo.bar.baz.bam, 10)
+            foo.bar = PythonObject({ "baz": PythonObject({ "bam": 42 }) }, bind=Bar)
 
-        foo.bar = PythonObject({ "baz": PythonObject({ "bam": 42 }) }, bind=Bar)
-
-        self.assertEqual(foo.bar.baz.bam, 42)
+            self.assertEqual(foo.bar.baz.bam, 42)
 
     def test_conflicting_types(self):
         foo = PythonObject({
@@ -584,22 +576,21 @@ class TestNestedUniversalObjectTypes(TestCase):
             })
         })
 
-        add_composite_type(get_manager(foo),
+        with scoped_bind(foo,
             UniversalObjectType({
                 "bar": UniversalObjectType({
                     "baz": IntegerType()
                 })
             })
-        )
-
-        with self.assertRaises(Exception):
-            add_composite_type(get_manager(foo),
-                UniversalObjectType({
-                    "bar": UniversalObjectType({
-                        "baz": AnyType()
+        ):
+            with self.assertRaises(Exception):
+                add_composite_type(get_manager(foo),
+                    UniversalObjectType({
+                        "bar": UniversalObjectType({
+                            "baz": AnyType()
+                        })
                     })
-                })
-            )
+                )
 
     def test_changes_blocked_without_micro_ops(self):
         foo = PythonObject({
@@ -607,8 +598,6 @@ class TestNestedUniversalObjectTypes(TestCase):
                 "baz": 42
             })
         })
-
-        get_manager(foo)
 
         with self.assertRaises(Exception):
             foo.bar = "hello"
@@ -620,12 +609,11 @@ class TestNestedUniversalObjectTypes(TestCase):
             })
         })
 
-        add_composite_type(get_manager(foo),
+        with scoped_bind(foo,
             UniversalObjectType({ "bar": AnyType() })
-        )
-
-        foo.bar = "hello"
-        self.assertEqual(foo.bar, "hello")
+        ):
+            foo.bar = "hello"
+            self.assertEqual(foo.bar, "hello")
 
 
 class TestNestedPythonTypes(TestCase):
@@ -636,12 +624,11 @@ class TestNestedPythonTypes(TestCase):
             })
         })
 
-        add_composite_type(get_manager(foo), RICH_TYPE)
+        with scoped_bind(foo, DEFAULT_COMPOSITE_TYPE):
+            foo.bar.baz = 22
 
-        foo.bar.baz = 22
-
-        foo.bar = "hello"
-        self.assertEqual(foo.bar, "hello")
+            foo.bar = "hello"
+            self.assertEqual(foo.bar, "hello")
 
     def test_python_object_with_reference_can_be_modified(self):
         bar = PythonObject({
@@ -651,12 +638,11 @@ class TestNestedPythonTypes(TestCase):
             "bar": bar
         })
 
-        add_composite_type(get_manager(bar), UniversalObjectType({ "baz": IntegerType() }))
-        add_composite_type(get_manager(foo), DEFAULT_COMPOSITE_TYPE)
-
-        self.assertEqual(foo.bar.baz, 42)
-        foo.bar.baz = 5
-        self.assertEqual(foo.bar.baz, 5)
+        with scoped_bind(bar, UniversalObjectType({ "baz": IntegerType() })):
+            with scoped_bind(foo, DEFAULT_COMPOSITE_TYPE):
+                self.assertEqual(foo.bar.baz, 42)
+                foo.bar.baz = 5
+                self.assertEqual(foo.bar.baz, 5)
 
     def test_python_object_with_reference_types_are_enforced(self):
         bar = PythonObject({
@@ -680,16 +666,15 @@ class TestNestedPythonTypes(TestCase):
             "bar": bar
         })
 
-        add_composite_type(get_manager(bar), UniversalObjectType({ "baz": IntegerType() }))
-        add_composite_type(get_manager(foo), DEFAULT_COMPOSITE_TYPE)
+        with scoped_bind(bar, UniversalObjectType({ "baz": IntegerType() })):
+            with scoped_bind(foo, DEFAULT_COMPOSITE_TYPE):
+                foo.bar = PythonObject({
+                    "baz": 123
+                })
 
-        foo.bar = PythonObject({
-            "baz": 123
-        })
-
-        self.assertEqual(foo.bar.baz, 123)
-        foo.bar.baz = "what"
-        self.assertEqual(foo.bar.baz, "what")
+                self.assertEqual(foo.bar.baz, 123)
+                foo.bar.baz = "what"
+                self.assertEqual(foo.bar.baz, "what")
 
     def test_that_python_constraints_dont_spread_to_constrained_children(self):
         bar = PythonObject({
@@ -700,58 +685,56 @@ class TestNestedPythonTypes(TestCase):
         })
 
         # The first, stronger, type prevents the NO_SETTER_ERROR_COMPOSITE_TYPE spreading from foo to bar
-        add_composite_type(get_manager(bar), UniversalObjectType({ "baz": IntegerType() }))
-        add_composite_type(get_manager(foo), NO_SETTER_ERROR_COMPOSITE_TYPE)
+        with scoped_bind(bar, UniversalObjectType({ "baz": IntegerType() })):
+            with scoped_bind(foo, NO_SETTER_ERROR_COMPOSITE_TYPE):
+                self.assertIs(foo.bar, bar)
 
-        self.assertIs(foo.bar, bar)
+                self.assertEqual(len(get_manager(foo).get_attached_nodes()), 1)
+                self.assertEqual(len(get_manager(foo.bar).get_attached_nodes()), 1)
 
-        self.assertEqual(len(get_manager(foo).attached_types), 1)
-        self.assertEqual(len(get_manager(foo.bar).attached_types), 1)
+                # ... but when bar is replaced with a new object without constraints, the PythonObjectType
+                # spreads to the new object
+                foo.bar = PythonObject({
+                    "baz": 123
+                })
 
-        # ... but when bar is replaced with a new object without constraints, the PythonObjectType
-        # spreads to the new object
-        foo.bar = PythonObject({
-            "baz": 123
-        })
+                self.assertIsNot(foo.bar, bar)
 
-        self.assertIsNot(foo.bar, bar)
+                self.assertEqual(len(get_manager(foo.bar).get_attached_nodes()), 1)
 
-        self.assertEqual(len(get_manager(foo.bar).attached_types), 1)
-
-        # Now that the new object has the PythonObjectType constraint, we can't bind a stronger
-        # constraint
-        with self.assertRaises(CompositeTypeIncompatibleWithTarget):
-            add_composite_type(get_manager(foo.bar), UniversalObjectType({ "baz": IntegerType() }))
+                # Now that the new object has the PythonObjectType constraint, we can't bind a stronger
+                # constraint
+                with self.assertRaises(CompositeTypeIncompatibleWithTarget):
+                    add_composite_type(get_manager(foo.bar), UniversalObjectType({ "baz": IntegerType() }))
 
     def test_python_constraints_work_with_lists(self):
         foo = PythonObject({
             "bar": PythonList([ 1, 2, 3 ])
         })
 
-        add_composite_type(get_manager(foo), DEFAULT_COMPOSITE_TYPE)
-        del foo.bar[1]
+        with scoped_bind(foo, DEFAULT_COMPOSITE_TYPE):
+            del foo.bar[1]
 
     def test_python_constraints_work_with_lists2(self):
         foo = PythonObject({
             "bar": PythonList([ 1, 2, 3 ])
         })
 
-        add_composite_type(get_manager(foo), DEFAULT_COMPOSITE_TYPE)
-        foo.bar.insert(2, 5)
-        self.assertListEqual([ 1, 2, 5, 3 ], foo._get("bar")._to_list())
+        with scoped_bind(foo, DEFAULT_COMPOSITE_TYPE):
+            foo.bar.insert(2, 5)
+            self.assertListEqual([ 1, 2, 5, 3 ], foo._get("bar")._to_list())
 
     def test_python_constraints_work_with_lists3(self):
         foo = Universal(True, initial_wrapped={
             "bar": Universal(False, initial_wrapped={ 0: 1, 1: 2, 2: 3 })
         })
 
-        add_composite_type(get_manager(foo), DEFAULT_COMPOSITE_TYPE)
+        with scoped_bind(foo, DEFAULT_COMPOSITE_TYPE):
+            Bar = get_manager(foo._get("bar")).get_effective_composite_type()
 
-        Bar = get_manager(foo._get("bar")).get_effective_composite_type()
+            iter = Bar.get_micro_op_type(("iter", ))
 
-        iter = Bar.get_micro_op_type(("iter", ))
-
-        self.assertIsNotNone(iter)
+            self.assertIsNotNone(iter)
 
     def test_python_delete_works(self):
         foo = PythonObject({
@@ -760,10 +743,9 @@ class TestNestedPythonTypes(TestCase):
             })
         })
 
-        add_composite_type(get_manager(foo), DEFAULT_COMPOSITE_TYPE)
-
-        del foo.bar
-        self.assertFalse(hasattr(foo, "bar"))
+        with scoped_bind(foo, DEFAULT_COMPOSITE_TYPE):
+            del foo.bar
+            self.assertFalse(hasattr(foo, "bar"))
 
     def test_python_replacing_object_works(self):
         foo = PythonObject({
@@ -772,11 +754,9 @@ class TestNestedPythonTypes(TestCase):
             })
         })
 
-        add_composite_type(get_manager(foo), DEFAULT_COMPOSITE_TYPE)
-
-        foo.bar = PythonObject({ "baz": 123 })
-
-        self.assertEqual(foo.bar.baz, 123)
+        with scoped_bind(foo, DEFAULT_COMPOSITE_TYPE):
+            foo.bar = PythonObject({ "baz": 123 })
+            self.assertEqual(foo.bar.baz, 123)
 
     def test_python_random_read_fails_nicely(self):
         foo = PythonObject({
@@ -785,10 +765,9 @@ class TestNestedPythonTypes(TestCase):
             })
         })
 
-        add_composite_type(get_manager(foo), DEFAULT_COMPOSITE_TYPE)
-
-        with self.assertRaises(AttributeError):
-            foo.bop
+        with scoped_bind(foo, DEFAULT_COMPOSITE_TYPE):
+            with self.assertRaises(AttributeError):
+                foo.bop
 
 class TestDefaultDict(TestCase):
     def test_default_dict_is_consistent_type(self):
@@ -803,27 +782,29 @@ class TestDefaultDict(TestCase):
             "bar": "forty-two"
         }, default_factory=default_factory)
 
-        add_composite_type(get_manager(foo), UniversalDefaultDictType(StringType(), StringType(), name="test"))
-
-        self.assertEqual(foo.bar, "forty-two")
-        self.assertEqual(foo.bam, "bam-123")
+        with scoped_bind(foo, UniversalDefaultDictType(StringType(), StringType(), name="test")):
+            self.assertEqual(foo.bar, "forty-two")
+            self.assertEqual(foo.bam, "bam-123")
 
 class TestListObjects(TestCase):
+    def test_lists_cant_be_accessed_without_types(self):
+        foo = PythonList([ 1, 2, 3 ])
+        with self.assertRaises(IndexError):
+            foo[0]
+
     def test_basic_list_of_ints(self):
         foo = PythonList([ 1, 2, 3 ])
 
-        add_composite_type(get_manager(foo), UniversalListType(IntegerType()))
-
-        foo[0] = 42
-        self.assertEqual(foo[0], 42)
+        with scoped_bind(foo, UniversalListType(IntegerType())):
+            foo[0] = 42
+            self.assertEqual(foo[0], 42)
 
     def test_basic_tuple_of_ints(self):
         foo = PythonList([ 1, 2, 3 ])
 
-        add_composite_type(get_manager(foo), UniversalTupleType([ IntegerType(), IntegerType(), IntegerType() ]))
-
-        foo[0] = 42
-        self.assertEqual(foo[0], 42)
+        with scoped_bind(foo, UniversalTupleType([ IntegerType(), IntegerType(), IntegerType() ])):
+            foo[0] = 42
+            self.assertEqual(foo[0], 42)
 
     def test_bounds_enforced(self):
         foo = PythonList([ 1, 2 ])
@@ -966,72 +947,63 @@ class TestList(TestCase):
 
     def test_list_modification_wrong_type_blocked(self):
         foo = PythonList([ 4, 6, 8 ])
-        add_composite_type(get_manager(foo), UniversalListType(IntegerType()))
-
-        with self.assertRaises(TypeError):
-            foo.append("hello")
+        with scoped_bind(foo, UniversalListType(IntegerType())):
+            with self.assertRaises(TypeError):
+                foo.append("hello")
 
     def test_list_modification_right_type_ok(self):
         foo = PythonList([ 4, 6, 8 ])
-        add_composite_type(get_manager(foo), UniversalListType(IntegerType()))
-
-        foo.append(10)
+        with scoped_bind(foo, UniversalListType(IntegerType())):
+            foo.append(10)
 
     def test_list_appending_blocked(self):
         foo = PythonList([ 4, 6, 8 ])
-        add_composite_type(get_manager(foo), UniversalTupleType([]))
-
-        with self.assertRaises(IndexError):
-            foo.append(10)
+        with scoped_bind(foo, UniversalTupleType([])):
+            with self.assertRaises(IndexError):
+                foo.append(10)
 
     def test_mixed_type_tuple(self):
         foo = PythonList([ 4, 6, 8 ])
-        add_composite_type(get_manager(foo), UniversalTupleType([ IntegerType(), AnyType() ]))
+        with scoped_bind(foo, UniversalTupleType([ IntegerType(), AnyType() ])):
+            with self.assertRaises(TypeError):
+                foo[0] = "hello"
 
-        with self.assertRaises(TypeError):
-            foo[0] = "hello"
+            self.assertEqual(foo[0], 4)
 
-        self.assertEqual(foo[0], 4)
-
-        foo[1] = "what"
-        self.assertEqual(foo[1], "what")
+            foo[1] = "what"
+            self.assertEqual(foo[1], "what")
 
     def test_outside_tuple_access_blocked(self):
         foo = PythonList([ 4, 6, 8 ])
-        add_composite_type(get_manager(foo), UniversalTupleType([ IntegerType(), AnyType() ]))
-
-        with self.assertRaises(IndexError):
-            foo[2]
-        with self.assertRaises(IndexError):
-            foo[2] = "hello"
+        with scoped_bind(foo, UniversalTupleType([ IntegerType(), AnyType() ])):
+            with self.assertRaises(IndexError):
+                foo[2]
+            with self.assertRaises(IndexError):
+                foo[2] = "hello"
 
     def test_outside_tuple_access_allowed(self):
         foo = PythonList([ 4, 6, 8 ])
-        add_composite_type(get_manager(foo), UniversalListType(AnyType()))
-
-        self.assertEqual(foo[2], 8)
-        foo[2] = "hello"
-        self.assertEqual(foo[2], "hello")
+        with scoped_bind(foo, UniversalListType(AnyType())):
+            self.assertEqual(foo[2], 8)
+            foo[2] = "hello"
+            self.assertEqual(foo[2], "hello")
 
     def test_combined_const_list_and_tuple(self):
         foo = PythonList([ 4, 6, 8 ])
-        add_composite_type(get_manager(foo), UniversalLupleType([ IntegerType(), AnyType() ], Const(AnyType())))
-
-        self.assertEqual(foo[2], 8)
+        with scoped_bind(foo, UniversalLupleType([ IntegerType(), AnyType() ], Const(AnyType()))):
+            self.assertEqual(foo[2], 8)
 
     def test_insert_at_start(self):
         foo = PythonList([ 4, 6, 8 ])
-        add_composite_type(get_manager(foo), UniversalListType(IntegerType()))
-
-        foo.insert(0, 2)
-        self.assertEqual(list(foo), [ 2, 4, 6, 8 ])
+        with scoped_bind(foo, UniversalListType(IntegerType())):
+            foo.insert(0, 2)
+            self.assertEqual(list(foo), [ 2, 4, 6, 8 ])
 
     def test_insert_with_wrong_type_blocked(self):
         foo = PythonList([ 4, 6, 8 ])
-        add_composite_type(get_manager(foo), UniversalListType(IntegerType()))
-
-        with self.assertRaises(Exception):
-            foo.insert(0, "hello")
+        with scoped_bind(foo, UniversalListType(IntegerType())):
+            with self.assertRaises(Exception):
+                foo.insert(0, "hello")
 
     def test_luple_type_is_consistent(self):
         type = UniversalLupleType(
@@ -1042,50 +1014,44 @@ class TestList(TestCase):
 
     def test_insert_on_short_tuple(self):
         foo = PythonList([ 4, 6, 8 ])
-        add_composite_type(get_manager(foo), UniversalLupleType([ IntegerType() ], IntegerType()))
-
-        foo.insert(0, 2)
-        self.assertEqual(list(foo), [ 2, 4, 6, 8 ])
+        with scoped_bind(foo, UniversalLupleType([ IntegerType() ], IntegerType())):
+            foo.insert(0, 2)
+            self.assertEqual(list(foo), [ 2, 4, 6, 8 ])
 
     def test_insert_on_long_tuple(self):
         foo = PythonList([ 4, 6, 8 ])
-        add_composite_type(get_manager(foo),
+        with scoped_bind(foo,
             UniversalLupleType(
                 [ IntegerType(), IntegerType() ],
                 IntegerType()
             )
-        )
-
-        foo.insert(0, 2)
-        self.assertEqual(list(foo), [ 2, 4, 6, 8 ])
+        ):
+            foo.insert(0, 2)
+            self.assertEqual(list(foo), [ 2, 4, 6, 8 ])
 
     def test_insert_on_very_long_tuple(self):
         foo = PythonList([ 4, 6, 8, 10, 12, 14 ])
-        add_composite_type(get_manager(foo), UniversalLupleType([ IntegerType(), IntegerType(), IntegerType(), IntegerType(), IntegerType(), IntegerType() ], IntegerType()))
-
-        foo.insert(0, 2)
-        self.assertEqual(list(foo), [ 2, 4, 6, 8, 10, 12, 14 ])
+        with scoped_bind(foo, UniversalLupleType([ IntegerType(), IntegerType(), IntegerType(), IntegerType(), IntegerType(), IntegerType() ], IntegerType())):
+            foo.insert(0, 2)
+            self.assertEqual(list(foo), [ 2, 4, 6, 8, 10, 12, 14 ])
 
     def test_sparse_list_setting(self):
         foo = PythonList([ 4, 6, 8 ], is_sparse=True)
-        add_composite_type(get_manager(foo), UniversalListType(IntegerType(), is_sparse=True))
-
-        foo[4] = 12
-        self.assertEqual(list(foo), [ 4, 6, 8, SPARSE_ELEMENT, 12 ])
+        with scoped_bind(foo, UniversalListType(IntegerType(), is_sparse=True)):
+            foo[4] = 12
+            self.assertEqual(list(foo), [ 4, 6, 8, SPARSE_ELEMENT, 12 ])
 
     def test_sparse_list_inserting(self):
         foo = PythonList([ 4, 6, 8 ], is_sparse=True)
-        add_composite_type(get_manager(foo), UniversalListType(IntegerType(), is_sparse=True))
-
-        foo.insert(4, 12)
-        self.assertEqual(list(foo), [ 4, 6, 8, SPARSE_ELEMENT, 12 ])
+        with scoped_bind(foo, UniversalListType(IntegerType(), is_sparse=True)):
+            foo.insert(4, 12)
+            self.assertEqual(list(foo), [ 4, 6, 8, SPARSE_ELEMENT, 12 ])
 
     def test_set_on_non_sparse_blocked(self):
         foo = PythonList([ 4, 6, 8 ])
-        add_composite_type(get_manager(foo), UniversalListType(IntegerType(), is_sparse=False))
-
-        with self.assertRaises(IndexError):
-            foo[4] = 12
+        with scoped_bind(foo, UniversalListType(IntegerType(), is_sparse=False)):
+            with self.assertRaises(IndexError):
+                foo[4] = 12
 
     def test_incorrect_type_blocked(self):
         foo = PythonList([ 4, 6, 8 ])
@@ -1225,14 +1191,11 @@ class TestRuntime(TestCase):
         })
 
         Atn = add_composite_type(get_manager(A), At)
-        self.assertEqual(len(get_manager(A).attached_nodes), 1)
-        self.assertEqual(get_manager(A).attached_network_counts[id(Atn.network)], 1)
+        self.assertEqual(len(get_manager(A).get_attached_nodes()), 1)
         Btn = add_composite_type(get_manager(B), Bt)
-        self.assertEqual(len(get_manager(A).attached_nodes), 2)
-        self.assertEqual(get_manager(A).attached_network_counts[id(Atn.network)], 1)
+        self.assertEqual(len(get_manager(A).get_attached_nodes()), 1)
         Btn2 = add_composite_type(get_manager(B), Bt)
-        self.assertEqual(len(get_manager(A).attached_nodes), 3)
-        self.assertEqual(get_manager(A).attached_network_counts[id(Atn.network)], 1)
+        self.assertEqual(len(get_manager(A).get_attached_nodes()), 1)
 
 
     def test_wildcard_extensions(self):
@@ -1251,16 +1214,12 @@ class TestRuntime(TestCase):
         }, wildcard_type=Bt)
 
         Atn = add_composite_type(get_manager(A), At)
-        self.assertEqual(len(get_manager(A).attached_nodes), 1)
-        self.assertEqual(len(get_manager(B).attached_nodes), 1)
-        self.assertEqual(get_manager(A).attached_network_counts[id(Atn.network)], 1)
-        self.assertEqual(get_manager(B).attached_network_counts[id(Atn.network)], 0)
+        self.assertEqual(len(get_manager(A).get_attached_nodes()), 1)
+        self.assertEqual(len(get_manager(B).get_attached_nodes()), 1)
 
-        Atn.network.detach()
-        self.assertEqual(len(get_manager(A).attached_nodes), 0)
-        self.assertEqual(len(get_manager(B).attached_nodes), 0)
-        self.assertEqual(get_manager(A).attached_network_counts[id(Atn.network)], 0)
-        self.assertEqual(get_manager(B).attached_network_counts[id(Atn.network)], 0)
+        Atn = None
+        self.assertEqual(len(get_manager(A).get_attached_nodes()), 0)
+        self.assertEqual(len(get_manager(B).get_attached_nodes()), 0)
 
 
     def test_overlapping_types(self):
@@ -1287,21 +1246,16 @@ class TestRuntime(TestCase):
 
         Atn = add_composite_type(get_manager(A), At)
         Asn = add_composite_type(get_manager(A), As)
-        self.assertEqual(len(get_manager(A).attached_nodes), 2)
-        self.assertEqual(len(get_manager(B).attached_nodes), 2)
-        self.assertEqual(len(get_manager(A).attached_networks), 2)
-        self.assertEqual(len(get_manager(B).attached_networks), 0)
-        self.assertEqual(get_manager(A).attached_network_counts[id(Atn.network)], 1)
-        self.assertEqual(get_manager(B).attached_network_counts[id(Atn.network)], 0)
+        self.assertEqual(len(get_manager(A).get_attached_nodes()), 2)
+        self.assertEqual(len(get_manager(B).get_attached_nodes()), 2)
 
-        Atn.network.detach()
-        Asn.network.detach()
-        self.assertEqual(len(get_manager(A).attached_nodes), 0)
-        self.assertEqual(len(get_manager(B).attached_nodes), 0)
-        self.assertEqual(len(get_manager(A).attached_networks), 0)
-        self.assertEqual(len(get_manager(B).attached_networks), 0)
-        self.assertEqual(get_manager(A).attached_network_counts[id(Atn.network)], 0)
-        self.assertEqual(get_manager(B).attached_network_counts[id(Asn.network)], 0)
+        Atn = None
+        self.assertEqual(len(get_manager(A).get_attached_nodes()), 1)
+        self.assertEqual(len(get_manager(B).get_attached_nodes()), 1)
+
+        Asn = None
+        self.assertEqual(len(get_manager(A).get_attached_nodes()), 0)
+        self.assertEqual(len(get_manager(B).get_attached_nodes()), 0)
 
 
     def test_overlapping_with_rich_type(self):
@@ -1322,21 +1276,13 @@ class TestRuntime(TestCase):
 
         Atn = add_composite_type(get_manager(A), At)
         Dtn = add_composite_type(get_manager(A), DEFAULT_COMPOSITE_TYPE)
-        self.assertEqual(len(get_manager(A).attached_nodes), 2)
-        self.assertEqual(len(get_manager(B).attached_nodes), 2)
-        self.assertEqual(len(get_manager(A).attached_networks), 2)
-        self.assertEqual(len(get_manager(B).attached_networks), 0)
-        self.assertEqual(get_manager(A).attached_network_counts[id(Atn.network)], 1)
-        self.assertEqual(get_manager(A).attached_network_counts[id(Dtn.network)], 1)
+        self.assertEqual(len(get_manager(A).get_attached_nodes()), 2)
+        self.assertEqual(len(get_manager(B).get_attached_nodes()), 2)
 
-        Atn.network.detach()
-        Dtn.network.detach()
-        self.assertEqual(len(get_manager(A).attached_nodes), 0)
-        self.assertEqual(len(get_manager(B).attached_nodes), 0)
-        self.assertEqual(len(get_manager(A).attached_networks), 0)
-        self.assertEqual(len(get_manager(B).attached_networks), 0)
-        self.assertEqual(get_manager(A).attached_network_counts[id(Atn.network)], 0)
-        self.assertEqual(get_manager(B).attached_network_counts[id(Dtn.network)], 0)
+        Atn = None
+        Dtn = None
+        self.assertEqual(len(get_manager(A).get_attached_nodes()), 0)
+        self.assertEqual(len(get_manager(B).get_attached_nodes()), 0)
 
 
     def test_modifying(self):
@@ -1355,19 +1301,15 @@ class TestRuntime(TestCase):
             "bar": A
         }, bind=Bt)
 
-        self.assertEqual(len(get_manager(A).attached_nodes), 1)
-        self.assertEqual(len(get_manager(A).attached_networks), 0)
-        self.assertEqual(len(get_manager(B).attached_nodes), 1)
-        self.assertEqual(len(get_manager(B).attached_networks), 1)
+        self.assertEqual(len(get_manager(A).get_attached_nodes()), 1)
+        self.assertEqual(len(get_manager(B).get_attached_nodes()), 1)
 
         B.bar = PythonObject({
             "foo": 42
         }, bind=At)
         
-        self.assertEqual(len(get_manager(A).attached_nodes), 0)
-        self.assertEqual(len(get_manager(A).attached_networks), 0)
-        self.assertEqual(len(get_manager(B).attached_nodes), 1)
-        self.assertEqual(len(get_manager(B).attached_networks), 1)
+        self.assertEqual(len(get_manager(A).get_attached_nodes()), 0)
+        self.assertEqual(len(get_manager(B).get_attached_nodes()), 1)
 
     def test_modifying2(self):
         Bt = UniversalObjectType({
@@ -1388,12 +1330,8 @@ class TestRuntime(TestCase):
         Atn = add_composite_type(get_manager(A), At)
         Dtn = add_composite_type(get_manager(A), DEFAULT_COMPOSITE_TYPE)
 
-        self.assertEqual(len(get_manager(A).attached_nodes), 2)
-        self.assertEqual(get_manager(A).attached_network_counts[id(Atn.network)], 1)
-        self.assertEqual(get_manager(A).attached_network_counts[id(Dtn.network)], 1)
-        self.assertEqual(len(get_manager(B).attached_nodes), 2)
-        self.assertEqual(get_manager(B).attached_network_counts[id(Atn.network)], 0)
-        self.assertEqual(get_manager(B).attached_network_counts[id(Dtn.network)], 0)
+        self.assertEqual(len(get_manager(A).get_attached_nodes()), 2)
+        self.assertEqual(len(get_manager(B).get_attached_nodes()), 2)
 
         B2 = PythonObject({
             "foo": 42
@@ -1401,15 +1339,9 @@ class TestRuntime(TestCase):
 
         A.bar = B2
 
-        self.assertEqual(len(get_manager(A).attached_nodes), 2)
-        self.assertEqual(get_manager(A).attached_network_counts[id(Atn.network)], 1)
-        self.assertEqual(get_manager(A).attached_network_counts[id(Dtn.network)], 1)
-        self.assertEqual(len(get_manager(B).attached_nodes), 0)
-        self.assertEqual(get_manager(B).attached_network_counts[id(Atn.network)], 0)
-        self.assertEqual(get_manager(B).attached_network_counts[id(Dtn.network)], 0)
-        self.assertEqual(len(get_manager(B2).attached_nodes), 2)
-        self.assertEqual(get_manager(B2).attached_network_counts[id(Atn.network)], 0)
-        self.assertEqual(get_manager(B2).attached_network_counts[id(Dtn.network)], 0)
+        self.assertEqual(len(get_manager(A).get_attached_nodes()), 2)
+        self.assertEqual(len(get_manager(B).get_attached_nodes()), 0)
+        self.assertEqual(len(get_manager(B2).get_attached_nodes()), 2)
 
     def test_modifying_list(self):
         Bt = UniversalObjectType({
@@ -1424,14 +1356,10 @@ class TestRuntime(TestCase):
         A = PythonList([ B ])
 
         Atn = add_composite_type(get_manager(A), At)
-        Dtn = add_composite_type(get_manager(A), DEFAULT_COMPOSITE_TYPE, Reasoner())
+        Dtn = add_composite_type(get_manager(A), DEFAULT_COMPOSITE_TYPE)
 
-        self.assertEqual(len(get_manager(A).attached_nodes), 2)
-        self.assertEqual(get_manager(A).attached_network_counts[id(Atn.network)], 1)
-        self.assertEqual(get_manager(A).attached_network_counts[id(Dtn.network)], 1)
-        self.assertEqual(len(get_manager(B).attached_nodes), 2)
-        self.assertEqual(get_manager(B).attached_network_counts[id(Atn.network)], 0)
-        self.assertEqual(get_manager(B).attached_network_counts[id(Dtn.network)], 0)
+        self.assertEqual(len(get_manager(A).get_attached_nodes()), 2)
+        self.assertEqual(len(get_manager(B).get_attached_nodes()), 2)
 
         B2 = PythonObject({
             "foo": 42
@@ -1439,15 +1367,9 @@ class TestRuntime(TestCase):
 
         A[0] = B2
 
-        self.assertEqual(len(get_manager(A).attached_nodes), 2)
-        self.assertEqual(get_manager(A).attached_network_counts[id(Atn.network)], 1)
-        self.assertEqual(get_manager(A).attached_network_counts[id(Dtn.network)], 1)
-        self.assertEqual(len(get_manager(B).attached_nodes), 0)
-        self.assertEqual(get_manager(B).attached_network_counts[id(Atn.network)], 0)
-        self.assertEqual(get_manager(B).attached_network_counts[id(Dtn.network)], 0)
-        self.assertEqual(len(get_manager(B2).attached_nodes), 2)
-        self.assertEqual(get_manager(B2).attached_network_counts[id(Atn.network)], 0)
-        self.assertEqual(get_manager(B2).attached_network_counts[id(Dtn.network)], 0)
+        self.assertEqual(len(get_manager(A).get_attached_nodes()), 2)
+        self.assertEqual(len(get_manager(B).get_attached_nodes()), 0)
+        self.assertEqual(len(get_manager(B2).get_attached_nodes()), 2)
 
 class TestRDHInstances(TestCase):
     def test_object_set_and_get(self):

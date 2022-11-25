@@ -503,9 +503,9 @@ class GetterMicroOpType(MicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         if key_filter is MISSING or key_filter == self.key:
             if substitute_value is not MISSING:
-                items = ( (key_filter, substitute_value), )
+                items = ( (self.key, substitute_value), )
             elif target._contains(self.key):
-                items = ( (key_filter, target._get(self.key)), )
+                items = ( (self.key, target._get(self.key)), )
             else:
                 items = []
         else:
@@ -868,15 +868,15 @@ class GetterWildcardMicroOpType(MicroOpType):
     def prepare_bind(self, target, key_filter, substitute_value):
         if key_filter is not MISSING:
             if substitute_value is not MISSING:
-                items = { key_filter: substitute_value }
+                items = [ (key_filter, substitute_value) ]
             elif target._contains(key_filter):
-                items = { key_filter: target._get(key_filter) }
+                items = [ (key_filter, target._get(key_filter)) ]
             else:
-                items = {}
+                items = []
         else:
-            items = target._to_dict()
+            items = target._items()
 
-        items = { k: v for k, v in items.items() if v is not SPARSE_ELEMENT }
+        items = { k: v for k, v in items if v is not SPARSE_ELEMENT }
 
         return ( items, self.value_type )
 
