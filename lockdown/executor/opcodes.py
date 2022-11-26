@@ -553,7 +553,7 @@ class DynamicDereferenceOp(Opcode):
         break_types.add(
             self, 
             "exception",
-            self.INVALID_DEREFERENCE.get_type()
+            self.INVALID_DEREFERENCE.get_type(self.reference)
         )
 
         break_types.add(self, "value", AnyType())
@@ -568,7 +568,6 @@ class DynamicDereferenceOp(Opcode):
             )
 
             if references is None:
-                ContextSearcher(context, check_wildcards=True).search_for_reference(self.reference, {})
                 return frame.exception(self, self.INVALID_DEREFERENCE())
 
             target = context

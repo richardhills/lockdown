@@ -68,41 +68,6 @@ static valuesG = function(any type) {
 	};
 };
 
-static sum = function(Iterable<any, int> list) => int {
-	int total = 0;
-	list *|> {
-		total = total + value;
-	};
-	return total;
-};
-
-static max = function({
-	type: "Universal",
-	micro_ops: [{
-        type: "iter",
-        params: [ int, int ]		
-	}, {
-		type: "get",
-		index: 0,
-		params: [ 0, int ]
-	}]
-} list) => int {
-	int largestValue = list[0];
-	list *|> {
-		if(argument.value > largestValue) {
-			largestValue = argument.value;
-		};
-	};
-	return largestValue;
-};
-
-static gcd = function(int a, int b) {
-  while(b != 0) {
-    [ a, b ] = [ b, a % b ];
-  };
-  return a;
-};
-
 static intYielder = Function<> => void, yields int => void;
 
 static list = function(intYielder func) {
@@ -150,6 +115,50 @@ static find = function(
 	return 0;
 };
 
+
+static sum = function(Iterable<any, int> list) => int {
+  int total = 0;
+  list *|> {
+    total = total + value;
+  };
+  return total;
+};
+
+static max = function({
+  type: "Universal",
+  micro_ops: [{
+        type: "iter",
+        params: [ int, int ]    
+  }, {
+    type: "get",
+    index: 0,
+    params: [ 0, int ]
+  }]
+} list) => int {
+  int largestValue = list[0];
+  list *|> {
+    if(argument.value > largestValue) {
+      largestValue = argument.value;
+    };
+  };
+  return largestValue;
+};
+
+static gcd = function(int a, int b) {
+  while(b != 0) {
+    [ a, b ] = [ b, a % b ];
+  };
+  return a;
+};
+
+static factorial = function(int a) {
+  int result = 1;
+  for(var i from range(1, a)) {
+    result = result * i;
+  };
+  return result;
+};
+
 export {
-	var, any, int, bool, string, void, Iterable, keys, values, valuesG, sum, max, gcd, list,  range, irange, length, find
+	var, any, int, bool, string, void, Iterable, keys, values, valuesG, sum, max, gcd, factorial, list,  range, irange, length, find
 };

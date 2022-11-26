@@ -1408,6 +1408,18 @@ class TestEuler(TestCase):
         _, result = bootstrap_function(code)
         self.assertEqual(result.value, 20)
 
+    def test_15(self):
+        code = parse("""
+            function() {
+                var binomial = function(int n, int k) {
+                    return factorial(n) / factorial(k) / factorial(n - k);
+                };
+                return binomial(40, 20);
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.value, 1378465288200)
+
 
     def test_28(self):
         code = parse("""
@@ -1436,7 +1448,7 @@ class TestEuler(TestCase):
                         ways[ [i + 1, j] ] = ways[ [i, j] ] + (j >= coin ? ways[ [i + 1, j - coin] ] : 0);
                     };
                 };
-                return ways[ [ COINS.length, TOTAL ] ];
+                return ways[ [ length(COINS), TOTAL ] ];
             }
         """, debug=True)
         _, result = bootstrap_function(code, check_safe_exit=False)
