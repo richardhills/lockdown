@@ -241,6 +241,8 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
             declared_break_types_for_mode = declared_break_types._get(mode, declared_break_types._get("infer-all", None))
             if declared_break_types_for_mode:
                 declared_break_types_for_mode = declared_break_types_for_mode._to_list()
+            else:
+                declared_break_types_for_mode = []
 
             for declared_break_type_for_mode in declared_break_types_for_mode:
                 # Check if this declared_break_type_for_mode is enough to capture the actual_break_types
@@ -265,9 +267,6 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
                     final_declared_break_types.add(None, mode, final_out, final_in)
                     break
             else:
-                print("STOP")
-                result = final_out.is_copyable_from(actual_out, DUMMY_REASONER)
-                print("STOP")
                 raise PreparationException("""Nothing declared for {}, {}.\nFunction declares break types {}.\nBut local_initialization breaks {}, code breaks {}""".format(
                     mode, actual_break_type, declared_break_types, local_other_break_types, code_break_types
                 ))

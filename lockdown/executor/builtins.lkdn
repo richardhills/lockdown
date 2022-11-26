@@ -46,32 +46,32 @@ static Iterable = function(any keyType, any valueType) => any {
 	return {
 		type: "Universal",
 		micro_ops: [{
-            type: "iter",
-            params: [ keyType, valueType ]		
+      type: "iter",
+      params: [ keyType, valueType ]		
 		}]
 	};
 };
 
 static keys = function(Iterable<any, any> list) {
 	return list *|> {
-		continue argument[1];
+		continue key;
 	};
 };
 
 static values = function(Iterable<any, any> list) {
-	return list *|> { continue argument[2]; };
+	return list *|> { continue value; };
 };
 
 static valuesG = function(any type) {
 	return dynamic function(Iterable<any, prepare.local.type> list) => Iterable<any, prepare.local.type> {
-		return list *|> { continue argument[2]; };
+		return list *|> { continue value; };
 	};
 };
 
 static sum = function(Iterable<any, int> list) => int {
 	int total = 0;
 	list *|> {
-		total = total + argument[2];
+		total = total + value;
 	};
 	return total;
 };
@@ -89,8 +89,8 @@ static max = function({
 } list) => int {
 	int largestValue = list[0];
 	list *|> {
-		if(argument[2] > largestValue) {
-			largestValue = argument[2];
+		if(argument.value > largestValue) {
+			largestValue = argument.value;
 		};
 	};
 	return largestValue;

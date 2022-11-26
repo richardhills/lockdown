@@ -632,7 +632,7 @@ class RDHLang5Visitor(langVisitor):
                 invoke_op(
                     prepare_function_lit(loop_code, **get_context_debug_info(ctx)),
                     object_template_op({
-                        iterator_name: dereference("argument.2", **get_context_debug_info(ctx))
+                        iterator_name: dereference("argument.value", **get_context_debug_info(ctx))
                     }, **get_context_debug_info(ctx)),
                     **get_context_debug_info(ctx)
                 ),

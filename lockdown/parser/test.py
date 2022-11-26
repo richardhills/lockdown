@@ -487,7 +487,7 @@ class TestMapPipeline(TestCase):
     def test_map_pipeline(self):
         code = parse("""
             function() {
-                return [ 4, 6, 2 ] *|> { continue argument[2] + 1; };
+                return [ 4, 6, 2 ] *|> { continue value + 1; };
             }
         """, debug=True)
         _, result = bootstrap_function(code)
@@ -497,7 +497,7 @@ class TestMapPipeline(TestCase):
     def test_index_pipeline(self):
         code = parse("""
             function() {
-                return [ 4, 6, 2 ] *|> { continue argument[0]; };
+                return [ 4, 6, 2 ] *|> { continue index; };
             }
         """, debug=True)
         _, result = bootstrap_function(code)
@@ -507,7 +507,7 @@ class TestMapPipeline(TestCase):
     def test_keys_pipeline(self):
         code = parse("""
             function() {
-                return { foo: 3, bar: 5 } *|> { continue argument[1]; };
+                return { foo: 3, bar: 5 } *|> { continue key; };
             }
         """, debug=True)
         _, result = bootstrap_function(code)

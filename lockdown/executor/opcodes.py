@@ -801,12 +801,13 @@ class MapOp(OpcodeOperandMixin, Opcode):
 
         if self.iter_micro_op:
             immediate_context = immediate_context or {}
-            immediate_context["suggested_argument_type"] = UniversalTupleType([
-                IntegerType(),
-                self.iter_micro_op.key_type,
-                self.iter_micro_op.value_type
-            ])
+            immediate_context["suggested_argument_type"] = UniversalObjectType({
+                "index": IntegerType(),
+                "key": self.iter_micro_op.key_type,
+                "value": self.iter_micro_op.value_type
+            })
 
+        # TODO Verify the function can accept the type that we call it with
         self.mapper.prepare(break_types, context, frame_manager, hooks, immediate_context)
 
         if not self.iter_micro_op:
@@ -873,7 +874,12 @@ class MapOp(OpcodeOperandMixin, Opcode):
                     with frame_manager.capture("end") as ender:
                         with frame_manager.capture("continue") as capturer:
                             with frame_manager.capture("value"):
-                                mapper.invoke(PythonList([ i, k, v ]), frame_manager, hooks)
+                                args = PythonObject({
+                                    "index": i,
+                                    "key": k,
+                                    "value": v
+                                })
+                                mapper.invoke(args, frame_manager, hooks)
                         if capturer.value is not None:
                             results.append(capturer.value)
                     if ender.value is not None:
