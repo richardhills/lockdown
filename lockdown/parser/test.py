@@ -441,6 +441,58 @@ class TestBuiltIns(TestCase):
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(12, result.value)
 
+class TestMaths(TestCase):
+    def test_gcm1(self):
+        code = parse("""
+            function() {
+                return gcd(1, 1);
+            }
+        """)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 1);
+
+    def test_gcm2(self):
+        code = parse("""
+            function() {
+                return gcd(5, 5);
+            }
+        """)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 5);
+
+    def test_gcm3(self):
+        code = parse("""
+            function() {
+                return gcd(5, 25);
+            }
+        """)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 5);
+
+    def test_gcm4(self):
+        code = parse("""
+            function() {
+                return gcd(15, 25);
+            }
+        """)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 5);
+
+    def test_gcm5(self):
+        code = parse("""
+            function() {
+                return gcd(7, 13);
+            }
+        """)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 1);
+
+
 class TestPipeline(TestCase):
     def test_value_pipeline(self):
         code = parse("""
@@ -1161,6 +1213,22 @@ class TestEuler(TestCase):
         """, debug=True)
         _, result = bootstrap_function(code)
         self.assertEqual(result.value, 906609)
+
+    def test_5(self):
+        code = parse("""
+            function() {
+                var solve = function(int test) {
+                    int result = 1;
+                    for(var i from range(1, test + 1)) {
+                        result = result * i / gcd(result, i);
+                    };
+                    return result;
+                };
+                return solve(20);
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.value, 232792560)
 
     def test_6(self):
         code = parse("""

@@ -96,6 +96,13 @@ static max = function({
 	return largestValue;
 };
 
+static gcd = function(int a, int b) {
+  while(b != 0) {
+    [ a, b ] = [ b, a % b ];
+  };
+  return a;
+};
+
 static intYielder = Function<> => void, yields int => void;
 
 static list = function(intYielder func) {
@@ -144,5 +151,5 @@ static find = function(
 };
 
 export {
-	var, any, int, bool, string, void, Iterable, keys, values, valuesG, sum, max, list,  range, irange, length, find
+	var, any, int, bool, string, void, Iterable, keys, values, valuesG, sum, max, gcd, list,  range, irange, length, find
 };
