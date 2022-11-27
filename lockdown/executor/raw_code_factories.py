@@ -532,6 +532,11 @@ def condition_op(condition, when_true, when_false):
         "when_false": when_false
     }, debug_reason="code")
 
+def typeof_op(expression):
+    return PythonObject({
+        "opcode": "typeof",
+        "expression": expression
+    })
 
 def prepare_op(function_expression, **kwargs):
     check_is_opcode(function_expression)

@@ -154,11 +154,13 @@ expression
    | expression '>=' expression # gte
    | expression '||' expression # boolOr
    | expression '&&' expression # boolAnd
+   | expression '*|>' '{' codeBlock '}' # toMap
    | SYMBOL '=' expression  # immediateAssignment
    | expression '.' SYMBOL '=' expression  # staticAssignment
    | expression '[' expression ']' '=' expression # dynamicAssignment
    | expression '[' expression ']' '<<' expression # dynamicInsertion
    | expression '?' expression ':' expression #ternary
+   | 'typeof' expression #typeof
    | 'continue' expression  # continueStatement
    | 'break'			    # breakStatement
    | ifStatement			# toIfStatement
@@ -166,7 +168,6 @@ expression
    | whileLoop				# toWhileLoop
    | forGeneratorLoop		# toForGeneratorLoop
    | forListLoop			# toForListLoop
-   | expression '*|>' '{' codeBlock '}' # toMap
    | breakTypes				# toBreakTypes
    | objectType				# toObjectType
    | listType				# toListType
@@ -229,7 +230,7 @@ dictionaryType
    ;
 
 functionType
-   : 'Function' '<' expression? '>' expression?
+   : 'Function' '<' expression? (',' expression)* '>' expression?
    ;
 
 ifStatement

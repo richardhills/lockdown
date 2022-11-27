@@ -17,7 +17,7 @@ from lockdown.executor.raw_code_factories import function_lit, nop, comma_op, \
     local_function, reset_op, inferred_type, prepare_function_lit, transform, \
     continue_op, check_is_opcode, is_op, function_type, \
     composite_type, static_op, map_op, insert_op, prepared_function, int_type, \
-    any_type, print_op, shift_op, prepare_op, close_op, rich_type
+    any_type, print_op, shift_op, prepare_op, close_op, rich_type, typeof_op
 from lockdown.parser.grammar.langLexer import langLexer
 from lockdown.parser.grammar.langParser import langParser
 from lockdown.parser.grammar.langVisitor import langVisitor
@@ -507,6 +507,9 @@ class RDHLang5Visitor(langVisitor):
             self.visit(when_false)
         )
 
+    def visitTypeof(self, ctx):
+        return typeof_op(self.visit(ctx.expression()))
+
     def visitReturnStatement(self, ctx):
         expression = self.visit(ctx.expression())
         return transform_op(
@@ -813,10 +816,10 @@ class RDHLang5Visitor(langVisitor):
 
     def visitFunctionType(self, ctx):
         expressions = ctx.expression()
-        if len(expressions) == 2:
-            argument_type, break_types = expressions
-            argument_type = self.visit(argument_type)
-            argument_type = list_type([ argument_type ], None)
+        if len(expressions) >= 2:
+            *argument_types, break_types = expressions
+            argument_types = [ self.visit(argument_type) for argument_type in argument_types ]
+            argument_type = list_type(argument_types, None)
         else:
             break_types, = ctx.expression()
             argument_type = no_value_type()

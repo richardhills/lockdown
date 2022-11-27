@@ -548,6 +548,15 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#typeof.
+    def enterTypeof(self, ctx:langParser.TypeofContext):
+        pass
+
+    # Exit a parse tree produced by langParser#typeof.
+    def exitTypeof(self, ctx:langParser.TypeofContext):
+        pass
+
+
     # Enter a parse tree produced by langParser#dynamicAssignment.
     def enterDynamicAssignment(self, ctx:langParser.DynamicAssignmentContext):
         pass

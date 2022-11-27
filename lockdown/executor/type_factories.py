@@ -147,70 +147,6 @@ def build_universal_type(data, cache):
 
     return cache[data_id]
 
-# def deconstruct_micro_op(micro_op, results):
-#     if isinstance(micro_op, GetterMicroOpType):
-#         return PythonDict({
-#             "type": "get",
-#             "index": micro_op.key,
-#             "params": PythonList([ micro_op.key, derich_type(micro_op.value_type, results) ])
-#         })
-#     if isinstance(micro_op, SetterMicroOpType):
-#         return PythonDict({
-#             "type": "set",
-#             "index": micro_op.key,
-#             "params": PythonList([ micro_op.key, derich_type(micro_op.value_type, results) ])
-#         })
-#     if isinstance(micro_op, InsertStartMicroOpType):
-#         return PythonDict({
-#             "type": "insert-start",
-#             "params": PythonList([ derich_type(micro_op.value_type, results), micro_op.type_error ])
-#         })
-#     if isinstance(micro_op, InsertEndMicroOpType):
-#         return PythonDict({
-#             "type": "insert-end",
-#             "params": PythonList([ derich_type(micro_op.value_type, results), micro_op.type_error ])
-#         })
-#     if isinstance(micro_op, GetterWildcardMicroOpType):
-#         return PythonDict({
-#             "type": "get-wildcard",
-#             "params": PythonList([ derich_type(micro_op.key_type, results), derich_type(micro_op.value_type, results), micro_op.key_error ])
-#         })
-#     if isinstance(micro_op, SetterWildcardMicroOpType):
-#         return PythonDict({
-#             "type": "set-wildcard",
-#             "params": PythonList([ derich_type(micro_op.key_type, results), derich_type(micro_op.value_type, results), micro_op.key_error, micro_op.type_error ])
-#         })
-#     if isinstance(micro_op, DeletterWildcardMicroOpType):
-#         return PythonDict({
-#             "type": "delete-wildcard",
-#             "params": PythonList([ derich_type(micro_op.key_type, results), micro_op.key_error ])
-#         })
-#     if isinstance(micro_op, RemoverWildcardMicroOpType):
-#         return PythonDict({
-#             "type": "remove-wildcard",
-#             "params": PythonDict([ micro_op.key_error, micro_op.type_error ])
-#         })
-#     if isinstance(micro_op, InserterWildcardMicroOpType):
-#         return PythonDict({
-#             "type": "insert-wildcard",
-#             "params": PythonDict([ derich_type(micro_op.key_type, results), micro_op.key_error, micro_op.type_error ])
-#         })
-#     if isinstance(micro_op, IterMicroOpType):
-#         return PythonDict({
-#             "type": "iter",
-#             "params": PythonDict([ derich_type(micro_op.value_type, results) ])
-#         })
-# 
-# def deconstruct_universal_type(type, results):
-#     micro_ops = []
-#     for key, micro_op_type in type.get_micro_op_types().items():
-#         micro_ops.append(deconstruct_micro_op(micro_op_type, results))
-# 
-#     return PythonDict({
-#         "type": "Universal",
-#         "micro_ops": PythonList(micro_ops)
-#     })
-
 TYPES = {
     "Any": lambda data, cache: AnyType(),
     "Bottom": lambda data, cache: BottomType(),
@@ -245,41 +181,107 @@ def enrich_type_with_cache(data, cache):
 
     return new_type
 
-# def deconstruct_function_type(type, results):
-#     deconstructed_break_types = {}
-#     for mode, break_types in type.break_types.items():
-#         for break_type in break_types._to_list():
-#             new_break_type = {
-#                 "out": derich_type(break_type._get("out"), results)
-#             }
-#             if break_type._contains("in"):
-#                 new_break_type["in"] = derich_type(break_type._get("in"), results)
-# 
-#         deconstructed_break_types[mode] = new_break_type
-#     return PythonDict({
-#         "type": "Function",
-#         "argument": derich_type(type.argument_type, results),
-#         "break_types": PythonDict(deconstructed_break_types)
-#     })
-# 
-# def derich_type(type, results):
-#     if id(type) in results:
-#         return results[id(type)]
-# 
-#     if isinstance(type, AnyType):
-#         return PythonDict({ "type": "Any" })
-#     if isinstance(type, CompositeType):
-#         return deconstruct_universal_type(type, results)
-#     if isinstance(type, IntegerType):
-#         return PythonDict({ "type": "Integer" })
-#     if isinstance(type, BooleanType):
-#         return PythonDict({ "type": "Boolean" })
-#     if isinstance(type, NoValueType):
-#         return PythonDict({ "type": "NoValue" })
-#     if isinstance(type, StringType):
-#         return PythonDict({ "type": "String" })
-#     if isinstance(type, UnitType):
-#         return PythonDict({ "type": "Integer", "value": type.value })
-#     if isinstance(type, ClosedFunctionType):
-#         return deconstruct_function_type(type, results)
-#     raise FatalError(type)
+def deconstruct_function_type(type, results):
+    deconstructed_break_types = {}
+    for mode, break_types in type.break_types.items():
+        for break_type in break_types._to_list():
+            new_break_type = {
+                "out": derich_type(break_type._get("out"), results)
+            }
+            if break_type._contains("in"):
+                new_break_type["in"] = derich_type(break_type._get("in"), results)
+ 
+        deconstructed_break_types[mode] = new_break_type
+    return PythonDict({
+        "type": "Function",
+        "argument": derich_type(type.argument_type, results),
+        "break_types": PythonDict(deconstructed_break_types)
+    })
+
+
+def deconstruct_micro_op(micro_op, results):
+    if isinstance(micro_op, GetterMicroOpType):
+        return PythonDict({
+            "type": "get",
+            "index": micro_op.key,
+            "params": PythonList([ micro_op.key, derich_type(micro_op.value_type, results) ])
+        })
+    if isinstance(micro_op, SetterMicroOpType):
+        return PythonDict({
+            "type": "set",
+            "index": micro_op.key,
+            "params": PythonList([ micro_op.key, derich_type(micro_op.value_type, results) ])
+        })
+    if isinstance(micro_op, InsertStartMicroOpType):
+        return PythonDict({
+            "type": "insert-start",
+            "params": PythonList([ derich_type(micro_op.value_type, results), micro_op.type_error ])
+        })
+    if isinstance(micro_op, InsertEndMicroOpType):
+        return PythonDict({
+            "type": "insert-end",
+            "params": PythonList([ derich_type(micro_op.value_type, results), micro_op.type_error ])
+        })
+    if isinstance(micro_op, GetterWildcardMicroOpType):
+        return PythonDict({
+            "type": "get-wildcard",
+            "params": PythonList([ derich_type(micro_op.key_type, results), derich_type(micro_op.value_type, results), micro_op.key_error ])
+        })
+    if isinstance(micro_op, SetterWildcardMicroOpType):
+        return PythonDict({
+            "type": "set-wildcard",
+            "params": PythonList([ derich_type(micro_op.key_type, results), derich_type(micro_op.value_type, results), micro_op.key_error, micro_op.type_error ])
+        })
+    if isinstance(micro_op, DeletterWildcardMicroOpType):
+        return PythonDict({
+            "type": "delete-wildcard",
+            "params": PythonList([ derich_type(micro_op.key_type, results), micro_op.key_error ])
+        })
+    if isinstance(micro_op, RemoverWildcardMicroOpType):
+        return PythonDict({
+            "type": "remove-wildcard",
+            "params": PythonList([ micro_op.key_error, micro_op.type_error ])
+        })
+    if isinstance(micro_op, InserterWildcardMicroOpType):
+        return PythonDict({
+            "type": "insert-wildcard",
+            "params": PythonList([ derich_type(micro_op.value_type, results), micro_op.key_error, micro_op.type_error ])
+        })
+    if isinstance(micro_op, IterMicroOpType):
+        return PythonDict({
+            "type": "iter",
+            "params": PythonList([ derich_type(micro_op.value_type, results) ])
+        })
+ 
+def deconstruct_universal_type(type, results):
+    micro_ops = []
+    for key, micro_op_type in type.get_micro_op_types().items():
+        micro_ops.append(deconstruct_micro_op(micro_op_type, results))
+ 
+    return PythonDict({
+        "type": "Universal",
+        "micro_ops": PythonList(micro_ops)
+    })
+
+
+def derich_type(type, results):
+    if id(type) in results:
+        return results[id(type)]
+ 
+    if isinstance(type, AnyType):
+        return PythonDict({ "type": "Any" })
+    if isinstance(type, CompositeType):
+        return deconstruct_universal_type(type, results)
+    if isinstance(type, IntegerType):
+        return PythonDict({ "type": "Integer" })
+    if isinstance(type, BooleanType):
+        return PythonDict({ "type": "Boolean" })
+    if isinstance(type, NoValueType):
+        return PythonDict({ "type": "NoValue" })
+    if isinstance(type, StringType):
+        return PythonDict({ "type": "String" })
+    if isinstance(type, UnitType):
+        return PythonDict({ "type": "Unit", "value": type.value })
+    if isinstance(type, ClosedFunctionType):
+        return deconstruct_function_type(type, results)
+    raise FatalError(type)

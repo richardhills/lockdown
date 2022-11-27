@@ -6,6 +6,7 @@ import sys
 import unittest
 
 from lockdown.utils.utils import profile, environment
+from sys import setrecursionlimit
 
 
 parser = argparse.ArgumentParser()
@@ -28,6 +29,8 @@ if __name__ == "__main__":
     from lockdown.parser.test import *
     from lockdown.type_system.test import *
     from lockdown.utils.test import *
+
+#    setrecursionlimit(8000)
 
     with environment(
         rtti=args.t,

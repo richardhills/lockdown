@@ -229,9 +229,9 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
             print("Wot")
 
         code_break_types = code.get_break_types(context, frame_manager, hooks)
-    
+
         #get_manager(context).remove_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
-    
+
         actual_break_types_factory.merge(code_break_types)
 
     final_declared_break_types = BreakTypesFactory(None)
@@ -671,13 +671,14 @@ class ClosedFunction(LockdownFunction):
             try:
                 new_context = frame.step(
                     "local_initialization_context",
-                    lambda: Universal(True, initial_wrapped={
-                        "prepare": self.open_function.prepare_context,
-                        "outer": self.outer_context,
-                        "argument": argument,
-                        "static": self.open_function.static,
-                        "_types": self.open_function.local_initialization_context_type
-                    }, debug_reason="local-initialization-context")
+                    lambda: Context(
+                        self.open_function.local_initialization_context_type, 
+                        prepare=self.open_function.prepare_context,
+                        static=self.open_function.static,
+                        outer=self.outer_context,
+                        argument=argument,
+                        debug_reason="local-initialization-context"
+                    )
                 )
 
                 with scoped_bind(
@@ -700,14 +701,15 @@ class ClosedFunction(LockdownFunction):
             try:
                 new_context = frame.step(
                     "code_execution_context",
-                    lambda: Universal(True, initial_wrapped={
-                        "prepare": self.open_function.prepare_context,
-                        "outer": self.outer_context,
-                        "argument": argument,
-                        "static": self.open_function.static,
-                        "local": local,
-                        "_types": self.open_function.execution_context_type
-                    }, debug_reason="code-execution-context")
+                    lambda: Context(
+                        self.open_function.execution_context_type,
+                        prepare=self.open_function.prepare_context,
+                        static=self.open_function.static,
+                        outer=self.outer_context,
+                        argument=argument,
+                        local=local,
+                        debug_reason="code-execution-context"
+                    )
                 )
                 with scoped_bind(
                     new_context,

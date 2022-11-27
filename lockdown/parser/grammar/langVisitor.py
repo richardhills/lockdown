@@ -309,6 +309,11 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#typeof.
+    def visitTypeof(self, ctx:langParser.TypeofContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#dynamicAssignment.
     def visitDynamicAssignment(self, ctx:langParser.DynamicAssignmentContext):
         return self.visitChildren(ctx)

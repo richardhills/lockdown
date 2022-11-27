@@ -7,9 +7,10 @@ from unittest.case import TestCase
 from lockdown.executor.bootstrap import bootstrap_function
 from lockdown.executor.exceptions import PreparationException
 from lockdown.parser.parser import parse
+from lockdown.type_system.composites import scoped_bind
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.universal_type import DEFAULT_READONLY_COMPOSITE_TYPE, \
-    PythonList, PythonObject
+    PythonList, PythonObject, PythonDict
 from lockdown.utils.utils import environment, fastest
 
 
@@ -440,6 +441,147 @@ class TestBuiltIns(TestCase):
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(12, result.value)
+
+#    def test_reverse(self):
+#        code = parse("""
+#            function() {
+#                return reversed([ 4, 6, 2 ]);
+#            }
+#        """, debug=True)
+#        _, result = bootstrap_function(code)
+#        self.assertEqual(result.caught_break_mode, "value")
+#        self.assertEqual([ 2, 6, 4 ], result._to_list())
+
+class TestRRTI(TestCase):
+    def test_unit_type(self):
+        code = parse("""
+            function() {
+                return typeof(5);
+            }
+        """)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._to_dict(), { "type": "Unit", "value": 5 });
+
+    def test_unit_type2(self):
+        code = parse("""
+            function() {
+                return typeof("hello");
+            }
+        """)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._to_dict(), { "type": "Unit", "value": "hello" });
+
+    def test_ints(self):
+        code = parse("""
+            function() {
+                int x = 5;
+                return typeof(x);
+            }
+        """)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._to_dict(), { "type": "Integer" });
+
+    def test_var(self):
+        code = parse("""
+            function() {
+                var x = 5;
+                return typeof(x);
+            }
+        """)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._to_dict(), { "type": "Unit", "value": 5 })
+
+    def test_list(self):
+        code = parse("""
+            function() {
+                List<int> x = [ 4, 5 ];
+                return typeof(x);
+            }
+        """)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._get("type"), "Universal")
+
+        micro_op_types = sorted(
+            result.value._get_in("micro_ops")._to_list(),
+            key=lambda micro_op: micro_op._get("type")
+        )
+        types = [ m._get("type") for m in micro_op_types ]
+        self.assertEqual(
+            types,
+            [ "get-wildcard", "insert-end", "insert-start", "insert-wildcard", "iter", "remove-wildcard", "set-wildcard" ]
+        )
+        params = [ [ p._to_dict() if isinstance(p, PythonDict) else p for p in m._get("params")._to_list() ] for m in micro_op_types ]
+        self.assertEqual(
+            params,
+            [ [ {"type": "Integer"}, {"type": "Integer"}, True ],
+              [ {"type": "Integer"}, False ],
+              [ {"type": "Integer"}, False ],
+              [ {"type": "Integer"}, True, False ],
+              [ {"type": "Integer"} ],
+              [ True, False ],
+              [ {"type": "Integer"}, {"type": "Integer"}, True, False ] ]
+        )
+
+
+    def test_tuple2(self):
+        code = parse("""
+            function() {
+                var x = [ 4, 5 ];
+                return typeof(x);
+            }
+        """)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._get("type"), "Universal")
+
+        micro_op_types = sorted(
+            result.value._get_in("micro_ops")._to_list(),
+            key=lambda micro_op: micro_op._get("type")
+        )
+        types = [ m._get("type") for m in micro_op_types ]
+        self.assertEqual(
+            types,
+            [ "delete-wildcard", "get", "get", "get-wildcard", "insert-end", "iter", "set", "set", "set-wildcard" ]
+        )
+        params = [ [ p._to_dict() if isinstance(p, PythonDict) else p for p in m._get("params")._to_list() ] for m in micro_op_types ]
+        self.assertEqual(
+            params,
+            [ [ {"type": "Any"}, True ],
+              [ 0, {"type": "Unit", "value": 4}],
+              [ 1, {"type": "Unit", "value": 5}],
+              [ {"type": "Any"}, {"type": "Any"}, True ],
+              [ {"type": "Any"}, False ],
+              [ {"type": "Any"} ],
+              [ 0, {"type": "Unit", "value": 4}],
+              [ 1, {"type": "Unit", "value": 5}],
+              [ {"type": "Any"}, { "type": "Any"}, False, True ]
+            ]
+        )
+
+    def test_tuple3(self):
+        code = parse("""
+            function() {
+                Tuple<int, int> x = [ 4, 5 ];
+                return typeof(x);
+            }
+        """)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._get("type"), "Universal")
+        micro_op_types = [
+            micro_op._get("type") for micro_op in result.value._get_in("micro_ops")._to_list()
+        ]
+        micro_op_types = sorted(micro_op_types)
+        self.assertEqual(
+            micro_op_types,
+            [ "get", "get", "set", "set" ]
+        )
+
 
 class TestMaths(TestCase):
     def test_gcm1(self):
@@ -1419,6 +1561,45 @@ class TestEuler(TestCase):
         """, debug=True)
         _, result = bootstrap_function(code)
         self.assertEqual(result.value, 1378465288200)
+
+    def test_18(self):
+        code = parse("""
+            function() {
+                List<int> calcRow =
+                    [  4, 62, 98, 27, 23,  9, 70, 98, 73, 93, 38, 53, 60,  4, 23 ];
+
+                List<List<int>> tree = [
+                    [ 63, 66,  4, 68, 89, 53, 67, 30, 73, 16, 69, 87, 40, 31 ],
+                    [ 91, 71, 52, 38, 17, 14, 91, 43, 58, 50, 27, 29, 48 ],
+                    [ 70, 11, 33, 28, 77, 73, 17, 78, 39, 68, 17, 57 ],
+                    [ 53, 71, 44, 65, 25, 43, 91, 52, 97, 51, 14 ],
+                    [ 41, 48, 72, 33, 47, 32, 37, 16, 94, 29 ],
+                    [ 41, 41, 26, 56, 83, 40, 80, 70, 33 ],
+                    [ 99, 65,  4, 28,  6, 16, 70, 92 ],
+                    [ 88,  2, 77, 73,  7, 63, 67 ],
+                    [ 19,  1, 23, 75,  3, 34 ],
+                    [ 20,  4, 82, 47, 65 ],
+                    [ 18, 35, 87, 10 ],
+                    [ 17, 47, 82 ],
+                    [ 95, 64 ],
+                    [ 75 ]
+                ];
+
+                tree *|> {
+                    calcRow = value *|> {
+                        continue value + max([
+                            calcRow[index],
+                            calcRow[index + 1]
+                        ]);
+                    };
+                };
+
+                return calcRow[0];
+            }
+        """)
+        _, result = bootstrap_function(code, check_safe_exit=False)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 1074)
 
 
     def test_28(self):

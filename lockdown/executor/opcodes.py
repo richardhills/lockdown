@@ -12,7 +12,7 @@ from lockdown.executor.function_type import OpenFunctionType, ClosedFunctionType
 from lockdown.executor.operands import OpcodeOperandMixin, Operand, BoundOperand
 from lockdown.executor.raw_code_factories import dereference, assignment_op, \
     literal_op
-from lockdown.executor.type_factories import enrich_type
+from lockdown.executor.type_factories import enrich_type, derich_type
 from lockdown.executor.utils import evaluate, TypeErrorFactory, \
     get_expression_break_types, flatten_out_types, MicroOpBinder, \
     each_reference, get_best_micro_op, get_operand_type, get_context_type, \
@@ -1699,6 +1699,20 @@ class InvokeOp(Opcode):
             argument=self.argument.to_ast(context_name, dependency_builder)
         )
 
+class TypeofOp(OpcodeOperandMixin, Opcode):
+    expression = Operand(AnyType(), None)
+
+    def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
+        break_types = BreakTypesFactory(self)
+        self.expression.prepare(break_types, context, frame_manager, hooks, immediate_context)
+
+        break_types.add(self, "value", AnyType())
+
+        return break_types.build()
+
+    def jump(self, context, frame_manager, hooks, immediate_context=None):        
+        with frame_manager.get_next_frame(self) as frame:
+            return frame.value(self, derich_type(self.expression.value_type, {}))
 
 class MatchOp(Opcode):
     NO_MATCH = TypeErrorFactory("Match: no_match")
@@ -1762,6 +1776,11 @@ class PrintOp(Opcode):
     def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
         break_types = BreakTypesFactory(self)
         break_types.add(self, "value", NoValueType())
+
+        expression_types, expression_break_types = get_expression_break_types(self.expression, context, frame_manager, hooks)
+        # Todo verify that expression_types is string
+        break_types.merge(expression_break_types)
+
         return break_types.build()
 
     def jump(self, context, frame_manager, hooks, immediate_context=None):
@@ -1856,6 +1875,10 @@ FUNCTION_OPCODES = {
     "invoke": InvokeOp,
 }
 
+TYPE_OPCODES = {
+    "typeof": TypeofOp
+}
+
 MISC_OPCODES = {
     "print": PrintOp
 }
@@ -1865,6 +1888,7 @@ OPCODES = spread_dict(
     MATH_AND_LOGIC_OPCODES,
     DATA_OPCODES,
     FUNCTION_OPCODES,
+    TYPE_OPCODES,
     MISC_OPCODES
 )
 

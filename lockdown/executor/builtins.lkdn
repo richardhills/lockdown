@@ -160,5 +160,5 @@ static factorial = function(int a) {
 };
 
 export {
-	var, any, int, bool, string, void, Iterable, keys, values, valuesG, sum, max, gcd, factorial, list,  range, irange, length, find
+	var, any, int, bool, string, void, Iterable, keys, values, valuesG, sum, max, gcd, factorial, list, range, irange, length, find
 };
