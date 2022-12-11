@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-from lockdown.type_system.core_types import Type, BottomType, AnyType
+from lockdown.type_system.core_types import Type, BottomType, AnyType,\
+    NoValueType
 from lockdown.type_system.exceptions import FatalError
 from lockdown.type_system.universal_type import PythonDict, Universal, \
     PythonList

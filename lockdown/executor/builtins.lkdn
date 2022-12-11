@@ -68,7 +68,7 @@ static valuesG = function(any type) {
 	};
 };
 
-static intYielder = Function<> => void, yields int => void;
+static intYielder = Function<> => void, yields int => any;
 
 static list = function(intYielder func) {
 	return for(var v from func) {

@@ -404,18 +404,8 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by langParser#objectPropertyPair.
-    def visitObjectPropertyPair(self, ctx:langParser.ObjectPropertyPairContext):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by langParser#objectType.
     def visitObjectType(self, ctx:langParser.ObjectTypeContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by langParser#objectTypePropertyPair.
-    def visitObjectTypePropertyPair(self, ctx:langParser.ObjectTypePropertyPairContext):
         return self.visitChildren(ctx)
 
 
@@ -429,8 +419,8 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by langParser#splat.
-    def visitSplat(self, ctx:langParser.SplatContext):
+    # Visit a parse tree produced by langParser#splat2.
+    def visitSplat2(self, ctx:langParser.Splat2Context):
         return self.visitChildren(ctx)
 
 
@@ -441,6 +431,16 @@ class langVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by langParser#dictionaryType.
     def visitDictionaryType(self, ctx:langParser.DictionaryTypeContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#objectProperties.
+    def visitObjectProperties(self, ctx:langParser.ObjectPropertiesContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#objectProperty.
+    def visitObjectProperty(self, ctx:langParser.ObjectPropertyContext):
         return self.visitChildren(ctx)
 
 

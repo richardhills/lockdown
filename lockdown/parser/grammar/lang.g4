@@ -130,7 +130,7 @@ expression
    | 'false'				# falseExpression
    | objectTemplate			# toObjectTemplate
    | listTemplate			# toListTemplate
-   | expression '(' expression (',' expression)* ')' # invocation
+   | expression '(' objectProperties ')' # invocation
    | expression '<' expression (',' expression)* '>' # staticInvocation
    | expression '(|' expression '|)'     # singleParameterInvocation
    | expression '(' ')'     # noParameterInvocation
@@ -191,33 +191,22 @@ breakType
    ; 
 
 objectTemplate
-   : '{' objectPropertyPair? (',' objectPropertyPair)* '}'
-   ;
-
-objectPropertyPair
-   : SYMBOL ':' expression
-   | SYMBOL
-   | NUMBER ':' expression
-   | '[' expression ']' ':' expression
+   : '{' objectProperties '}'
    ;
 
 objectType
-   : 'Object' '{' objectTypePropertyPair? (';' objectTypePropertyPair)* '}'
-   ;
-
-objectTypePropertyPair
-   : SYMBOL ':' expression
+   : 'Object' '{' objectProperties '}'
    ;
 
 listTemplate
-   : '[' expression? (',' expression)* ']'
+   : '[' objectProperties ']'
    ;
 
 tupleType
-   : 'Tuple' '<' expression? (',' expression)* splat? '>'
+   : 'Tuple' '<' expression? (',' expression)* splat2? '>'
    ;
 
-splat
+splat2
    : '...'
    ;
 
@@ -227,6 +216,19 @@ listType
 
 dictionaryType
    : 'Dictionary' '<' expression ':' expression '>'
+   ;
+
+objectProperties
+   : objectProperty? (',' objectProperty)* splat='...'?
+   ;
+
+objectProperty
+   : SYMBOL
+   | SYMBOL ':' expression
+   | NUMBER ':' expression
+   | expression
+   | '[' expression ']' ':' expression
+   | splat='...'? expression
    ;
 
 functionType

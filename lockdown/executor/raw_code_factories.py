@@ -234,12 +234,14 @@ def print_op(expression):
         "expression": expression
     }, debug_reason="code")
 
-def object_template_op(values, debug_reason="code", **kwargs):
+def object_template_op(values, debug_reason="code", op_keys=False, **kwargs):
     values_list = []
 
     for k, v in values.items():
         check_is_opcode(v)
         if isinstance(k, str):
+            if op_keys:
+                raise FatalError()
             k = literal_op(k)
 
         check_is_opcode(k)

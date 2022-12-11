@@ -81,7 +81,9 @@ class RDHLang5Visitor(langVisitor):
                 argument_type_expression=self.visit(ctx.raw_argument)
             ).chain(code_block)
         else:
-            function_builder = code_block
+            function_builder = CodeBlockBuilder(
+                argument_type_expression=list_type([], None)
+            ).chain(code_block)
 
         if ctx.functionBreakTypes:
             break_types = self.visit(ctx.functionBreakTypes)
@@ -322,8 +324,29 @@ class RDHLang5Visitor(langVisitor):
         return literal_op(False)
 
     def visitInvocation(self, ctx):
-        function = self.visit(ctx.expression()[0])
-        arguments = [self.visit(a) for a in ctx.expression()[1:]]
+        function = self.visit(ctx.expression())
+
+        properties, splat = self.visit(ctx.objectProperties())
+
+        if splat:
+            raise FatalError()
+
+        arguments = []
+
+        for lhs, rhs, mode in properties:
+            extra_arguement = None
+
+            if mode == "splat":
+                raise NotImplementedError()
+            if mode == "value":
+                extra_arguement = rhs
+            if mode == "symbol":
+                extra_arguement = unbound_dereference(lhs)
+            if mode == "key-value":
+                raise NotImplementedError()
+
+            arguments.append(extra_arguement)
+
         return invoke_op(function, list_template_op(arguments), **get_context_debug_info(ctx))
 
     def visitStaticInvocation(self, ctx):
@@ -518,7 +541,7 @@ class RDHLang5Visitor(langVisitor):
 
     def visitYieldStatement(self, ctx):
         expression = self.visit(ctx.expression())
-        return shift_op(expression, no_value_type())
+        return shift_op(expression, any_type())
 
     def visitExportStatement(self, ctx):
         expression = self.visit(ctx.expression())
@@ -594,7 +617,8 @@ class RDHLang5Visitor(langVisitor):
                             ("yield", "value"),
                             ("value", "end"),
                             reset_op(
-                                dereference("outer.local.callback", **get_context_debug_info(ctx)), nop()
+                                dereference("outer.local.callback", **get_context_debug_info(ctx)),
+                                list_template_op([])
                             )
                         ),
                         comma_op(
@@ -696,45 +720,119 @@ class RDHLang5Visitor(langVisitor):
 
     def visitObjectTemplate(self, ctx):
         result = {}
-        for pair in ctx.objectPropertyPair():
-            key, value = self.visit(pair)
-            result[key] = value
-        return object_template_op(result)
+        properties, splat = self.visit(ctx.objectProperties())
 
-    def visitObjectPropertyPair(self, ctx):
-        if ctx.SYMBOL():
-            symbol = ctx.SYMBOL().getText()
-            if len(ctx.expression()) > 0:
-                return [ literal_op(symbol), self.visit(ctx.expression()[0]) ]
+        if splat:
+            raise FatalError()
+
+        for lhs, rhs, mode in properties:
+            if mode == "splat":
+                raise NotImplementedError()
+            if mode == "value":
+                raise FatalError()
+            if mode == "symbol":
+                rhs = unbound_dereference(lhs)
+                lhs = literal_op(lhs)
+            if mode == "key-value":
+                pass
+
+            result[lhs] = rhs
+        return object_template_op(result, op_keys=True)
+
+    def visitObjectProperties(self, ctx):
+        return ( [ self.visit(p) for p in ctx.objectProperty() ], ctx.splat is not None )
+
+    def visitObjectProperty(self, ctx):
+        expressions = [ self.visit(e) for e in ctx.expression() ]
+        symbol = ctx.SYMBOL()
+        if symbol:
+            symbol = symbol.getText()
+        number = ctx.NUMBER()
+        if number:
+            number = json.loads(ctx.NUMBER().getText())
+
+        lhs = rhs = None
+        # key-value: lhs and rhs are expressions
+        # symbol: lhs is a symbol, which has different meanings in different contexts
+        # value: rhs is an expression which has different meanings in different contexts
+        mode = None
+        is_splat = ctx.splat is not None
+
+        if is_splat:
+            rhs = expressions[0]
+            mode = "splat"
+        elif symbol:
+            if len(expressions) > 0:
+                lhs = literal_op(symbol)
+                rhs = expressions[0]
+                mode = "key-value"
             else:
-                return [ literal_op(symbol), unbound_dereference(symbol) ]
-        elif ctx.NUMBER():
-            return [ literal_op(json.loads(ctx.NUMBER().getText())), self.visit(ctx.expression()[0]) ]
+                lhs = symbol
+                rhs = None
+                mode = "symbol"
+        elif number is not None:
+            lhs = literal_op(number)
+            rhs = expressions[0]
+            mode = "key-value"
+        elif len(expressions) > 1:
+            lhs, rhs = expressions
+            mode = "key-value"
+        elif len(expressions) == 1:
+            lhs = None
+            rhs = expressions[0]
+            mode = "value"
         else:
-            key, value = ctx.expression()
-            return [ self.visit(key), self.visit(value) ]
+            raise FatalError()
+
+        return [ lhs, rhs, mode ]
 
     def visitObjectType(self, ctx):
         result = {}
-        for pair in ctx.objectTypePropertyPair():
-            name, type = self.visit(pair)
-            result[name] = type
+        properties, splat = self.visit(ctx.objectProperties())
+
+        if splat:
+            raise FatalError()
+
+        for lhs, rhs, mode in properties:
+            if mode == "splat":
+                raise NotImplementedError()
+            if mode == "value":
+                raise FatalError()
+            if mode == "symbol":
+                raise FatalError()
+            if mode == "key-value":
+                pass
+            result[lhs] = rhs
         return object_type(result, any_type())
 
-    def visitObjectTypePropertyPair(self, ctx):
-        return [ ctx.SYMBOL().getText(), self.visit(ctx.expression()) ]
-
     def visitListTemplate(self, ctx):
-        return list_template_op([
-            self.visit(e) for e in ctx.expression()
-        ])
+        result = []
+        properties, splat = self.visit(ctx.objectProperties())
+
+        if splat:
+            raise FatalError()
+
+        for lhs, rhs, mode in properties:
+            value_type = None
+            if mode == "splat":
+                raise NotImplementedError()
+            if mode == "value":
+                value_type = rhs
+            if mode == "symbol":
+                value_type = unbound_dereference(lhs)
+            if mode == "key-value":
+                raise FatalError()
+
+            result.append(value_type)
+
+        return list_template_op(result)
 
     def visitTupleType(self, ctx):
         micro_ops = []
         expressions = [self.visit(e) for e in ctx.expression()]
 
         inferred_splat_type = None
-        if ctx.splat():
+        if ctx.splat2():
             inferred_splat_type = expressions.pop()
 
         for index, expression in enumerate(expressions):
@@ -822,7 +920,7 @@ class RDHLang5Visitor(langVisitor):
             argument_type = list_type(argument_types, None)
         else:
             break_types, = ctx.expression()
-            argument_type = no_value_type()
+            argument_type = list_type([], None)
 
         break_types = self.visit(break_types)
 

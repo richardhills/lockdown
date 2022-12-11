@@ -719,30 +719,12 @@ class langListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by langParser#objectPropertyPair.
-    def enterObjectPropertyPair(self, ctx:langParser.ObjectPropertyPairContext):
-        pass
-
-    # Exit a parse tree produced by langParser#objectPropertyPair.
-    def exitObjectPropertyPair(self, ctx:langParser.ObjectPropertyPairContext):
-        pass
-
-
     # Enter a parse tree produced by langParser#objectType.
     def enterObjectType(self, ctx:langParser.ObjectTypeContext):
         pass
 
     # Exit a parse tree produced by langParser#objectType.
     def exitObjectType(self, ctx:langParser.ObjectTypeContext):
-        pass
-
-
-    # Enter a parse tree produced by langParser#objectTypePropertyPair.
-    def enterObjectTypePropertyPair(self, ctx:langParser.ObjectTypePropertyPairContext):
-        pass
-
-    # Exit a parse tree produced by langParser#objectTypePropertyPair.
-    def exitObjectTypePropertyPair(self, ctx:langParser.ObjectTypePropertyPairContext):
         pass
 
 
@@ -764,12 +746,12 @@ class langListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by langParser#splat.
-    def enterSplat(self, ctx:langParser.SplatContext):
+    # Enter a parse tree produced by langParser#splat2.
+    def enterSplat2(self, ctx:langParser.Splat2Context):
         pass
 
-    # Exit a parse tree produced by langParser#splat.
-    def exitSplat(self, ctx:langParser.SplatContext):
+    # Exit a parse tree produced by langParser#splat2.
+    def exitSplat2(self, ctx:langParser.Splat2Context):
         pass
 
 
@@ -788,6 +770,24 @@ class langListener(ParseTreeListener):
 
     # Exit a parse tree produced by langParser#dictionaryType.
     def exitDictionaryType(self, ctx:langParser.DictionaryTypeContext):
+        pass
+
+
+    # Enter a parse tree produced by langParser#objectProperties.
+    def enterObjectProperties(self, ctx:langParser.ObjectPropertiesContext):
+        pass
+
+    # Exit a parse tree produced by langParser#objectProperties.
+    def exitObjectProperties(self, ctx:langParser.ObjectPropertiesContext):
+        pass
+
+
+    # Enter a parse tree produced by langParser#objectProperty.
+    def enterObjectProperty(self, ctx:langParser.ObjectPropertyContext):
+        pass
+
+    # Exit a parse tree produced by langParser#objectProperty.
+    def exitObjectProperty(self, ctx:langParser.ObjectPropertyContext):
         pass
 
 

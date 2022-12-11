@@ -18,15 +18,15 @@ from lockdown.executor.raw_code_factories import function_lit, list_type, \
     build_break_types, any_type, bottom_type, iter_micro_op, close_op, \
     prepare_op, context_op, bool_type
 from lockdown.parser.parser import parse
+from lockdown.type_system.composites import add_composite_type
 from lockdown.type_system.core_types import NoValueType
 from lockdown.type_system.exceptions import FatalError
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.universal_type import PythonObject, \
     DEFAULT_READONLY_COMPOSITE_TYPE, IterMicroOpType, UniversalObjectType, \
-    RICH_READONLY_TYPE, Universal
+    RICH_READONLY_TYPE, Universal, PythonList
 from lockdown.utils.utils import NO_VALUE, print_code, MISSING, get_environment, \
     spread_dict
-from lockdown.type_system.composites import add_composite_type
 
 
 class ObjectDictWrapper(object):
@@ -142,7 +142,7 @@ def raise_unhandled_break(mode, value, caused_by, opcode, data):
 
 def bootstrap_function(data, argument=None, outer_context=None, check_safe_exit=True, print_ast=False):
     if argument is None:
-        argument = NO_VALUE
+        argument = PythonList([])
     if outer_context is None:
         outer_context = get_default_global_context()
 
