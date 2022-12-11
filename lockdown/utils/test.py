@@ -23,22 +23,22 @@ class TestWeakIdentityKeyDictionary(TestCase):
         foo = WeakIdentityKeyDictionary({ key: 10 })
 
         for k in foo:
-            self.assertEquals(k, key)
+            self.assertEqual(k, key)
 
     def test_iter_values(self):
         key = Key()
         foo = WeakIdentityKeyDictionary({ key: 10 })
 
         for v in foo.values():
-            self.assertEquals(v, 10)
+            self.assertEqual(v, 10)
 
     def test_iter_items(self):
         key = Key()
         foo = WeakIdentityKeyDictionary({ key: 10 })
 
         for k, v in foo.items():
-            self.assertEquals(k, key)
-            self.assertEquals(v, 10)
+            self.assertEqual(k, key)
+            self.assertEqual(v, 10)
 
     def test_init_with_multi_data(self):
         key1 = Key()

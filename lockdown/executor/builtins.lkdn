@@ -27,8 +27,8 @@ static BaseComposite = {
 	micro_ops: []
 };
 
-static tuple = function(any type, int length) {
-  return dynamic function(type value) {
+static tuple = function(type: any, length: int) {
+  return dynamic function(value: type) {
     var opcodes = list(range(0, length)) *|> {
       continue json({
         "opcode": "literal",
@@ -42,7 +42,7 @@ static tuple = function(any type, int length) {
   };
 };
 
-static Iterable = function(any keyType, any valueType) => any {
+static Iterable = function(keyType: any, valueType: any) => any {
 	return {
 		type: "Universal",
 		micro_ops: [{
@@ -52,31 +52,31 @@ static Iterable = function(any keyType, any valueType) => any {
 	};
 };
 
-static keys = function(Iterable<any, any> list) {
+static keys = function(list: Iterable<any, any>) {
 	return list *|> {
 		continue key;
 	};
 };
 
-static values = function(Iterable<any, any> list) {
+static values = function(list: Iterable<any, any>) {
 	return list *|> { continue value; };
 };
 
-static valuesG = function(any type) {
-	return dynamic function(Iterable<any, prepare.local.type> list) => Iterable<any, prepare.local.type> {
+static valuesG = function(type: any) {
+	return dynamic function(list: Iterable<any, prepare.local.type>) => Iterable<any, prepare.local.type> {
 		return list *|> { continue value; };
 	};
 };
 
 static intYielder = Function<> => void, yields int => any;
 
-static list = function(intYielder func) {
+static list = function(func: intYielder) {
 	return for(var v from func) {
 		continue v;
 	};
 };
 
-static range = function(int start, int end) => intYielder {
+static range = function(start: int, end: int) => intYielder {
 	return function() {
 		int i = start;
 		while(i < end) {
@@ -96,7 +96,7 @@ static irange = function() {
 	};
 };
 
-static length = function(BaseComposite c) {
+static length = function(c: BaseComposite) {
 	return json({
 		"opcode": "length",
 		"composite": lockdown(c)
@@ -104,8 +104,8 @@ static length = function(BaseComposite c) {
 };
 
 static find = function(
-	intYielder func,
-	Function<int> => bool checker
+	func: intYielder,
+	checker: Function<int> => bool
 ) => int {
 	for(var i from func) {
 		if(checker(i)) {
@@ -116,7 +116,7 @@ static find = function(
 };
 
 
-static sum = function(Iterable<any, int> list) => int {
+static sum = function(list: Iterable<any, int>) => int {
   int total = 0;
   list *|> {
     total = total + value;
@@ -124,7 +124,7 @@ static sum = function(Iterable<any, int> list) => int {
   return total;
 };
 
-static max = function({
+static max = function(list: {
   type: "Universal",
   micro_ops: [{
         type: "iter",
@@ -134,7 +134,7 @@ static max = function({
     index: 0,
     params: [ 0, int ]
   }]
-} list) => int {
+}) => int {
   int largestValue = list[0];
   list *|> {
     if(argument.value > largestValue) {
@@ -144,14 +144,14 @@ static max = function({
   return largestValue;
 };
 
-static gcd = function(int a, int b) {
+static gcd = function(a: int, b: int) {
   while(b != 0) {
     [ a, b ] = [ b, a % b ];
   };
   return a;
 };
 
-static factorial = function(int a) {
+static factorial = function(a: int) {
   int result = 1;
   for(var i from range(1, a)) {
     result = result * i;

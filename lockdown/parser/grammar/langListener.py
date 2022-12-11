@@ -80,24 +80,6 @@ class langListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by langParser#argumentDestructurings.
-    def enterArgumentDestructurings(self, ctx:langParser.ArgumentDestructuringsContext):
-        pass
-
-    # Exit a parse tree produced by langParser#argumentDestructurings.
-    def exitArgumentDestructurings(self, ctx:langParser.ArgumentDestructuringsContext):
-        pass
-
-
-    # Enter a parse tree produced by langParser#argumentDestructuring.
-    def enterArgumentDestructuring(self, ctx:langParser.ArgumentDestructuringContext):
-        pass
-
-    # Exit a parse tree produced by langParser#argumentDestructuring.
-    def exitArgumentDestructuring(self, ctx:langParser.ArgumentDestructuringContext):
-        pass
-
-
     # Enter a parse tree produced by langParser#symbolInitialization.
     def enterSymbolInitialization(self, ctx:langParser.SymbolInitializationContext):
         pass
@@ -788,6 +770,15 @@ class langListener(ParseTreeListener):
 
     # Exit a parse tree produced by langParser#objectProperty.
     def exitObjectProperty(self, ctx:langParser.ObjectPropertyContext):
+        pass
+
+
+    # Enter a parse tree produced by langParser#objectKey.
+    def enterObjectKey(self, ctx:langParser.ObjectKeyContext):
+        pass
+
+    # Exit a parse tree produced by langParser#objectKey.
+    def exitObjectKey(self, ctx:langParser.ObjectKeyContext):
         pass
 
 

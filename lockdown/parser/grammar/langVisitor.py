@@ -49,16 +49,6 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by langParser#argumentDestructurings.
-    def visitArgumentDestructurings(self, ctx:langParser.ArgumentDestructuringsContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by langParser#argumentDestructuring.
-    def visitArgumentDestructuring(self, ctx:langParser.ArgumentDestructuringContext):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by langParser#symbolInitialization.
     def visitSymbolInitialization(self, ctx:langParser.SymbolInitializationContext):
         return self.visitChildren(ctx)
@@ -441,6 +431,11 @@ class langVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by langParser#objectProperty.
     def visitObjectProperty(self, ctx:langParser.ObjectPropertyContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#objectKey.
+    def visitObjectKey(self, ctx:langParser.ObjectKeyContext):
         return self.visitChildren(ctx)
 
 

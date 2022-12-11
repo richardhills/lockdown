@@ -69,13 +69,53 @@ class RDHLang5Visitor(langVisitor):
             return self.visit(ctx.lockdownJsonExpression())
 
     def visitFunction(self, ctx):
-        argument_destructuring = ctx.argumentDestructurings()
+        arguments = ctx.objectProperties()
+        if arguments:
+            arguments, final_splat = self.visit(arguments)
 
         code_block = self.visit(ctx.codeBlock())
 
-        if argument_destructuring:
-            argument_destructuring = self.visit(argument_destructuring)
-            function_builder = argument_destructuring.chain(code_block)
+        if arguments:
+            if final_splat:
+                raise FatalError
+
+            argument_types = [ None ] * len(arguments)
+            local_variable_types = {}
+            local_variable_initializers = {}
+
+            for index, (is_splat, lhs_value, lhs_mode, rhs) in enumerate(arguments):
+                name = None
+                type = None
+
+                if is_splat:
+                    raise FatalError()
+                if rhs is None:
+                    raise FatalError()
+                if lhs_mode == "literal-key":
+                    if isinstance(lhs_value, str):
+                        name = lhs_value
+                        type = rhs
+                    elif isinstance(lhs_value, int):
+                        raise FatalError()
+                if lhs_mode == "expression-key":
+                    raise FatalError()
+                if lhs_mode == "computed-expression-key":
+                    raise FatalError()
+
+                argument_types[index] = type
+                local_variable_types[name] = type
+                local_variable_initializers[name] = dereference("argument", index)
+
+            argument_code_builder = CodeBlockBuilder(
+                argument_type_expression=list_type(argument_types, None),
+                local_variable_type=object_type(
+                    local_variable_types,
+                    wildcard_type=rich_type()
+                ),
+                local_initializer=object_template_op(local_variable_initializers)
+            )
+
+            function_builder = argument_code_builder.chain(code_block)
         elif ctx.raw_argument:
             function_builder = CodeBlockBuilder(
                 argument_type_expression=self.visit(ctx.raw_argument)
@@ -117,28 +157,28 @@ class RDHLang5Visitor(langVisitor):
     def visitLockdownJsonExpression(self, ctx):
         return self.visit(ctx.expression())
 
-    def visitArgumentDestructurings(self, ctx):
-        initializers = [self.visit(l) for l in ctx.argumentDestructuring()]
-
-        argument_types = [ None ] * len(initializers)
-        local_variable_types = {}
-        local_variable_initializers = {}
-
-        for index, (type, name) in enumerate(initializers):
-            argument_types[index] = type
-            local_variable_types[name] = type
-            local_variable_initializers[name] = dereference("argument", index)
-
-        return CodeBlockBuilder(
-            argument_type_expression=list_type(argument_types, None),
-            local_variable_type=object_type(local_variable_types),
-            local_initializer=object_template_op(local_variable_initializers)
-        )
-
-    def visitArgumentDestructuring(self, ctx):
-        symbol = ctx.SYMBOL().getText()
-        type = self.visit(ctx.expression())
-        return (type, symbol)
+    # def visitArgumentDestructurings(self, ctx):
+    #     initializers = [self.visit(l) for l in ctx.argumentDestructuring()]
+    #
+    #     argument_types = [ None ] * len(initializers)
+    #     local_variable_types = {}
+    #     local_variable_initializers = {}
+    #
+    #     for index, (type, name) in enumerate(initializers):
+    #         argument_types[index] = type
+    #         local_variable_types[name] = type
+    #         local_variable_initializers[name] = dereference("argument", index)
+    #
+    #     return CodeBlockBuilder(
+    #         argument_type_expression=list_type(argument_types, None),
+    #         local_variable_type=object_type(local_variable_types),
+    #         local_initializer=object_template_op(local_variable_initializers)
+    #     )
+    #
+    # def visitArgumentDestructuring(self, ctx):
+    #     symbol = ctx.SYMBOL().getText()
+    #     type = self.visit(ctx.expression())
+    #     return (type, symbol)
 
     def visitSymbolInitialization(self, ctx):
         return (
@@ -333,19 +373,24 @@ class RDHLang5Visitor(langVisitor):
 
         arguments = []
 
-        for lhs, rhs, mode in properties:
-            extra_arguement = None
+        for is_splat, lhs_value, lhs_mode, rhs in properties:
+            extra_argument = None
 
-            if mode == "splat":
+            if is_splat:
                 raise NotImplementedError()
-            if mode == "value":
-                extra_arguement = rhs
-            if mode == "symbol":
-                extra_arguement = unbound_dereference(lhs)
-            if mode == "key-value":
-                raise NotImplementedError()
+            if rhs is not None:
+                raise FatalError()
+            if lhs_mode == "literal-key":
+                if isinstance(lhs_value, str):
+                    extra_argument = unbound_dereference(lhs_value)
+                elif isinstance(lhs_value, int):
+                    extra_argument = literal_op(lhs_value)
+            if lhs_mode == "expression-key":
+                extra_argument = lhs_value
+            if lhs_mode == "computed-expression-key":
+                raise FatalError()
 
-            arguments.append(extra_arguement)
+            arguments.append(extra_argument)
 
         return invoke_op(function, list_template_op(arguments), **get_context_debug_info(ctx))
 
@@ -725,66 +770,54 @@ class RDHLang5Visitor(langVisitor):
         if splat:
             raise FatalError()
 
-        for lhs, rhs, mode in properties:
-            if mode == "splat":
+        for is_splat, lhs_value, lhs_mode, rhs in properties:
+            if is_splat:
                 raise NotImplementedError()
-            if mode == "value":
-                raise FatalError()
-            if mode == "symbol":
-                rhs = unbound_dereference(lhs)
-                lhs = literal_op(lhs)
-            if mode == "key-value":
+            if lhs_mode == "literal-key":
+                if rhs is None:
+                    rhs = unbound_dereference(lhs_value)
+                lhs_value = literal_op(lhs_value)
+            if lhs_mode == "expression-key":
+                pass
+            if lhs_mode == "computed-expression-key":
                 pass
 
-            result[lhs] = rhs
+            result[lhs_value] = rhs
         return object_template_op(result, op_keys=True)
 
     def visitObjectProperties(self, ctx):
         return ( [ self.visit(p) for p in ctx.objectProperty() ], ctx.splat is not None )
 
     def visitObjectProperty(self, ctx):
-        expressions = [ self.visit(e) for e in ctx.expression() ]
+        is_splat = ctx.splat is not None
+        lhs_value, lhs_mode = self.visit(ctx.objectKey())
+        rhs = ctx.expression()
+        if rhs:
+            rhs = self.visit(rhs)
+
+        return [ is_splat, lhs_value, lhs_mode, rhs ]
+
+    def visitObjectKey(self, ctx):
+        expression = ctx.expression()
+        if expression:
+            expression = self.visit(expression)
         symbol = ctx.SYMBOL()
         if symbol:
             symbol = symbol.getText()
         number = ctx.NUMBER()
         if number:
             number = json.loads(ctx.NUMBER().getText())
+        computed = ctx.computed is not None
 
-        lhs = rhs = None
-        # key-value: lhs and rhs are expressions
-        # symbol: lhs is a symbol, which has different meanings in different contexts
-        # value: rhs is an expression which has different meanings in different contexts
-        mode = None
-        is_splat = ctx.splat is not None
-
-        if is_splat:
-            rhs = expressions[0]
-            mode = "splat"
-        elif symbol:
-            if len(expressions) > 0:
-                lhs = literal_op(symbol)
-                rhs = expressions[0]
-                mode = "key-value"
+        if symbol is not None:
+            return [ symbol, "literal-key" ]
+        if number is not None:
+            return [ number, "literal-key" ]
+        if expression:
+            if computed:
+                return [ expression, "computed-expression-key" ]
             else:
-                lhs = symbol
-                rhs = None
-                mode = "symbol"
-        elif number is not None:
-            lhs = literal_op(number)
-            rhs = expressions[0]
-            mode = "key-value"
-        elif len(expressions) > 1:
-            lhs, rhs = expressions
-            mode = "key-value"
-        elif len(expressions) == 1:
-            lhs = None
-            rhs = expressions[0]
-            mode = "value"
-        else:
-            raise FatalError()
-
-        return [ lhs, rhs, mode ]
+                return [ expression, "expression-key" ]
 
     def visitObjectType(self, ctx):
         result = {}
@@ -793,16 +826,17 @@ class RDHLang5Visitor(langVisitor):
         if splat:
             raise FatalError()
 
-        for lhs, rhs, mode in properties:
-            if mode == "splat":
+        for is_splat, lhs_value, lhs_mode, rhs in properties:
+            if is_splat:
                 raise NotImplementedError()
-            if mode == "value":
+            if lhs_mode == "literal-key":
+                lhs_value = literal_op(lhs_value)
+            if lhs_mode == "expression-key":
                 raise FatalError()
-            if mode == "symbol":
+            if lhs_mode == "computed-expression-key":
                 raise FatalError()
-            if mode == "key-value":
-                pass
-            result[lhs] = rhs
+
+            result[lhs_value] = rhs
         return object_type(result, any_type())
 
     def visitListTemplate(self, ctx):
@@ -812,15 +846,21 @@ class RDHLang5Visitor(langVisitor):
         if splat:
             raise FatalError()
 
-        for lhs, rhs, mode in properties:
+        for is_splat, lhs_value, lhs_mode, rhs in properties:
             value_type = None
-            if mode == "splat":
+
+            if is_splat:
                 raise NotImplementedError()
-            if mode == "value":
-                value_type = rhs
-            if mode == "symbol":
-                value_type = unbound_dereference(lhs)
-            if mode == "key-value":
+            if rhs is not None:
+                raise FatalError()
+            if lhs_mode == "literal-key":
+                if isinstance(lhs_value, str):
+                    value_type = unbound_dereference(lhs_value)
+                elif isinstance(lhs_value, int):
+                    value_type = literal_op(lhs_value)
+            if lhs_mode == "expression-key":
+                value_type = lhs_value
+            if lhs_mode == "computed-expression-key":
                 raise FatalError()
 
             result.append(value_type)

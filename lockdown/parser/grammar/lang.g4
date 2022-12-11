@@ -79,7 +79,7 @@ WS
    ;
 
 function
-   : dynamic='dynamic'? 'function' SYMBOL? '(' argumentDestructurings? ')' (functionBreakTypes=expression)? '{' codeBlock '}'
+   : dynamic='dynamic'? 'function' SYMBOL? '(' objectProperties ')' (functionBreakTypes=expression)? '{' codeBlock '}'
    | dynamic='dynamic'? 'function' SYMBOL? '(|' raw_argument=expression '|)' (functionBreakTypes=expression)? '{' codeBlock '}'
    ;
 
@@ -89,14 +89,6 @@ codeBlockAsFunction
 
 lockdownJsonExpression
    : 'lockdown' '(' expression ')'
-   ;
-
-argumentDestructurings
-   : argumentDestructuring (',' argumentDestructuring)*
-   ;
-
-argumentDestructuring
-   : expression SYMBOL
    ;
 
 symbolInitialization
@@ -223,12 +215,14 @@ objectProperties
    ;
 
 objectProperty
+   : splat='...'? objectKey (':' expression)?
+   ;
+
+objectKey
    : SYMBOL
-   | SYMBOL ':' expression
-   | NUMBER ':' expression
+   | NUMBER
    | expression
-   | '[' expression ']' ':' expression
-   | splat='...'? expression
+   | computed='[' expression ']'
    ;
 
 functionType

@@ -384,7 +384,7 @@ class TestBuiltIns(TestCase):
                         yield i * i;
                     };
                 };
-                return find(squareGenerator, function(int i) { return i > 50; } );
+                return find(squareGenerator, function(i: int) { return i > 50; } );
             }
         """, debug=True)
         _, result = bootstrap_function(code)
@@ -1207,7 +1207,7 @@ class TestSpeed(TestCase):
 class TestError(TestCase):
     def test_1(self):
         code = parse("""
-            function(int foo) => int {
+            function(foo: int) => int {
                 return foo;
             }
         """, debug=True)
@@ -1219,7 +1219,7 @@ class TestError(TestCase):
 
     def test_2(self):
         code = parse("""
-            function(any foo) {
+            function(foo: any) {
                 return foo.bar;
             }
         """, debug=True)
@@ -1232,7 +1232,7 @@ class TestError(TestCase):
 
     def test_3(self):
         code = parse("""
-            function(any foo) {
+            function(foo: any) {
                 return foo + 3;
             }
         """, debug=True)
@@ -1245,7 +1245,7 @@ class TestError(TestCase):
         
     def test_4(self):
         code = parse("""
-            function(any foo) {
+            function(foo: any) {
                 foo = "hello";
                 return foo;
             }
@@ -1359,7 +1359,7 @@ class TestEuler(TestCase):
     def test_5(self):
         code = parse("""
             function() {
-                var solve = function(int test) {
+                var solve = function(test: int) {
                     int result = 1;
                     for(var i from range(1, test + 1)) {
                         result = result * i / gcd(result, i);
@@ -1389,7 +1389,7 @@ class TestEuler(TestCase):
     def test_7_slow(self):
         code = parse("""
             function() => int {
-                var isPrime = function(int number) => bool {
+                var isPrime = function(number: int) => bool {
                     for(var i from range(2, number / 2)) {
                         if(number % i == 0) {
                             return false;
@@ -1416,7 +1416,7 @@ class TestEuler(TestCase):
     def test_7_fast(self):
         code = parse("""
             function() => int {
-                var isPrime = function(int number) => bool {
+                var isPrime = function(number: int) => bool {
                     for(var i from range(2, number / 2)) {
                         if(number % i == 0) {
                             return false;
@@ -1471,7 +1471,7 @@ class TestEuler(TestCase):
         # The original test goes to 500, but I can only do 10 atm...
         code = parse("""
             function() {
-                var countDivisors = function(int number) {
+                var countDivisors = function(number: int) {
                     int test = number, count = 1;
                     for(var test from range(1, number)) {
                         if(number % test == 0) {
@@ -1495,7 +1495,7 @@ class TestEuler(TestCase):
     def test_12a(self):
         code = parse("""
             function() {
-                var countDivisors = function(int number) {
+                var countDivisors = function(number: int) {
                     return length(
                         for(var test from range(1, number)) {
                             if(number % test == 0) {
@@ -1513,7 +1513,7 @@ class TestEuler(TestCase):
                     };
                 };
 
-                return find(triangleNumberGenerator, function(int number) {
+                return find(triangleNumberGenerator, function(number: int) {
                     return countDivisors(number) > 10;
                 });
             }             
@@ -1527,11 +1527,11 @@ class TestEuler(TestCase):
             function() => int {
                 Dictionary<int : int> cachedResults = { 1: 1 };
 
-                Function<int> => int testNumber = function(int number) => int {
+                Function<int> => int testNumber = function(number: int) => int {
                     return 0;
                 };
 
-                testNumber = function(int number) => int {
+                testNumber = function(number: int) => int {
                     var cachedResult = cachedResults[number]?;
 
                     if(cachedResult is int) {
@@ -1553,7 +1553,7 @@ class TestEuler(TestCase):
     def test_15(self):
         code = parse("""
             function() {
-                var binomial = function(int n, int k) {
+                var binomial = function(n: int, k: int) {
                     return factorial(n) / factorial(k) / factorial(n - k);
                 };
                 return binomial(40, 20);
