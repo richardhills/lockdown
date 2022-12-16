@@ -794,6 +794,59 @@ class TestFunctionDeclaration(TestCase):
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 2 ** (3 * 3))
 
+class TestFunctionVarArgs(TestCase):
+    def test_only_var_args(self):
+        code = parse("""
+            function() {
+                var func = function(...vars: int) {
+                    return vars[1];
+                };
+                return func(3, 4, 8);
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code, check_safe_exit=False)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 4)
+
+    def test_slice_args(self):
+        code = parse("""
+            function() {
+                var func = function(...vars: int) {
+                    return vars;
+                };
+                return func(3, 4, 8);
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code, check_safe_exit=False)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._to_list(), [ 3, 4, 8 ])
+
+    def test_var_args_after_other_args(self):
+        code = parse("""
+            function() {
+                var func = function(foo: int, bar: int, ...vars: int) {
+                    return vars;
+                };
+                return func(3, 4, 8);
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code, check_safe_exit=False)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._to_list(), [ 8 ])
+
+    def test_var_args_with_mixed_types(self):
+        code = parse("""
+            function() {
+                var func = function(foo: int, bar: int, ...vars: any) {
+                    return vars;
+                };
+                return func(3, 4, "hello", "yes");
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code, check_safe_exit=False)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._to_list(), [ "hello", "yes" ])
+
 
 class TestObjectDestructuring(TestCase):
     def test_single_initialization_destructure(self):

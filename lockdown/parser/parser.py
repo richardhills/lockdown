@@ -79,35 +79,45 @@ class RDHLang5Visitor(langVisitor):
             if final_splat:
                 raise FatalError
 
-            argument_types = [ None ] * len(arguments)
+            argument_types = []
             local_variable_types = {}
             local_variable_initializers = {}
+            wildcard_argument_type = None
 
             for index, (is_splat, lhs_value, lhs_mode, rhs) in enumerate(arguments):
-                name = None
-                type = None
+                if lhs_mode == "literal-key":
+                    if not isinstance(lhs_value, str):
+                        raise FatalError()
 
-                if is_splat:
-                    raise FatalError()
+                    if is_splat:
+                        if index != len(arguments) - 1:
+                            raise FatalError()
+    
+                        wildcard_argument_type = rhs
+                        local_variable_types[lhs_value] = inferred_type()
+                        local_variable_initializers[lhs_value] = map_op(
+                            dereference("argument"), prepared_function(
+                                object_type({ "index": int_type(), "value": rhs }),
+                                condition_op(
+                                    binary_integer_op("gte", unbound_dereference("index"), literal_op(index)),
+                                    continue_op(unbound_dereference("value")), nop()
+                                )
+                            )
+                        )
+                    else:
+                        argument_types.append(rhs)
+                        local_variable_types[lhs_value] = rhs
+                        local_variable_initializers[lhs_value] = dereference("argument", index)
+
                 if rhs is None:
                     raise FatalError()
-                if lhs_mode == "literal-key":
-                    if isinstance(lhs_value, str):
-                        name = lhs_value
-                        type = rhs
-                    elif isinstance(lhs_value, int):
-                        raise FatalError()
                 if lhs_mode == "expression-key":
                     raise FatalError()
                 if lhs_mode == "computed-expression-key":
                     raise FatalError()
 
-                argument_types[index] = type
-                local_variable_types[name] = type
-                local_variable_initializers[name] = dereference("argument", index)
-
             argument_code_builder = CodeBlockBuilder(
-                argument_type_expression=list_type(argument_types, None),
+                argument_type_expression=list_type(argument_types, wildcard_argument_type),
                 local_variable_type=object_type(
                     local_variable_types,
                     wildcard_type=rich_type()
