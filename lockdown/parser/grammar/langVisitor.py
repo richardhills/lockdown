@@ -99,6 +99,11 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#negation.
+    def visitNegation(self, ctx:langParser.NegationContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#mod.
     def visitMod(self, ctx:langParser.ModContext):
         return self.visitChildren(ctx)
@@ -136,11 +141,6 @@ class langVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by langParser#division.
     def visitDivision(self, ctx:langParser.DivisionContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by langParser#toListType.
-    def visitToListType(self, ctx:langParser.ToListTypeContext):
         return self.visitChildren(ctx)
 
 
@@ -411,11 +411,6 @@ class langVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by langParser#splat2.
     def visitSplat2(self, ctx:langParser.Splat2Context):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by langParser#listType.
-    def visitListType(self, ctx:langParser.ListTypeContext):
         return self.visitChildren(ctx)
 
 

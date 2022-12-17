@@ -18,7 +18,7 @@ from lockdown.executor.raw_code_factories import function_lit, nop, comma_op, \
     continue_op, check_is_opcode, is_op, function_type, \
     composite_type, static_op, map_op, insert_op, prepared_function, int_type, \
     any_type, print_op, shift_op, prepare_op, close_op, rich_type, typeof_op, \
-    merge_op
+    merge_op, unary_op
 from lockdown.parser.grammar.langLexer import langLexer
 from lockdown.parser.grammar.langParser import langParser
 from lockdown.parser.grammar.langVisitor import langVisitor
@@ -457,6 +457,10 @@ class RDHLang5Visitor(langVisitor):
         if unsafe:
             result = transform_op("exception", "value", result, True)
         return result
+
+    def visitNegation(self, ctx):
+        expression = self.visit(ctx.expression())
+        return unary_op("not", expression)
 
     def visitMultiplication(self, ctx):
         lvalue, rvalue = ctx.expression()

@@ -78,6 +78,22 @@ class TestBasicFunction(TestCase):
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 42)
 
+    def test_returns_false(self):
+        code = parse("""
+            function() { return !true; }
+        """)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, False)
+
+    def test_returns_true(self):
+        code = parse("""
+            function() { return !false; }
+        """)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, True)
+
     def test_returns_string(self):
         code = parse("""
             function() { return "hello"; }

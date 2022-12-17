@@ -170,6 +170,15 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#negation.
+    def enterNegation(self, ctx:langParser.NegationContext):
+        pass
+
+    # Exit a parse tree produced by langParser#negation.
+    def exitNegation(self, ctx:langParser.NegationContext):
+        pass
+
+
     # Enter a parse tree produced by langParser#mod.
     def enterMod(self, ctx:langParser.ModContext):
         pass
@@ -239,15 +248,6 @@ class langListener(ParseTreeListener):
 
     # Exit a parse tree produced by langParser#division.
     def exitDivision(self, ctx:langParser.DivisionContext):
-        pass
-
-
-    # Enter a parse tree produced by langParser#toListType.
-    def enterToListType(self, ctx:langParser.ToListTypeContext):
-        pass
-
-    # Exit a parse tree produced by langParser#toListType.
-    def exitToListType(self, ctx:langParser.ToListTypeContext):
         pass
 
 
@@ -734,15 +734,6 @@ class langListener(ParseTreeListener):
 
     # Exit a parse tree produced by langParser#splat2.
     def exitSplat2(self, ctx:langParser.Splat2Context):
-        pass
-
-
-    # Enter a parse tree produced by langParser#listType.
-    def enterListType(self, ctx:langParser.ListTypeContext):
-        pass
-
-    # Exit a parse tree produced by langParser#listType.
-    def exitListType(self, ctx:langParser.ListTypeContext):
         pass
 
 

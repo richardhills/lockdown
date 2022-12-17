@@ -272,6 +272,13 @@ def list_template_op(values):
     }, debug_reason="code")
 
 
+def unary_op(name, value):
+    check_is_opcode(value)
+    return PythonObject({
+        "opcode": name,
+        "value": value,
+    }, debug_reason="code")
+
 def binary_integer_op(name, lvalue, rvalue):
     check_is_opcode(lvalue)
     check_is_opcode(rvalue)

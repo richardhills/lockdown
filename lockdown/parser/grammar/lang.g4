@@ -131,6 +131,7 @@ expression
    | '<' expression '>'		# staticExpression
    | expression 'is' expression # is
    | SYMBOL					# immediateDereference
+   | '!' expression # negation
    | expression '.' SYMBOL  # staticDereference
    | expression '[' expression ']' unsafe='?'? # dynamicDereference
    | expression '*' expression # multiplication
@@ -162,7 +163,6 @@ expression
    | forListLoop			# toForListLoop
    | breakTypes				# toBreakTypes
    | objectType				# toObjectType
-   | listType				# toListType
    | dictionaryType			# toDictionaryType
    | tupleType				# toTupleType
    | functionType			# toFunctionType
@@ -200,10 +200,6 @@ tupleType
 
 splat2
    : '...'
-   ;
-
-listType
-   : 'List' '<' expression '>'
    ;
 
 dictionaryType

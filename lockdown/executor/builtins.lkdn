@@ -76,6 +76,38 @@ static list = function(func: intYielder) {
 	};
 };
 
+static List = function(type: any) {
+  var isSparse = false;
+  return {
+    type: "Universal",
+    micro_ops: [{
+      type: "get-wildcard",
+      params: [ int, type, true ]
+    }, {
+      type: "iter",
+      params: [ int, type ]
+    }, {
+      type: "set-wildcard",
+      params: [ int, type, !isSparse, false ]
+    }, {
+      type: "remove-wildcard",
+      params: [ true, false ]
+    }, {
+      type: "insert-wildcard",
+      params: [ type, !isSparse, false ]
+    }, {
+      type: "insert-start",
+      params: [ type, false ]
+    }, {
+      type: "insert-end",
+      params: [ type, false ]
+    }, {
+      type: "insert-end",
+      params: [ type, false ]
+    }]
+  };
+};
+
 static range = function(start: int, end: int) => intYielder {
 	return function() {
 		int i = start;
@@ -159,5 +191,5 @@ static factorial = function(a: int) {
 };
 
 export {
-	var, any, int, bool, string, void, Iterable, keys, values, valuesG, sum, max, gcd, factorial, list, range, irange, length, find
+	var, any, int, bool, string, void, Iterable, keys, values, valuesG, sum, max, gcd, factorial, list, List, range, irange, length, find
 };

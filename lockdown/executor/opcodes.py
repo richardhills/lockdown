@@ -1010,6 +1010,35 @@ class LengthOp(OpcodeOperandMixin, Opcode):
                 self.composite.get(context, frame, hooks)._length
             )
 
+def UnaryOp(name, func, argument_type, result_type):
+    MISSING_OPERAND = TypeErrorFactory("{}: missing_operand".format(name))
+
+    class _UnaryOp(OpcodeOperandMixin, Opcode):
+        value = Operand(argument_type, MISSING_OPERAND)
+
+        def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
+            break_types = BreakTypesFactory(self)
+
+            can_run = self.value.prepare(break_types, context, frame_manager, hooks, immediate_context)
+
+            if can_run:
+                break_types.add(self, "value", result_type)
+
+            return break_types.build()
+
+        def jump(self, context, frame_manager, hooks, immediate_context=None):
+            with frame_manager.get_next_frame(self) as frame:
+                return frame.value(self, 
+                    func(
+                        self.value.get,
+                        context,
+                        frame,
+                        hooks
+                    )
+                )
+
+    return _UnaryOp
+
 
 def BinaryOp(name, func, argument_type, result_type, number_op=None, cmp_op=None):
     MISSING_OPERANDS = TypeErrorFactory("{}: missing_operands".format(name))
@@ -1949,6 +1978,10 @@ MATH_AND_LOGIC_OPCODES = {
     "and": BinaryOp(
         "And",
         lambda lvalue, rvalue, *args: lvalue(*args) and rvalue(*args), BooleanType(), BooleanType()
+    ),
+    "not": UnaryOp(
+        "Not",
+        lambda value, *args: not value(*args), BooleanType(), BooleanType()
     ),
 }
 
