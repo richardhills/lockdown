@@ -256,6 +256,104 @@ class TemplateOp(OpcodeOperandMixin, Opcode):
             context_name, dependency_builder, **parameters
         )
 
+class MergeOp(OpcodeOperandMixin, Opcode):
+    INVALID = TypeErrorFactory("MergeOp: invalid")
+
+    left = Operand(CompositeType({}, "MergeOp"), INVALID)
+    right = Operand(CompositeType({}, "MergeOp"), INVALID)
+
+    def __init__(self, data, visitor):
+        super(MergeOp, self).__init__(data, visitor)
+        self.left_iter_micro_op = self.right_iter_micro_op = None
+
+    def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
+        break_types = BreakTypesFactory(self)
+
+        self.left.prepare(break_types, context, frame_manager, hooks, immediate_context)
+        self.right.prepare(break_types, context, frame_manager, hooks, immediate_context)
+
+        if self.left.safe:
+            self.left_iter_micro_op = self.left.value_type.get_micro_op_type(("iter",))
+        if self.right.safe:
+            self.right_iter_micro_op = self.right.value_type.get_micro_op_type(("iter",))
+
+        all_getter_micro_ops = [
+            micro_op for micro_op in
+            list(self.left.value_type.get_micro_op_types().values()) + list(self.right.value_type.get_micro_op_types().values())
+            if isinstance(micro_op, GetterMicroOpType)
+        ]
+
+        all_getter_micro_ops_by_key = {
+            m.key: m for m in all_getter_micro_ops
+        }
+
+        micro_ops = {}
+        all_key_types = []
+        all_value_types = []
+
+        for getter_micro_op in all_getter_micro_ops_by_key.values():
+            all_key_types.append(UnitType(getter_micro_op.key))
+            all_value_types.extend(unwrap_types(getter_micro_op.value_type))
+            micro_ops[("get", getter_micro_op.key)] = getter_micro_op
+            micro_ops[("set", getter_micro_op.key)] = SetterMicroOpType(getter_micro_op.key, AnyType())
+
+        combined_key_types = merge_types([ BottomType() ] + all_key_types, "exact")
+        combined_value_types = merge_types([ BottomType() ] + all_value_types, "exact")
+        have_default_factory = False
+
+        micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(AnyType(), combined_value_types, True)
+        micro_ops[("iter",)] = IterMicroOpType(combined_key_types, combined_value_types)
+        micro_ops[("set-wildcard",)] = SetterWildcardMicroOpType(AnyType(), AnyType(), False, False)
+        micro_ops[("delete-wildcard",)] = DeletterWildcardMicroOpType(AnyType(), not have_default_factory)
+        micro_ops[("remove-wildcard",)] = RemoverWildcardMicroOpType(not have_default_factory, False)
+        micro_ops[("insert-wildcard",)] = InserterWildcardMicroOpType(AnyType(), False, False)
+
+        micro_ops[("insert-start",)] = InsertStartMicroOpType(AnyType(), False)
+        micro_ops[("insert-end",)] = InsertEndMicroOpType(AnyType(), False)
+
+        value_type = CompositeType(micro_ops, name="MergeOp")
+
+        break_types.add(self, "value", value_type)
+
+        return break_types.build()
+
+    def splat(self, source, iter_micro_op, target, max_length):
+        for i, k, v in iter_micro_op.invoke(get_manager(source)):
+            if isinstance(k, int):
+                length_required_for_key = k + 1
+                max_length = max([ max_length, length_required_for_key ])
+            target[k] = v
+        return max_length
+
+    def jump(self, context, frame_manager, hooks, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
+            result = {}
+
+            initial_length = 0
+
+            initial_length = self.splat(
+                self.left.get(context, frame, hooks),
+                self.left_iter_micro_op,
+                result,
+                initial_length
+            )
+            initial_length = self.splat(
+                self.right.get(context, frame, hooks),
+                self.right_iter_micro_op,
+                result,
+                initial_length
+            )
+
+            return frame.value(
+                self, 
+                Universal(
+                    True,
+                    initial_wrapped=result,
+                    initial_length=initial_length,
+                    debug_reason="merge"
+                )
+            )
+
 class ContextOp(Opcode):
     def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
         break_types = BreakTypesFactory(self)
@@ -840,7 +938,7 @@ class MapOp(OpcodeOperandMixin, Opcode):
             if every_input_key_is_in_output:
                 for index in integer_keys:
                     micro_ops[("get", index)] = GetterMicroOpType(index, mapper_continue_type)
-                    micro_ops[("set", index)] = GetterMicroOpType(index, AnyType())
+                    micro_ops[("set", index)] = SetterMicroOpType(index, AnyType())
 
             if mapper_continue_type is not MISSING:
                 micro_ops[("get-wildcard",)] = GetterWildcardMicroOpType(IntegerType(), mapper_continue_type, True)
@@ -1859,9 +1957,10 @@ DATA_OPCODES = {
     "dynamic_dereference": DynamicDereferenceOp,
     "assignment": AssignmentOp,
     "dynamic_assignment": DynamicAssignmentOp,
+    "insert": InsertOp,
     "literal": LiteralOp,
     "template": TemplateOp,
-    "insert": InsertOp,
+    "merge": MergeOp,
     "map": MapOp,
     "length": LengthOp,
     "context": ContextOp,

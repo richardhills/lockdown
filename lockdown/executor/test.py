@@ -16,7 +16,7 @@ from lockdown.executor.raw_code_factories import function_lit, no_value_type, \
     unbound_dereference, match_op, dereference, prepared_function, one_of_type, \
     string_type, bool_type, try_catch_op, throw_op, const_string_type, \
     function_type, close_op, shift_op, transform_op, \
-    rich_type
+    rich_type, merge_op, list_template_op
 from lockdown.type_system.composites import add_composite_type
 from lockdown.type_system.core_types import IntegerType, StringType
 from lockdown.type_system.managers import get_manager
@@ -451,6 +451,73 @@ class TestTemplates(TestCase):
         add_composite_type(get_manager(result.value), DEFAULT_READONLY_COMPOSITE_TYPE)
         self.assertEqual(result.value._get("foo")._get("bar"), 42)
 
+    def test_simple_merge(self):
+        _, result = bootstrap_function(
+            function_lit(
+                any_type(),
+                return_op(
+                    merge_op(
+                        object_template_op({ "foo": literal_op(5) }),
+                        object_template_op({ "bar": literal_op(3) })
+                    )
+                )
+            ),
+            check_safe_exit=True
+        )
+
+        self.assertEqual(result.caught_break_mode, "return")
+        self.assertTrue(result.value._to_dict(), { "foo": 5, "bar": 3 })
+
+    def test_overwrite_merge(self):
+        _, result = bootstrap_function(
+            function_lit(
+                any_type(),
+                return_op(
+                    merge_op(
+                        object_template_op({ "foo": literal_op(5) }),
+                        object_template_op({ "foo": literal_op(3) })
+                    )
+                )
+            ),
+            check_safe_exit=True
+        )
+
+        self.assertEqual(result.caught_break_mode, "return")
+        self.assertTrue(result.value._to_dict(), { "foo": 3 })
+
+    def test_list_merge(self):
+        _, result = bootstrap_function(
+            function_lit(
+                any_type(),
+                return_op(
+                    merge_op(
+                        list_template_op([ literal_op(4), literal_op("hello") ]),
+                        list_template_op([ literal_op(2) ]),
+                    )
+                )
+            ),
+            check_safe_exit=True
+        )
+
+        self.assertEqual(result.caught_break_mode, "return")
+        self.assertTrue(result.value._to_list(), [ 2, "hello" ])
+
+    def test_overwrite_merge2(self):
+        _, result = bootstrap_function(
+            function_lit(
+                any_type(),
+                return_op(
+                    merge_op(
+                        object_template_op({ "foo": literal_op(5), "bar": literal_op("wot") }),
+                        object_template_op({ "foo": literal_op(3) })
+                    )
+                )
+            ),
+            check_safe_exit=True
+        )
+
+        self.assertEqual(result.caught_break_mode, "return")
+        self.assertTrue(result.value._to_dict(), { "foo": 3, "bar": "wot" })
 
 class TestLocals(TestCase):
     def test_initialization(self):

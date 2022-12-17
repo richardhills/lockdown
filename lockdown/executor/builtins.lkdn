@@ -115,7 +115,6 @@ static find = function(
 	return 0;
 };
 
-
 static sum = function(list: Iterable<any, int>) => int {
   int total = 0;
   list *|> {
@@ -127,8 +126,8 @@ static sum = function(list: Iterable<any, int>) => int {
 static max = function(list: {
   type: "Universal",
   micro_ops: [{
-        type: "iter",
-        params: [ int, int ]    
+    type: "iter",
+    params: [ int, int ]    
   }, {
     type: "get",
     index: 0,

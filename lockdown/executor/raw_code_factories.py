@@ -253,6 +253,13 @@ def object_template_op(values, debug_reason="code", op_keys=False, **kwargs):
         "opcodes": PythonList(values_list, debug_reason=debug_reason)
     }, **kwargs), debug_reason=debug_reason)
 
+def merge_op(left, right, **kwargs):
+    return PythonObject({
+        "opcode": "merge",
+        "left": left,
+        "right": right,
+        **kwargs
+    })
 
 def list_template_op(values):
     for v in values:

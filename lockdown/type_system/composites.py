@@ -688,6 +688,7 @@ class NetworkVerifierAndBuilder(object):
 
                 for micro_op in sub_type.get_micro_op_types().values():
                     if not micro_op.is_bindable_to(sub_type, target):
+                        micro_op.is_bindable_to(sub_type, target)
                         child_reasoner.push_micro_op_not_bindable_to(micro_op, sub_type, target)
                         micro_ops_checks_worked = False
                         break

@@ -375,6 +375,7 @@ class Frame(object):
                     ipdb.set_trace()
                 except ModuleNotFoundError:
                     pass
+                does_value_fit_through_type(exc_value.value, allowed_out, reasoner=reasoner)
                 msg = "Can not unwind {} {}, target {}, allowed {}: {}".format(exc_value.mode, exc_value.value, self.target, break_types, reasoner.to_message())
                 raise FatalError(msg)
 

@@ -847,6 +847,117 @@ class TestFunctionVarArgs(TestCase):
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value._to_list(), [ "hello", "yes" ])
 
+class TestObjectConstructing(TestCase):
+    def test_clone_constructor(self):
+        code = parse("""
+            function() {
+                var foo = { bar: 5 };
+                var baz = { ...foo };
+                return baz;
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._to_dict(), { "bar": 5 })
+
+    def test_complex_constructor(self):
+        code = parse("""
+            function() {
+                var foo = { bar: 5 };
+                var baz = { bam: 10, ...foo };
+                return baz;
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._to_dict(), { "bar": 5, "bam": 10 })
+
+    def test_pre_constructor(self):
+        code = parse("""
+            function() {
+                var foo = { bar: 5 };
+                var baz = { bar: 10, ...foo };
+                return baz;
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._to_dict(), { "bar": 5 })
+
+    def test_post_constructor(self):
+        code = parse("""
+            function() {
+                var foo = { bar: 5 };
+                var baz = { ...foo, bar: 10 };
+                return baz;
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._to_dict(), { "bar": 10 })
+
+
+    def test_pre_and_post_constructor(self):
+        code = parse("""
+            function() {
+                var foo = { bar: 5 };
+                var baz = { bar: 3, ...foo, bar: 10 };
+                return baz;
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._to_dict(), { "bar": 10 })
+
+    def test_multiple_constructor(self):
+        code = parse("""
+            function() {
+                var foo = { bar: 5 };
+                var fam = { bar: 9 };
+                var baz = { ...foo, ...fam };
+                return baz;
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._to_dict(), { "bar": 9 })
+
+    def test_dereference_constructor(self):
+        code = parse("""
+            function() {
+                var foo = { bar: { bam: 42 } };
+                var baz = { ...foo.bar };
+                return baz;
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._to_dict(), { "bam": 42 })
+
+    def test_dereference_constructor2(self):
+        code = parse("""
+            function() {
+                var foo = { bar: { bam: 42 } };
+                var baz = { bam: 10, ...foo.bar };
+                return baz;
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._to_dict(), { "bam": 42 })
+
+    def test_dereference_constructor3(self):
+        code = parse("""
+            function() {
+                var foo = { bar: { bam: 42 } };
+                var baz = { ...foo.bar, bam: 10 };
+                return baz;
+            }
+        """, debug=True)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._to_dict(), { "bam": 10 })
+
 
 class TestObjectDestructuring(TestCase):
     def test_single_initialization_destructure(self):

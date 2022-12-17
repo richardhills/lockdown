@@ -17,7 +17,8 @@ from lockdown.executor.raw_code_factories import function_lit, nop, comma_op, \
     local_function, reset_op, inferred_type, prepare_function_lit, transform, \
     continue_op, check_is_opcode, is_op, function_type, \
     composite_type, static_op, map_op, insert_op, prepared_function, int_type, \
-    any_type, print_op, shift_op, prepare_op, close_op, rich_type, typeof_op
+    any_type, print_op, shift_op, prepare_op, close_op, rich_type, typeof_op, \
+    merge_op
 from lockdown.parser.grammar.langLexer import langLexer
 from lockdown.parser.grammar.langParser import langParser
 from lockdown.parser.grammar.langVisitor import langVisitor
@@ -774,26 +775,28 @@ class RDHLang5Visitor(langVisitor):
         return (break_mode, list_template_op([ object_template_op(types) ]))
 
     def visitObjectTemplate(self, ctx):
-        result = {}
+        builder = ObjectTemplateBuilder()
+        
         properties, splat = self.visit(ctx.objectProperties())
 
         if splat:
             raise FatalError()
 
         for is_splat, lhs_value, lhs_mode, rhs in properties:
-            if is_splat:
-                raise NotImplementedError()
             if lhs_mode == "literal-key":
-                if rhs is None:
-                    rhs = unbound_dereference(lhs_value)
-                lhs_value = literal_op(lhs_value)
+                if is_splat:
+                    builder = builder.merge(unbound_dereference(lhs_value))
+                else:
+                    builder.add(literal_op(lhs_value), rhs or unbound_dereference(lhs_value))
             if lhs_mode == "expression-key":
-                pass
+                if is_splat:
+                    builder = builder.merge(lhs_value)
+                else:
+                    builder.add(lhs_value, rhs)
             if lhs_mode == "computed-expression-key":
-                pass
+                builder.add(lhs_value, rhs)
 
-            result[lhs_value] = rhs
-        return object_template_op(result, op_keys=True)
+        return builder.build()
 
     def visitObjectProperties(self, ctx):
         return ( [ self.visit(p) for p in ctx.objectProperty() ], ctx.splat is not None )
@@ -988,6 +991,32 @@ class RDHLang5Visitor(langVisitor):
 
         return function
 
+class ObjectTemplateBuilder(object):
+    def __init__(self, previous_op=None):
+        self.properties = {}
+        self.previous_op = previous_op
+
+    def add(self, lhs, rhs):
+        self.properties[lhs] = rhs
+
+    def merge(self, rhs):
+        return ObjectTemplateBuilder(merge_op(
+            self.build(),
+            rhs
+        ))
+
+    def build(self):
+        template_op = None
+        if self.properties or not self.previous_op:
+            template_op = object_template_op(self.properties, op_keys=True)
+
+        if self.previous_op and template_op:
+            return merge_op(self.previous_op, template_op)
+
+        result = self.previous_op or template_op
+        if result is None:
+            print("Asd")
+        return result
 
 class CodeBlockBuilder(object):
     def __init__(
