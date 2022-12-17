@@ -330,7 +330,7 @@ class TestBuiltIns(TestCase):
     def test_range(self):
         code = parse("""
             function() {
-                return list(range(1, 5));
+                return list<int>(range(1, 5));
             }
         """, debug=True)
         _, result = bootstrap_function(code)
@@ -440,13 +440,12 @@ class TestBuiltIns(TestCase):
     def test_values(self):
         code = parse("""
             function() {
-                return values({ foo: "bar", baz: 4 });
+                return values<any>({ foo: "bar", baz: 4 });
             }
         """, debug=True)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
-        self.assertIn("bar", result.value._to_list())
-        self.assertIn(4, result.value._to_list())
+        self.assertEqual(result.value._to_list(), [ "bar", 4 ])
 
     def test_sums(self):
         code = parse("""
@@ -655,7 +654,7 @@ class TestPipeline(TestCase):
     def test_value_pipeline(self):
         code = parse("""
             function() {
-                return { foo: "bar", baz: 4 } |> values;
+                return { foo: "bar", baz: 4 } |> values<any>;
             }
         """, debug=True)
         _, result = bootstrap_function(code)
@@ -676,7 +675,7 @@ class TestPipeline(TestCase):
     def test_length_pipeline_chain(self):
         code = parse("""
             function() {
-                return { foo: 3, bar: 4, baz: 5 } |> values |> length;
+                return { foo: 3, bar: 4, baz: 5 } |> values<int> |> length;
             }
         """, debug=True)
         _, result = bootstrap_function(code)
@@ -686,7 +685,7 @@ class TestPipeline(TestCase):
     def test_max_pipeline_chain(self):
         code = parse("""
             function() {
-                return { foo: 3, bar: 4, baz: 5 } |> valuesG<int> |> sum;
+                return { foo: 3, bar: 4, baz: 5 } |> values<int> |> sum;
             }
         """, debug=True)
         _, result = bootstrap_function(code)
@@ -1723,7 +1722,7 @@ class TestEuler(TestCase):
                     return calcedResult;
                 };
 
-                Tuple<int...> results = for(var test in list<range(1, 10)>) { continue testNumber(test); };
+                Tuple<int...> results = for(var test in list<int><range(1, 10)>) { continue testNumber(test); };
                 return max(results);
             }
         """, debug=True)

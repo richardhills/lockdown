@@ -410,9 +410,7 @@ class RDHLang5Visitor(langVisitor):
         return invoke_op(function, list_template_op(arguments), **get_context_debug_info(ctx))
 
     def visitStaticInvocation(self, ctx):
-        function = self.visit(ctx.expression()[0])
-        arguments = [self.visit(a) for a in ctx.expression()[1:]]
-        return static_op(invoke_op(function, list_template_op(arguments), **get_context_debug_info(ctx)))
+        return static_op(self.visitInvocation(ctx))
 
     def visitPipeline(self, ctx):
         argument, function = ctx.expression()

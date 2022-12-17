@@ -121,14 +121,13 @@ expression
    | 'false'				# falseExpression
    | objectTemplate			# toObjectTemplate
    | listTemplate			# toListTemplate
+   | expression '<' objectProperties '>' # staticInvocation
    | expression '(' objectProperties ')' # invocation
-   | expression '<' expression (',' expression)* '>' # staticInvocation
    | expression '|>' expression # pipeline
    | '(' expression ')'     # parenthesis
    | '<' expression '>'		# staticExpression
    | expression 'is' expression # is
    | '!' expression # negation
-   | SYMBOL					# immediateDereference
    | expression '.' SYMBOL  # staticDereference
    | expression '[' expression ']' unsafe='?'? # dynamicDereference
    | expression '*' expression # multiplication
@@ -138,13 +137,14 @@ expression
    | expression '%' expression # mod
    | expression '==' expression # eq
    | expression '!=' expression # neq
-   | expression '<' expression # lt
+   | expression ' < ' expression # lt
    | expression '<=' expression # lte
-   | expression '>' expression # gt
+   | expression ' > ' expression # gt
    | expression '>=' expression # gte
    | expression '||' expression # boolOr
    | expression '&&' expression # boolAnd
    | expression '*|>' '{' codeBlock '}' # toMap
+   | SYMBOL          # immediateDereference   
    | SYMBOL '=' expression  # immediateAssignment
    | expression '.' SYMBOL '=' expression  # staticAssignment
    | expression '[' expression ']' '=' expression # dynamicAssignment

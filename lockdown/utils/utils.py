@@ -77,8 +77,10 @@ def dump_code(ast):
                 items = [ i for i in items if i[0] not in ("start", "end") ]
                 items = sorted(items, key=sort_dict_output)
                 return OrderedDict(items)
+            if isinstance(o, InternalMarker):
+                return o.name
             return o
-    return RDHObjectEncoder().encode(ast)
+    return RDHObjectEncoder(indent=2).encode(ast)
 
 def print_code(ast):
     print(dump_code(ast))
