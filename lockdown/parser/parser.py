@@ -84,6 +84,7 @@ class RDHLang5Visitor(langVisitor):
             local_variable_types = {}
             local_variable_initializers = {}
             wildcard_argument_type = None
+            raw_argument_type = None
 
             for index, (is_splat, lhs_value, lhs_mode, rhs) in enumerate(arguments):
                 if lhs_mode == "literal-key":
@@ -93,7 +94,7 @@ class RDHLang5Visitor(langVisitor):
                     if is_splat:
                         if index != len(arguments) - 1:
                             raise FatalError()
-    
+
                         wildcard_argument_type = rhs
                         local_variable_types[lhs_value] = inferred_type()
                         local_variable_initializers[lhs_value] = map_op(
@@ -106,19 +107,26 @@ class RDHLang5Visitor(langVisitor):
                             )
                         )
                     else:
-                        argument_types.append(rhs)
-                        local_variable_types[lhs_value] = rhs
-                        local_variable_initializers[lhs_value] = dereference("argument", index)
+                        if rhs is None:
+                            raw_argument_type = unbound_dereference(lhs_value)
+                        else:
+                            argument_types.append(rhs)
+                            local_variable_types[lhs_value] = rhs
+                            local_variable_initializers[lhs_value] = dereference("argument", index)
 
-                if rhs is None:
-                    raise FatalError()
                 if lhs_mode == "expression-key":
-                    raise FatalError()
+                    if rhs is None:
+                        raw_argument_type = lhs_value
+                    else:
+                        raise FatalError()
                 if lhs_mode == "computed-expression-key":
                     raise FatalError()
 
+            if raw_argument_type is None:
+                raw_argument_type = list_type(argument_types, wildcard_argument_type)
+
             argument_code_builder = CodeBlockBuilder(
-                argument_type_expression=list_type(argument_types, wildcard_argument_type),
+                argument_type_expression=raw_argument_type,
                 local_variable_type=object_type(
                     local_variable_types,
                     wildcard_type=rich_type()
@@ -127,10 +135,6 @@ class RDHLang5Visitor(langVisitor):
             )
 
             function_builder = argument_code_builder.chain(code_block)
-        elif ctx.raw_argument:
-            function_builder = CodeBlockBuilder(
-                argument_type_expression=self.visit(ctx.raw_argument)
-            ).chain(code_block)
         else:
             function_builder = CodeBlockBuilder(
                 argument_type_expression=list_type([], None)
@@ -409,15 +413,6 @@ class RDHLang5Visitor(langVisitor):
         function = self.visit(ctx.expression()[0])
         arguments = [self.visit(a) for a in ctx.expression()[1:]]
         return static_op(invoke_op(function, list_template_op(arguments), **get_context_debug_info(ctx)))
-
-    def visitSingleParameterInvocation(self, ctx):
-        function, argument = ctx.expression()
-        function = self.visit(function)
-        argument = self.visit(argument)
-        return invoke_op(function, argument, **get_context_debug_info(ctx))
-
-    def visitNoParameterInvocation(self, ctx):
-        return invoke_op(self.visit(ctx.expression()), **get_context_debug_info(ctx))
 
     def visitPipeline(self, ctx):
         argument, function = ctx.expression()

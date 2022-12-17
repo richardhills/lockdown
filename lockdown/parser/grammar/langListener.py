@@ -296,15 +296,6 @@ class langListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by langParser#noParameterInvocation.
-    def enterNoParameterInvocation(self, ctx:langParser.NoParameterInvocationContext):
-        pass
-
-    # Exit a parse tree produced by langParser#noParameterInvocation.
-    def exitNoParameterInvocation(self, ctx:langParser.NoParameterInvocationContext):
-        pass
-
-
     # Enter a parse tree produced by langParser#toForListLoop.
     def enterToForListLoop(self, ctx:langParser.ToForListLoopContext):
         pass
@@ -446,15 +437,6 @@ class langListener(ParseTreeListener):
 
     # Exit a parse tree produced by langParser#toForGeneratorLoop.
     def exitToForGeneratorLoop(self, ctx:langParser.ToForGeneratorLoopContext):
-        pass
-
-
-    # Enter a parse tree produced by langParser#singleParameterInvocation.
-    def enterSingleParameterInvocation(self, ctx:langParser.SingleParameterInvocationContext):
-        pass
-
-    # Exit a parse tree produced by langParser#singleParameterInvocation.
-    def exitSingleParameterInvocation(self, ctx:langParser.SingleParameterInvocationContext):
         pass
 
 

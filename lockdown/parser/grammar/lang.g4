@@ -80,7 +80,6 @@ WS
 
 function
    : dynamic='dynamic'? 'function' SYMBOL? '(' objectProperties ')' (functionBreakTypes=expression)? '{' codeBlock '}'
-   | dynamic='dynamic'? 'function' SYMBOL? '(|' raw_argument=expression '|)' (functionBreakTypes=expression)? '{' codeBlock '}'
    ;
 
 codeBlockAsFunction
@@ -124,14 +123,12 @@ expression
    | listTemplate			# toListTemplate
    | expression '(' objectProperties ')' # invocation
    | expression '<' expression (',' expression)* '>' # staticInvocation
-   | expression '(|' expression '|)'     # singleParameterInvocation
-   | expression '(' ')'     # noParameterInvocation
    | expression '|>' expression # pipeline
    | '(' expression ')'     # parenthesis
    | '<' expression '>'		# staticExpression
    | expression 'is' expression # is
-   | SYMBOL					# immediateDereference
    | '!' expression # negation
+   | SYMBOL					# immediateDereference
    | expression '.' SYMBOL  # staticDereference
    | expression '[' expression ']' unsafe='?'? # dynamicDereference
    | expression '*' expression # multiplication

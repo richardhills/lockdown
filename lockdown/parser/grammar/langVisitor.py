@@ -169,11 +169,6 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by langParser#noParameterInvocation.
-    def visitNoParameterInvocation(self, ctx:langParser.NoParameterInvocationContext):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by langParser#toForListLoop.
     def visitToForListLoop(self, ctx:langParser.ToForListLoopContext):
         return self.visitChildren(ctx)
@@ -251,11 +246,6 @@ class langVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by langParser#toForGeneratorLoop.
     def visitToForGeneratorLoop(self, ctx:langParser.ToForGeneratorLoopContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by langParser#singleParameterInvocation.
-    def visitSingleParameterInvocation(self, ctx:langParser.SingleParameterInvocationContext):
         return self.visitChildren(ctx)
 
 

@@ -120,7 +120,7 @@ class TestBasicFunction(TestCase):
 
     def test_return_argument(self):
         code = parse("""
-            function(|int|) { return argument; }
+            function(int) { return argument; }
         """)
         _, result = bootstrap_function(code, argument=42)
         self.assertEqual(result.caught_break_mode, "value")
@@ -128,7 +128,7 @@ class TestBasicFunction(TestCase):
 
     def test_dereference_argument_parameter(self):
         code = parse("""
-            function(|Object { foo: int }|) { return foo; }
+            function(Object { foo: int }) { return foo; }
         """)
         _, result = bootstrap_function(code, argument=PythonObject({ "foo": 42 }))
         self.assertEqual(result.caught_break_mode, "value")
