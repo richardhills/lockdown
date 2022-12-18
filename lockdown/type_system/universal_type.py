@@ -444,7 +444,7 @@ class GetterMicroOpType(MicroOpType):
             else:
                 default_factory = target_manager.default_factory
                 if not default_factory:
-                    raise FatalError()
+                    raise FatalError("{} does not exist on {}".format(self.key, obj))
 
                 value = default_factory(target_manager, self.key)
 

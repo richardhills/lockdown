@@ -8,7 +8,7 @@ from lockdown.executor.ast_utils import build_and_compile_ast_function, compile_
 from lockdown.executor.context import Context
 from lockdown.executor.exceptions import PreparationException
 from lockdown.executor.flow_control import BreakTypesFactory, FrameManager, \
-    is_restartable
+    is_restartable, BreakException
 from lockdown.executor.function_type import enrich_break_type, OpenFunctionType, \
     ClosedFunctionType
 from lockdown.executor.opcodes import enrich_opcode, get_context_type, evaluate, \
@@ -70,13 +70,6 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
         debug_reason="static-evaluation-context"
     )
 
-    # context = Universal(True, initial_wrapped={
-    #     "prepare": outer_context,
-    #     "_types": UniversalObjectType({
-    #         "prepare": RICH_READONLY_TYPE
-    #     })
-    # }, bind=DEFAULT_READONLY_COMPOSITE_TYPE, debug_reason="static-prepare-context")
-
     static = evaluate(
         enrich_opcode(
             data._get("static"),
@@ -84,8 +77,6 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
         ),
         context, frame_manager, hooks
     )
-
-    #get_manager(static).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
 
     argument_type = enrich_type(static._get("argument"))
     outer_type = enrich_type(static._get("outer"))
@@ -123,21 +114,7 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
         debug_reason="local-enrichment-context"
     )
 
-    # context = Universal(True, initial_wrapped={
-    #     "prepare": outer_context,
-    #     "static": static,
-    #     "_types": UniversalObjectType({
-    #         "prepare": RICH_READONLY_TYPE,
-    #         "static": RICH_READONLY_TYPE,
-    #         "outer": outer_type,
-    #         "argument": argument_type,
-    #     })
-    # },
-    #     bind=DEFAULT_READONLY_COMPOSITE_TYPE,
-    #     debug_reason="local-prepare-context"
-    # )
-
-# optimization to avoid generating context_type lazily
+    # optimization to avoid generating context_type lazily
     get_manager(context)._context_type = UniversalObjectType({
         "outer": outer_type,
         "argument": argument_type,
@@ -157,14 +134,15 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
 
     #get_manager(declared_break_types).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
 
-    actual_local_type, local_other_break_types = get_expression_break_types(
-        local_initializer,
-        context,
-        frame_manager,
-        hooks
-    )
-
-    #get_manager(context).remove_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+    try:
+        actual_local_type, local_other_break_types = get_expression_break_types(
+            local_initializer,
+            context,
+            frame_manager,
+            hooks
+        )
+    except BreakException as e:
+        raise PreparationException(e)
 
     actual_break_types_factory.merge(local_other_break_types)
 
@@ -197,21 +175,6 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
             debug_reason="code-enrichment-context"
         )
 
-        # context = Universal(True, initial_wrapped={
-        #     "prepare": outer_context,
-        #     "static": static,
-        #     "_types": UniversalObjectType({
-        #         "prepare": RICH_READONLY_TYPE,
-        #         "static": RICH_READONLY_TYPE,
-        #         "outer": outer_type,
-        #         "argument": argument_type,
-        #         "local": local_type
-        #     })
-        # },
-        #     bind=DEFAULT_READONLY_COMPOSITE_TYPE,
-        #     debug_reason="code-prepare-context"
-        # )
-
         get_manager(context)._context_type = UniversalObjectType({
             "outer": outer_type,
             "argument": argument_type,
@@ -223,14 +186,10 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
             combine(type_conditional_converter, UnboundDereferenceBinder(context))
         )
 
-        if len(get_manager(context).get_attached_nodes()[0].child_nodes) == 0:
-            print("hello")
-        if len(get_manager(static).get_attached_nodes()) == 0:
-            print("Wot")
-
-        code_break_types = code.get_break_types(context, frame_manager, hooks)
-
-        #get_manager(context).remove_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
+        try:
+            code_break_types = code.get_break_types(context, frame_manager, hooks)
+        except BreakException as e:
+            raise PreparationException(e)
 
         actual_break_types_factory.merge(code_break_types)
 

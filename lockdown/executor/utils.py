@@ -68,25 +68,35 @@ def flatten_out_types(break_types):
     return merge_types([b["out"] for b in break_types], "super")
 
 
-class TypeErrorFactory(object):
-    def __init__(self, message):
-        self.message = message
+class OpcodeErrorType(object):
+    def __init__(self, name, **params):
+        self.name = name
+        self.params = params
+        for name, type in self.params.items():
+            if not isinstance(name, str):
+                raise FatalError()
+            if not isinstance(type, Type):
+                raise FatalError()
 
-    def __call__(self, message=None, **kwargs):
+    def __call__(self, **kwargs):
         data = {
-            "type": "TypeError",
-            "message": message or self.message,
-            "kwargs": PythonDict(kwargs)
+            "type": self.name
         }
-        return PythonObject(data, bind=self.get_type(message), debug_reason="type-error")
+        for key, value in kwargs.items():
+            if not key in self.params:
+                raise FatalError("{} not in {}".format(key, self.params))
+            data[key] = value
+        return PythonObject(data, debug_reason="type-error")
 
-    def get_type(self, message=None):
+    def get_type(self, **param_values):
         properties = {
-            "type": Const(UnitType("TypeError")),
-            "message": Const(UnitType(message or self.message)),
-            "kwargs": Const(UniversalDictType(StringType(), AnyType()))
+            "type": Const(UnitType(self.name))
         }
-        return UniversalObjectType(properties, wildcard_type=AnyType(), name="TypeError")
+        for name, type in self.params.items():
+            properties[name] = Const(type)
+        for name, value in param_values.items():
+            properties[name] = UnitType(value)
+        return UniversalObjectType(properties, name="TypeError")
 
 def get_operand_type(expression, context, frame_manager, hooks, break_types, immediate_context=None):
     value_type, other_break_types = get_expression_break_types(

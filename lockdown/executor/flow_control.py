@@ -32,6 +32,10 @@ class BreakException(Exception):
         self.opcode = opcode
         self.restart_type = restart_type
         self.caused_by = caused_by
+        self.stack_trace = [ opcode ]
+
+    def add_stack(self, invocation_opcode):
+        self.stack_trace.append(invocation_opcode)
 
     def __str__(self):
         return break_exception_to_string(self.mode, self.value, self.caused_by)

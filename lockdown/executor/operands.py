@@ -5,7 +5,7 @@ from lockdown.executor.exceptions import PreparationException
 from lockdown.executor.flow_control import BreakTypesFactory
 from lockdown.executor.raw_code_factories import is_opcode
 from lockdown.executor.utils import get_operand_type, get_expression_break_types, \
-    flatten_out_types, evaluate, TypeErrorFactory
+    flatten_out_types, evaluate, OpcodeErrorType
 from lockdown.type_system.composites import is_type_bindable_to_value
 from lockdown.type_system.core_types import Type, AnyType
 from lockdown.type_system.exceptions import FatalError
@@ -26,7 +26,7 @@ class Operand(object):
     def __init__(self, required_type, invalid_type_exception_factory):
         if not isinstance(required_type, Type):
             raise FatalError()
-        if invalid_type_exception_factory and not isinstance(invalid_type_exception_factory, TypeErrorFactory):
+        if invalid_type_exception_factory and not isinstance(invalid_type_exception_factory, OpcodeErrorType):
             raise FatalError()
         self.required_type = required_type
         self.invalid_type_exception_factory = invalid_type_exception_factory
@@ -54,7 +54,7 @@ class BoundOperand(object):
             raise FatalError()
         if not isinstance(required_type, Type):
             raise FatalError()
-        if invalid_type_exception_factory and not isinstance(invalid_type_exception_factory, TypeErrorFactory):
+        if invalid_type_exception_factory and not isinstance(invalid_type_exception_factory, OpcodeErrorType):
             raise FatalError()
 
         self.name = name

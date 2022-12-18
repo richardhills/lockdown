@@ -18,7 +18,7 @@ from lockdown.executor.raw_code_factories import function_lit, no_value_type, \
     function_type, close_op, shift_op, transform_op, \
     rich_type, merge_op, list_template_op
 from lockdown.type_system.composites import add_composite_type
-from lockdown.type_system.core_types import IntegerType, StringType
+from lockdown.type_system.core_types import IntegerType, StringType, UnitType
 from lockdown.type_system.managers import get_manager
 from lockdown.type_system.reasoner import DUMMY_REASONER
 from lockdown.type_system.universal_type import PythonObject, \
@@ -757,7 +757,7 @@ class TestInferredBreakTypes(TestCase):
         )
 
         self.assertEqual(result.caught_break_mode, "exception")
-        self.assertEqual(result.value.type, "TypeError")
+        self.assertEqual(result.value._get("type"), "Addition: missing_operands")
 
     def test_without_infer_exception_fails(self):
         with self.assertRaises(Exception):
@@ -1112,8 +1112,7 @@ class TestTryCatch(TestCase):
                 dereference_op(context_op(), literal_op("foo")),
                 prepared_function(
                     object_type({
-                        "type": const_string_type(),
-                        "message": const_string_type(),
+                        "type": UnitType("DereferenceOp: invalid_dereference")
                     }),
                     return_op(dereference("argument.message"))
                 ),

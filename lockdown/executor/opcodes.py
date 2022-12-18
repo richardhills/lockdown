@@ -13,15 +13,15 @@ from lockdown.executor.operands import OpcodeOperandMixin, Operand, BoundOperand
 from lockdown.executor.raw_code_factories import dereference, assignment_op, \
     literal_op
 from lockdown.executor.type_factories import enrich_type, derich_type
-from lockdown.executor.utils import evaluate, TypeErrorFactory, \
+from lockdown.executor.utils import evaluate, \
     get_expression_break_types, flatten_out_types, MicroOpBinder, \
     each_reference, get_best_micro_op, get_operand_type, get_context_type, \
-    ContextSearcher
+    ContextSearcher, OpcodeErrorType
 from lockdown.type_system.composites import CompositeType, scoped_bind, \
     does_value_fit_through_type, is_type_bindable_to_value, Composite
 from lockdown.type_system.core_types import AnyType, merge_types, Const, \
     UnitType, NoValueType, PermittedValuesDoesNotExist, unwrap_types, IntegerType, \
-    BooleanType, remove_type, BottomType, ValueType
+    BooleanType, remove_type, BottomType, ValueType, StringType, OneOfType
 from lockdown.type_system.exceptions import FatalError, InvalidDereferenceType, \
     InvalidDereferenceKey, InvalidAssignmentType, InvalidAssignmentKey
 from lockdown.type_system.managers import get_type_of_value, get_manager
@@ -135,16 +135,16 @@ class LiteralOp(Opcode):
 
 
 class TemplateOp(OpcodeOperandMixin, Opcode):
-    NO_VALUE_ASSIGNMENT = TypeErrorFactory("TemplateOp: no_value_assignment")
+    NO_VALUE_ASSIGNMENT = OpcodeErrorType("TemplateOp: no_value_assignment")
 
     def __init__(self, data, visitor):
         super(TemplateOp, self).__init__(data, visitor)
         if not isinstance(data._get("opcodes", MISSING), PythonList):
-            raise FatalError()
+            raise PreparationException("TemplateOp: missing opcodes")
 
         for e in data._get("opcodes"):
             if not isinstance(e, tuple) and len(e) != 2:
-                raise FatalError()
+                raise PreparationException("TemplateOp: invalid opcodes {}".format(e))
 
         self.operands = [(
                 BoundOperand(
@@ -257,7 +257,7 @@ class TemplateOp(OpcodeOperandMixin, Opcode):
         )
 
 class MergeOp(OpcodeOperandMixin, Opcode):
-    INVALID = TypeErrorFactory("MergeOp: invalid")
+    INVALID = OpcodeErrorType("MergeOp: invalid")
 
     left = Operand(CompositeType({}, "MergeOp"), INVALID)
     right = Operand(CompositeType({}, "MergeOp"), INVALID)
@@ -372,8 +372,8 @@ class ContextOp(Opcode):
 
 
 class DereferenceOp(OpcodeOperandMixin, Opcode):
-    INVALID_OF = TypeErrorFactory("DereferenceOp: invalid_of")
-    INVALID_DEREFERENCE = TypeErrorFactory("DereferenceOp: invalid_dereference")
+    INVALID_OF = OpcodeErrorType("DereferenceOp: invalid_of")
+    INVALID_DEREFERENCE = OpcodeErrorType("DereferenceOp: invalid_dereference", reference=AnyType())
 
     of = Operand(CompositeType({}, "DereferenceOp"), INVALID_OF)
     reference = Operand(AnyType(), None)
@@ -421,7 +421,7 @@ class DereferenceOp(OpcodeOperandMixin, Opcode):
 
         for invalid_dereference in invalid_dereferences:
             break_types.add(self, "exception", self.INVALID_DEREFERENCE.get_type(
-                message="DereferenceOp: invalid_dereference".format(invalid_dereference)
+                reference=invalid_dereference
             ))
         if invalid_unknown_dereference:
             break_types.add(self, "exception", self.INVALID_DEREFERENCE.get_type())
@@ -471,13 +471,9 @@ class DereferenceOp(OpcodeOperandMixin, Opcode):
 
                 return frame.value(self, result)
             except InvalidDereferenceType:
-                return frame.exception(self, self.INVALID_DEREFERENCE(
-                    message="DereferenceOp: invalid_dereference"
-                ))
+                return frame.exception(self, self.INVALID_DEREFERENCE(reference=reference))
             except InvalidDereferenceKey:
-                return frame.exception(self, self.INVALID_DEREFERENCE(
-                    message="DereferenceOp: invalid_dereference"
-                ))
+                return frame.exception(self, self.INVALID_DEREFERENCE(reference=reference))
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         tag, micro_op_to_compile = self.binder.simple_bind()
@@ -511,9 +507,9 @@ class DereferenceOp(OpcodeOperandMixin, Opcode):
 
 
 class AssignmentOp(Opcode):
-    INVALID_LVALUE = TypeErrorFactory("AssignmentOp: invalid_lvalue")
-    INVALID_RVALUE = TypeErrorFactory("AssignmentOp: invalid_rvalue")
-    INVALID_ASSIGNMENT = TypeErrorFactory("AssignmentOp: invalid_assignment")
+    INVALID_LVALUE = OpcodeErrorType("AssignmentOp: invalid_lvalue")
+    INVALID_RVALUE = OpcodeErrorType("AssignmentOp: invalid_rvalue")
+    INVALID_ASSIGNMENT = OpcodeErrorType("AssignmentOp: invalid_assignment")
 
     def __init__(self, data, visitor):
         super(AssignmentOp, self).__init__(data, visitor)
@@ -639,7 +635,7 @@ class AssignmentOp(Opcode):
         )
 
 class DynamicDereferenceOp(Opcode):
-    INVALID_DEREFERENCE = TypeErrorFactory("DynamicDereferenceOp: invalid_dereference {reference}")
+    INVALID_DEREFERENCE = OpcodeErrorType("DynamicDereferenceOp: invalid_dereference", reference=StringType())
 
     def __init__(self, data, visitor):
         super(DynamicDereferenceOp, self).__init__(data, visitor)
@@ -651,7 +647,7 @@ class DynamicDereferenceOp(Opcode):
         break_types.add(
             self, 
             "exception",
-            self.INVALID_DEREFERENCE.get_type(self.reference)
+            self.INVALID_DEREFERENCE.get_type()
         )
 
         break_types.add(self, "value", AnyType())
@@ -666,7 +662,7 @@ class DynamicDereferenceOp(Opcode):
             )
 
             if references is None:
-                return frame.exception(self, self.INVALID_DEREFERENCE())
+                return frame.exception(self, self.INVALID_DEREFERENCE(reference=self.reference))
 
             target = context
             for reference in [ *references, self.reference ]:
@@ -685,8 +681,8 @@ class DynamicDereferenceOp(Opcode):
             return frame.value(self, target)
 
 class DynamicAssignmentOp(OpcodeOperandMixin, Opcode):
-    INVALID_OF = TypeErrorFactory("DynamicAssignmentOp: invalid_of")
-    INVALID_ASSIGNMENT = TypeErrorFactory("DynamicAssignmentOp: invalid_assignment {reference}")
+    INVALID_OF = OpcodeErrorType("DynamicAssignmentOp: invalid_of")
+    INVALID_ASSIGNMENT = OpcodeErrorType("DynamicAssignmentOp: invalid_assignment {reference}")
 
     rvalue = Operand(AnyType(), INVALID_ASSIGNMENT)
 
@@ -756,9 +752,9 @@ WILDCARD = InternalMarker("WILDCARD")
 
 
 class InsertOp(Opcode):
-    INVALID_LVALUE = TypeErrorFactory("InsertOp: invalid_lvalue")
-    INVALID_RVALUE = TypeErrorFactory("InsertOp: invalid_rvalue")
-    INVALID_ASSIGNMENT = TypeErrorFactory("InsertOp: invalid_assignment")
+    INVALID_LVALUE = OpcodeErrorType("InsertOp: invalid_lvalue")
+    INVALID_RVALUE = OpcodeErrorType("InsertOp: invalid_rvalue")
+    INVALID_ASSIGNMENT = OpcodeErrorType("InsertOp: invalid_assignment")
 
     def __init__(self, data, visitor):
         super(InsertOp, self).__init__(data, visitor)
@@ -877,9 +873,9 @@ BOTTOM_CLOSED_FUNCTION_TYPE = ClosedFunctionType(
 )
 
 class MapOp(OpcodeOperandMixin, Opcode):
-    MISSING_COMPOSITE_TYPE = TypeErrorFactory("{}: missing_composite_type")
-    MISSING_MAPPER_FUNCTION = TypeErrorFactory("{}: missing_mapper_function")
-    MISSING_ITER = TypeErrorFactory("{}: missing_iter")
+    MISSING_COMPOSITE_TYPE = OpcodeErrorType("{}: missing_composite_type")
+    MISSING_MAPPER_FUNCTION = OpcodeErrorType("{}: missing_mapper_function")
+    MISSING_ITER = OpcodeErrorType("{}: missing_iter")
 
     composite = Operand(CompositeType({}, "MapOp"), MISSING_COMPOSITE_TYPE)
     mapper = Operand(TOP_CLOSED_FUNCTION_TYPE, MISSING_MAPPER_FUNCTION)
@@ -989,7 +985,7 @@ class MapOp(OpcodeOperandMixin, Opcode):
 
 
 class LengthOp(OpcodeOperandMixin, Opcode):
-    INVALID_COMPOSITE_TYPE = TypeErrorFactory("{}: invalid_composite_type")
+    INVALID_COMPOSITE_TYPE = OpcodeErrorType("{}: invalid_composite_type")
     composite = Operand(CompositeType({}, "LengthOp"), INVALID_COMPOSITE_TYPE)
 
     def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
@@ -1011,7 +1007,7 @@ class LengthOp(OpcodeOperandMixin, Opcode):
             )
 
 def UnaryOp(name, func, argument_type, result_type):
-    MISSING_OPERAND = TypeErrorFactory("{}: missing_operand".format(name))
+    MISSING_OPERAND = OpcodeErrorType("{}: missing_operand".format(name))
 
     class _UnaryOp(OpcodeOperandMixin, Opcode):
         value = Operand(argument_type, MISSING_OPERAND)
@@ -1041,7 +1037,7 @@ def UnaryOp(name, func, argument_type, result_type):
 
 
 def BinaryOp(name, func, argument_type, result_type, number_op=None, cmp_op=None):
-    MISSING_OPERANDS = TypeErrorFactory("{}: missing_operands".format(name))
+    MISSING_OPERANDS = OpcodeErrorType("{}: missing_operands".format(name))
 
     class _BinaryOp(OpcodeOperandMixin, Opcode):
         lvalue = Operand(argument_type, MISSING_OPERANDS)
@@ -1244,19 +1240,25 @@ class ShiftOp(Opcode):
 
 
 class ResetOp(Opcode):
-    MISSING_IN_BREAK_TYPE = TypeErrorFactory("ResetOp: missing_in_break_type")
-    MISSING_FUNCTION = TypeErrorFactory("ResetOp: missing_function")
+    MISSING_IN_BREAK_TYPE = OpcodeErrorType("ResetOp: missing_in_break_type")
+    MISSING_FUNCTION = OpcodeErrorType("ResetOp: missing_function")
 
     def __init__(self, data, visitor):
         super(ResetOp, self).__init__(data, visitor)
-        if hasattr(data, "code"):
+        if data._contains("code"):
             self.opcode = enrich_opcode(data._get("code"), visitor)
             self.function = None
             self.argument = None
         else:
             self.opcode = None
-            self.function = enrich_opcode(data._get("function"), visitor)
-            self.argument = enrich_opcode(data._get("argument"), visitor)
+            try:
+                self.function = enrich_opcode(data._get("function"), visitor)
+            except IndexError:
+                raise PreparationException("Missing function: {}".format(data))
+            try:
+                self.argument = enrich_opcode(data._get("argument"), visitor)
+            except IndexError:
+                raise PreparationException("Missing argument: {}".format(data))
 
     def get_value_and_continuation_block_type(self, out_break_type, in_break_type, continuation_break_types):
         return UniversalObjectType({
@@ -1309,7 +1311,7 @@ class ResetOp(Opcode):
         return break_types.build()
 
     def jump(self, context, frame_manager, hooks, immediate_context=None):
-        from lockdown.executor.function import Continuation
+        from lockdown.executor.function import Continuation, LockdownFunction
 
         with frame_manager.get_next_frame(self) as frame:
             if self.opcode:
@@ -1327,6 +1329,9 @@ class ResetOp(Opcode):
             else:
                 argument = frame.step("argument", lambda: evaluate(self.argument, context, frame_manager, hooks))
                 function = frame.step("function", lambda: evaluate(self.function, context, frame_manager, hooks))
+
+                if not isinstance(function, LockdownFunction):
+                    return frame.exception(self, self.MISSING_FUNCTION())
 
                 def enter_function():
                     return function.invoke(argument, frame_manager, hooks)
@@ -1503,7 +1508,7 @@ except BreakException as e:
 
 
 class ConditionalOp(OpcodeOperandMixin, Opcode):
-    INVALID_CONDITIONAL = TypeErrorFactory("ConditionalOp: invalid_conditional")
+    INVALID_CONDITIONAL = OpcodeErrorType("ConditionalOp: invalid_conditional")
     condition = Operand(BooleanType(), INVALID_CONDITIONAL)
     when_true = Operand(AnyType(), None)
     when_false = Operand(AnyType(), None)
@@ -1558,7 +1563,7 @@ else:
 
 
 class PrepareOp(Opcode):
-    PREPARATION_ERROR = TypeErrorFactory("Prepare: preparation_error")
+    PREPARATION_ERROR = OpcodeErrorType("Prepare: preparation_error", exception=StringType())
 
     def __init__(self, data, visitor):
         super(PrepareOp, self).__init__(data, visitor)
@@ -1597,8 +1602,8 @@ class PrepareOp(Opcode):
 
 
 class CloseOp(Opcode):
-    INVALID_FUNCTION = TypeErrorFactory("Close: invalid_function")
-    INVALID_OUTER_CONTEXT = TypeErrorFactory("Close: invalid_outer_context")
+    INVALID_FUNCTION = OpcodeErrorType("Close: invalid_function")
+    INVALID_OUTER_CONTEXT = OpcodeErrorType("Close: invalid_outer_context")
 
     def __init__(self, data, visitor):
         super(CloseOp, self).__init__(data, visitor)
@@ -1718,9 +1723,9 @@ class StaticOp(Opcode):
 
 
 class InvokeOp(Opcode):
-    INVALID_FUNCTION_TYPE = TypeErrorFactory("Invoke: invalid_function_type")
-    INVALID_ARGUMENT_TYPE = TypeErrorFactory("Invoke: invalid_argument_type")
-    INVALID_BREAK_TYPE = TypeErrorFactory("Invoke: invalid_break_type")
+    INVALID_FUNCTION_TYPE = OpcodeErrorType("Invoke: invalid_function_type")
+    INVALID_ARGUMENT_TYPE = OpcodeErrorType("Invoke: invalid_argument_type")
+    INVALID_BREAK_TYPE = OpcodeErrorType("Invoke: invalid_break_type", break_mode=StringType(), break_value=AnyType())
 
     def __init__(self, data, visitor):
         super(InvokeOp, self).__init__(data, visitor)
@@ -1731,69 +1736,80 @@ class InvokeOp(Opcode):
         self.allowed_break_modes = data._get("allowed_break_modes")._to_list()
 
     def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
-        break_types = BreakTypesFactory(self)
+        try:
+            break_types = BreakTypesFactory(self)
 
-        immediate_context = {}
-        argument_type, other_argument_break_types = get_expression_break_types(self.argument, context, frame_manager, hooks)
-        if argument_type is not MISSING:
-            argument_type = flatten_out_types(argument_type)
-            immediate_context["suggested_argument_type"] = argument_type
-        break_types.merge(other_argument_break_types)
+            immediate_context = {}
+            argument_type, other_argument_break_types = get_expression_break_types(self.argument, context, frame_manager, hooks)
+            if argument_type is not MISSING:
+                argument_type = flatten_out_types(argument_type)
+                immediate_context["suggested_argument_type"] = argument_type
+            break_types.merge(other_argument_break_types)
 
-        function_type, other_function_break_types = get_expression_break_types(
-            self.function, context, frame_manager, hooks, immediate_context=immediate_context
-        )
-        break_types.merge(other_function_break_types)
+            function_type, other_function_break_types = get_expression_break_types(
+                self.function, context, frame_manager, hooks, immediate_context=immediate_context
+            )
+            break_types.merge(other_function_break_types)
 
-        if function_type is not MISSING and argument_type is not MISSING:
-            function_type = flatten_out_types(function_type)
+            if function_type is not MISSING and argument_type is not MISSING:
+                function_type = flatten_out_types(function_type)
 
-            if isinstance(function_type, ClosedFunctionType):
-                self.known_function_type = True
-                break_types.merge({
-                    break_mode: [{
-                        **break_type,
-                        "opcode": self
-                    } for break_type in sub_break_types]
-                    for break_mode, sub_break_types in function_type.break_types.items()
-                })
-                reasoner = Reasoner()
-                if function_type.argument_type.is_copyable_from(argument_type, reasoner):
-                    self.invalid_argument_type_exception_is_possible = False
-            else:
-                break_types.add(self, "exception", self.INVALID_FUNCTION_TYPE.get_type())
-                break_types.add(self, "exception", self.INVALID_BREAK_TYPE.get_type())
+                if isinstance(function_type, ClosedFunctionType):
+                    self.known_function_type = True
+                    break_types.merge({
+                        break_mode: [{
+                            **break_type,
+                            "opcode": self
+                        } for break_type in sub_break_types]
+                        for break_mode, sub_break_types in function_type.break_types.items()
+                    })
+                    reasoner = Reasoner()
+                    if function_type.argument_type.is_copyable_from(argument_type, reasoner):
+                        self.invalid_argument_type_exception_is_possible = False
+                else:
+                    break_types.add(self, "exception", self.INVALID_FUNCTION_TYPE.get_type())
+                    break_types.add(self, "exception", self.INVALID_BREAK_TYPE.get_type())
 
-                for allowed_break_mode in self.allowed_break_modes:
-                    break_types.add(self, allowed_break_mode, AnyType())
+                    for allowed_break_mode in self.allowed_break_modes:
+                        break_types.add(self, allowed_break_mode, AnyType())
 
-            if self.invalid_argument_type_exception_is_possible:
-                break_types.add(self, "exception", self.INVALID_ARGUMENT_TYPE.get_type())
+                if self.invalid_argument_type_exception_is_possible:
+                    break_types.add(self, "exception", self.INVALID_ARGUMENT_TYPE.get_type())
 
-        return break_types.build()
+            return break_types.build()
+        except BreakException as e:
+            e.add_stack(self)
+            raise
 
     def jump(self, context, frame_manager, hooks, immediate_context=None):
         from lockdown.executor.function import LockdownFunction
 
-        with frame_manager.get_next_frame(self) as frame:
-            function = frame.step("function", lambda: evaluate(self.function, context, frame_manager, hooks))
-            argument = frame.step("argument", lambda: evaluate(self.argument, context, frame_manager, hooks))
+        try:
+            with frame_manager.get_next_frame(self) as frame:
+                function = frame.step("function", lambda: evaluate(self.function, context, frame_manager, hooks))
+                argument = frame.step("argument", lambda: evaluate(self.argument, context, frame_manager, hooks))
 
-            if not isinstance(function, LockdownFunction):
-                return frame.exception(self, self.INVALID_FUNCTION_TYPE())
-            if self.invalid_argument_type_exception_is_possible and not does_value_fit_through_type(argument, function.get_type().argument_type):
-                return frame.exception(self, self.INVALID_ARGUMENT_TYPE()) 
+                if not isinstance(function, LockdownFunction):
+                    return frame.exception(self, self.INVALID_FUNCTION_TYPE())
+                if self.invalid_argument_type_exception_is_possible and not does_value_fit_through_type(argument, function.get_type().argument_type):
+                    return frame.exception(self, self.INVALID_ARGUMENT_TYPE()) 
 
-            with frame_manager.capture() as capture_result:
-                capture_result.attempt_capture_or_raise(*function.invoke(argument, frame_manager, hooks))
+                with frame_manager.capture() as capture_result:
+                    capture_result.attempt_capture_or_raise(*function.invoke(argument, frame_manager, hooks))
 
-            if not self.known_function_type:
-                if capture_result.caught_break_mode not in self.allowed_break_modes:
-                    return frame.exception(self, self.INVALID_BREAK_TYPE())
+                if not self.known_function_type:
+                    if capture_result.caught_break_mode not in self.allowed_break_modes:
+                        return frame.exception(self, self.INVALID_BREAK_TYPE(
+                            break_mode=capture_result.caught_break_mode,
+                            break_value=capture_result.value
+                        ))
 
-            return frame.unwind(*capture_result.reraise(opcode=self))
+                return frame.unwind(*capture_result.reraise(opcode=self))
 
-        raise FatalError()
+            raise FatalError()
+        except BreakException as e:
+            e.add_stack(self)
+            raise
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         from lockdown.executor.function import OpenFunction
@@ -1842,7 +1858,7 @@ class TypeofOp(OpcodeOperandMixin, Opcode):
             return frame.value(self, derich_type(self.expression.value_type, {}))
 
 class MatchOp(Opcode):
-    NO_MATCH = TypeErrorFactory("Match: no_match")
+    NO_MATCH = OpcodeErrorType("Match: no_match")
 
     def __init__(self, data, visitor):
         super(MatchOp, self).__init__(data, visitor)

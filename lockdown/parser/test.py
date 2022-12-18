@@ -356,16 +356,13 @@ class TestBuiltIns(TestCase):
 
     # def test_tuple(self):    
     #     code = parse("""
-    #         function() => Tuple<int, int, int> {
+    #         function() {
     #             return tuple<int, 3>(7);
     #         }
     #     """, debug=True)
     #     _, result = bootstrap_function(code)
     #     self.assertEqual(result.caught_break_mode, "value")
-    #     self.assertIsInstance(result.value, PythonList)
-    #     get_manager(result.value).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
-    #     self.assertEqual(len(result.value), 3)
-    #     self.assertEqual(list(result.value), [ 7, 7, 7 ])
+    #     self.assertEqual(result.value._to_list(), [ 7, 7, 7 ])
 
 #
 #     def test_tuple_range(self):
@@ -542,7 +539,6 @@ class TestRRTI(TestCase):
               [ {"type": "Integer"}, {"type": "Integer"}, True, False ] ]
         )
 
-
     def test_tuple2(self):
         code = parse("""
             function() {
@@ -595,6 +591,24 @@ class TestRRTI(TestCase):
         self.assertEqual(
             micro_op_types,
             [ "get", "get", "set", "set" ]
+        )
+
+    def test_object(self):
+        code = parse("""
+            function() {
+                return typeof({ x: 5 });
+            }
+        """)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._get("type"), "Universal")
+        micro_op_types = [
+            micro_op._get("type") for micro_op in result.value._get_in("micro_ops")._to_list()
+        ]
+        micro_op_types = sorted(micro_op_types)
+        self.assertEqual(
+            micro_op_types,
+            [ "delete-wildcard", "get", "get-wildcard", "insert-end", "insert-start", "insert-wildcard", "iter", "remove-wildcard", "set", "set-wildcard" ]
         )
 
 
@@ -1215,7 +1229,7 @@ class TestDictionary(TestCase):
         func, result = bootstrap_function(code, check_safe_exit=False)
         if hasattr(func, "break_types"):
             self.assertIn("exception", func.break_types)
-            self.assertTrue(func.break_types["exception"][0]["out"].get_micro_op_type(("get", "type")).value_type.value == "TypeError")
+            self.assertEqual(func.break_types["exception"][0]["out"].get_micro_op_type(("get", "type")).value_type.value, "DereferenceOp: invalid_dereference")
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 55)
 
@@ -1230,7 +1244,7 @@ class TestDictionary(TestCase):
         func, result = bootstrap_function(code, check_safe_exit=False)
         if hasattr(func, "break_types"):
             self.assertNotIn("exception", func.break_types)
-            self.assertTrue(func.break_types["value"][1]["out"].get_micro_op_type(("get", "type")).value_type.value == "TypeError")
+            self.assertEqual(func.break_types["value"][1]["out"].get_micro_op_type(("get", "type")).value_type.value, "DereferenceOp: invalid_dereference")
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 55)
 
@@ -1244,7 +1258,7 @@ class TestDictionary(TestCase):
         """)
         _, result = bootstrap_function(code, check_safe_exit=False)
         self.assertEqual(result.caught_break_mode, "exception")
-        self.assertEqual(result.value._to_dict()["message"], "DereferenceOp: invalid_dereference")
+        self.assertEqual(result.value._to_dict()["type"], "DereferenceOp: invalid_dereference")
 
 
     def test_basic_dictionary4(self):

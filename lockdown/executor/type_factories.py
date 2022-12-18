@@ -263,6 +263,12 @@ def deconstruct_universal_type(type, results):
         "micro_ops": PythonList(micro_ops)
     })
 
+def deconstruct_one_of_type(type, results):
+    return PythonDict({
+        "type": "Universal",
+        "types": [ derich_type(t, results) for t in type.types ]
+    })
+    
 
 def derich_type(type, results):
     if id(type) in results:
@@ -280,8 +286,12 @@ def derich_type(type, results):
         return PythonDict({ "type": "NoValue" })
     if isinstance(type, StringType):
         return PythonDict({ "type": "String" })
+    if isinstance(type, BottomType):
+        return PythonDict({ "type": "Bottom" })
     if isinstance(type, UnitType):
         return PythonDict({ "type": "Unit", "value": type.value })
     if isinstance(type, ClosedFunctionType):
         return deconstruct_function_type(type, results)
+    if isinstance(type, OneOfType):
+        return deconstruct_one_of_type(type, results)
     raise FatalError(type)

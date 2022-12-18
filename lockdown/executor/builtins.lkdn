@@ -27,21 +27,6 @@ static BaseComposite = {
 	micro_ops: []
 };
 
-static tuple = function(type: any, length: int) {
-  return dynamic function(value: type) {
-    var opcodes = list(range(0, length)) *|> {
-      continue json({
-        "opcode": "literal",
-        "value": lockdown(value)
-      });
-    };
-    return json({
-      "opcode": "template",
-      "opcodes": lockdown(opcodes)
-    });
-  };
-};
-
 static Iterable = function(keyType: any, valueType: any) => any {
 	return {
 		type: "Universal",
@@ -105,6 +90,21 @@ static List = function(type: any) {
       type: "insert-end",
       params: [ type, false ]
     }]
+  };
+};
+
+static tuple = function(type: any, number: int) {
+  return dynamic function(repeatedValue: prepare.local.type) {
+    var opcodes = list<int>(range(0, number)) *|> {
+      continue json({
+        "opcode": "literal",
+        "value": lockdown(repeatedValue)
+      });
+    };
+    return json({
+      "opcode": "template",
+      "opcodes": lockdown(opcodes)
+    });
   };
 };
 
@@ -191,5 +191,5 @@ static factorial = function(a: int) {
 };
 
 export {
-	var, any, int, bool, string, void, Iterable, keys, values, sum, max, gcd, factorial, list, List, range, irange, length, find
+	var, any, int, bool, string, void, tuple, Iterable, keys, values, sum, max, gcd, factorial, list, List, range, irange, length, find
 };
