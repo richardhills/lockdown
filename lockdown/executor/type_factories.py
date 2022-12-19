@@ -191,7 +191,7 @@ def deconstruct_function_type(type, results):
             if "in" in break_type:
                 new_break_type["in"] = derich_type(break_type["in"], results)
  
-        deconstructed_break_types[mode] = new_break_type
+        deconstructed_break_types[mode] = PythonDict(new_break_type)
     return PythonDict({
         "type": "Function",
         "argument": derich_type(type.argument_type, results),

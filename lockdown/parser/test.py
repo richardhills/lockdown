@@ -616,12 +616,13 @@ class TestRRTI(TestCase):
         code = parse("""
             function() {
                 var x = function(y: int) { return y; };
-                return typeof(x);
+                var X = typeof(x);
+                return X;
             }
         """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
-        self.assertEqual(result.value._get("type"), "Universal")
+        self.assertEqual(result.value._get("type"), "Function")
         
 
 class TestMaths(TestCase):

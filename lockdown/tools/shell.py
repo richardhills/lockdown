@@ -91,7 +91,7 @@ print x * 2 + 10;
 
 Declare a function:
 
-var doubler = function(int x) { return x * 2; };
+var doubler = function(x: int) { return x * 2; };
 print doubler(42);
 
 Declare first class functions (for multi line input, start with --):
