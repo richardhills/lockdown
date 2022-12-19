@@ -24,8 +24,9 @@ from lockdown.parser.grammar.langParser import langParser
 from lockdown.parser.grammar.langVisitor import langVisitor
 from lockdown.type_system.exceptions import FatalError
 from lockdown.type_system.universal_type import DEFAULT_READONLY_COMPOSITE_TYPE, \
-    PythonObject, PythonDict
+    PythonObject, PythonDict, Universal
 from lockdown.utils.utils import MISSING, default, spread_dict
+from lockdown.type_system.managers import get_manager
 
 
 class RDHLang5Visitor(langVisitor):
@@ -1183,7 +1184,7 @@ class AlwaysFailErrorListener(ConsoleErrorListener):
         raise ParseError(msg, line, column)
 
 
-def parse(code, debug=False, pre_chain_function=None, post_chain_function=None):
+def parse(code, pre_chain_function=None, post_chain_function=None):
     lexer = langLexer(InputStream(code))
     lexer.addErrorListener(AlwaysFailErrorListener())
     tokens = CommonTokenStream(lexer)
@@ -1192,6 +1193,6 @@ def parse(code, debug=False, pre_chain_function=None, post_chain_function=None):
     ast = parser.json()
     visitor = RDHLang5Visitor(pre_chain_function=pre_chain_function, post_chain_function=post_chain_function)
     ast = visitor.visit(ast)
-    if debug:
-        ast._set("raw_code", code)
+    if isinstance(ast, Universal):
+        get_manager(ast).raw_code = code
     return ast

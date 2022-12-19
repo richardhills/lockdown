@@ -184,12 +184,12 @@ def enrich_type_with_cache(data, cache):
 def deconstruct_function_type(type, results):
     deconstructed_break_types = {}
     for mode, break_types in type.break_types.items():
-        for break_type in break_types._to_list():
+        for break_type in break_types:
             new_break_type = {
-                "out": derich_type(break_type._get("out"), results)
+                "out": derich_type(break_type["out"], results)
             }
-            if break_type._contains("in"):
-                new_break_type["in"] = derich_type(break_type._get("in"), results)
+            if "in" in break_type:
+                new_break_type["in"] = derich_type(break_type["in"], results)
  
         deconstructed_break_types[mode] = new_break_type
     return PythonDict({

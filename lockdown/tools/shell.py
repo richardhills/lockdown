@@ -73,7 +73,7 @@ def bootstraped_executor(frame_manager):
                 ),
                 True
             )
-        ), get_default_global_context(), frame_manager, None
+        ), get_default_global_context(), frame_manager, None, None, None
     ).close(NO_VALUE)
 
 GETTING_STARTED_MESSAGE = """
@@ -97,8 +97,8 @@ print doubler(42);
 Declare first class functions (for multi line input, start with --):
 
 --
-var multiplier = function(int x) {
-    return function(int y) {
+var multiplier = function(x: int) {
+    return function(y: int) {
         return x * y;
     };
 };

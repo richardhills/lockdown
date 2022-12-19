@@ -14,10 +14,10 @@ from lockdown.utils.utils import MISSING
 
 
 class OpcodeOperandMixin(object):
-    def __init__(self, data, visitor):
-        super(OpcodeOperandMixin, self).__init__(data, visitor)
+    def __init__(self, data, visitor, raw_code):
+        super(OpcodeOperandMixin, self).__init__(data, visitor, raw_code)
         for name, operand in self.get_unbound_operands():
-            setattr(self, name, operand.create_bound_operand(self, name, data, visitor))
+            setattr(self, name, operand.create_bound_operand(self, name, data, visitor, raw_code))
 
     def get_unbound_operands(self):
         return [ (k, v) for k, v in type(self).__dict__.items() if isinstance(v, Operand) ]
@@ -31,7 +31,7 @@ class Operand(object):
         self.required_type = required_type
         self.invalid_type_exception_factory = invalid_type_exception_factory
 
-    def create_bound_operand(self, opcode, name, data, visitor):
+    def create_bound_operand(self, opcode, name, data, visitor, raw_code):
         if not data._contains(name):
             raise PreparationException()
 
@@ -40,7 +40,7 @@ class Operand(object):
         return BoundOperand(
             name,
             opcode,
-            enrich_opcode(data._get(name), visitor),
+            enrich_opcode(data._get(name), visitor, raw_code),
             self.required_type,
             self.invalid_type_exception_factory
         )

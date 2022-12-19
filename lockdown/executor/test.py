@@ -290,7 +290,7 @@ class TestComma(TestCase):
                     shift_op(literal_op("second"), int_type())
                 ))
             ),
-            context, frame_manager, None
+            context, frame_manager, None, None, None
         ).close(None)
 
         def first():
@@ -559,7 +559,7 @@ class TestLocals(TestCase):
                 int_type(), shift_op(literal_op("hello"), int_type()),
                 return_op(dereference_op(context_op(), literal_op("local")))
             ),
-            context, frame_manager, None
+            context, frame_manager, None, None, None
         ).close(None)
 
         def start():
@@ -589,7 +589,7 @@ class TestLocals(TestCase):
                 int_type(), shift_op(literal_op("first"), int_type()),
                 return_op(addition_op(dereference_op(context_op(), literal_op("local")), shift_op(literal_op("second"), int_type())))
             ),
-            context, frame_manager, None
+            context, frame_manager, None, None, None
         ).close(None)
 
         def first():
@@ -1029,7 +1029,7 @@ class TestMatch(TestCase):
         self.assertEqual(result.caught_break_mode, "return")
         self.assertEqual(result.value, "hello world")
 
-        prepared_func = prepare(func, PythonObject({}), FrameManager())
+        prepared_func = prepare(func, PythonObject({}), FrameManager(), None, None, None)
         self.assertEqual(len(prepared_func.break_types), 1)
         self.assertTrue("return" in prepared_func.break_types)
         for return_break_type in prepared_func.break_types["return"]:
@@ -1112,9 +1112,9 @@ class TestTryCatch(TestCase):
                 dereference_op(context_op(), literal_op("foo")),
                 prepared_function(
                     object_type({
-                        "type": UnitType("DereferenceOp: invalid_dereference")
+                        "type": unit_type("DereferenceOp: invalid_dereference")
                     }),
-                    return_op(dereference("argument.message"))
+                    return_op(dereference("argument.type"))
                 ),
                 nop()
             )
@@ -1187,7 +1187,7 @@ class TestContinuations(TestCase):
                 any_type(), build_break_types(any_type(), yield_types={ "out": any_type(), "in": int_type() }),
                 return_op(addition_op(shift_op(literal_op("hello"), int_type()), literal_op(40)))
             ),
-            context, frame_manager, None
+            context, frame_manager, None, None, None
         ).close(None)
 
         def first():
@@ -1213,7 +1213,7 @@ class TestContinuations(TestCase):
                 any_type(), build_break_types(int_type(), yield_types={ "out": any_type(), "in": int_type() }),
                 return_op(addition_op(shift_op(literal_op("first"), int_type()), shift_op(literal_op("second"), int_type())))
             ),
-            context, frame_manager, None
+            context, frame_manager, None, None, None
         ).close(None)
 
         def first():
@@ -1249,7 +1249,7 @@ class TestContinuations(TestCase):
                 any_type(), build_break_types(int_type(), yield_types={ "out": any_type(), "in": int_type() }),
                 return_op(addition_op(shift_op(literal_op("first"), int_type()), shift_op(literal_op("second"), int_type())))
             ),
-            context, frame_manager, None
+            context, frame_manager, None, None, None
         ).close(None)
 
         with frame_manager.capture("return") as return_capturer:
@@ -1279,7 +1279,7 @@ class TestContinuations(TestCase):
                 build_break_types(return_type=any_type(), yield_types={ "out": any_type(), "in": int_type() }),
                 return_op(addition_op(shift_op(literal_op(30), int_type()), shift_op(literal_op(10), int_type())))
             ),
-            context, frame_manager, None
+            context, frame_manager, None, None, None
         ).close(None)
 
         def first():

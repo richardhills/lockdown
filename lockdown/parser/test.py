@@ -4,7 +4,7 @@ from __future__ import unicode_literals
 from time import time
 from unittest.case import TestCase
 
-from lockdown.executor.bootstrap import bootstrap_function
+from lockdown.executor.bootstrap import bootstrap_function, BootstrapException
 from lockdown.executor.exceptions import PreparationException
 from lockdown.parser.parser import parse
 from lockdown.type_system.composites import scoped_bind
@@ -12,6 +12,7 @@ from lockdown.type_system.managers import get_manager
 from lockdown.type_system.universal_type import DEFAULT_READONLY_COMPOSITE_TYPE, \
     PythonList, PythonObject, PythonDict
 from lockdown.utils.utils import environment, fastest
+from lockdown.executor.flow_control import BreakException
 
 
 class TestJSONParsing(TestCase):
@@ -332,7 +333,7 @@ class TestBuiltIns(TestCase):
             function() {
                 return list<int>(range(1, 5));
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertIsInstance(result.value, PythonList)
@@ -349,20 +350,20 @@ class TestBuiltIns(TestCase):
                     };
                 };
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 10)
 
-    # def test_tuple(self):    
-    #     code = parse("""
-    #         function() {
-    #             return tuple<int, 3>(7);
-    #         }
-    #     """, debug=True)
-    #     _, result = bootstrap_function(code)
-    #     self.assertEqual(result.caught_break_mode, "value")
-    #     self.assertEqual(result.value._to_list(), [ 7, 7, 7 ])
+    def test_tuple(self):    
+        code = parse("""
+            function() {
+                return tuple<int, 3>(7);
+            }
+        """)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._to_list(), [ 7, 7, 7 ])
 
 #
 #     def test_tuple_range(self):
@@ -381,7 +382,7 @@ class TestBuiltIns(TestCase):
 #             function() => Tuple<int, int, int> {
 #                 return tuple_range(3, 6);
 #             }
-#         """, debug=True)
+#         """)
 #         _, result = bootstrap_function(code)
 #         self.assertEqual(result.caught_break_mode, "value")
 #         self.assertIsInstance(result.value, PythonList)
@@ -399,7 +400,7 @@ class TestBuiltIns(TestCase):
                 };
                 return find(squareGenerator, function(i: int) { return i > 50; } );
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 64)
@@ -409,7 +410,7 @@ class TestBuiltIns(TestCase):
             function() {
                 return length([ 1, 4, 6 ]);
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 3)
@@ -419,7 +420,7 @@ class TestBuiltIns(TestCase):
             function() {
                 return length({ foo: "bar" });
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 0)
@@ -429,7 +430,7 @@ class TestBuiltIns(TestCase):
             function() {
                 return keys({ foo: "bar", baz: 4 });
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(sorted(result.value._to_list()), [ "baz", "foo" ])
@@ -439,7 +440,7 @@ class TestBuiltIns(TestCase):
             function() {
                 return values<any>({ foo: "bar", baz: 4 });
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value._to_list(), [ "bar", 4 ])
@@ -449,7 +450,7 @@ class TestBuiltIns(TestCase):
             function() {
                 return sum([ 4, 6, 2 ]);
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(12, result.value)
@@ -459,7 +460,7 @@ class TestBuiltIns(TestCase):
 #            function() {
 #                return reversed([ 4, 6, 2 ]);
 #            }
-#        """, debug=True)
+#        """)
 #        _, result = bootstrap_function(code)
 #        self.assertEqual(result.caught_break_mode, "value")
 #        self.assertEqual([ 2, 6, 4 ], result._to_list())
@@ -611,6 +612,17 @@ class TestRRTI(TestCase):
             [ "delete-wildcard", "get", "get-wildcard", "insert-end", "insert-start", "insert-wildcard", "iter", "remove-wildcard", "set", "set-wildcard" ]
         )
 
+    def test_function(self):
+        code = parse("""
+            function() {
+                var x = function(y: int) { return y; };
+                return typeof(x);
+            }
+        """)
+        _, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value._get("type"), "Universal")
+        
 
 class TestMaths(TestCase):
     def test_gcm1(self):
@@ -670,7 +682,7 @@ class TestPipeline(TestCase):
             function() {
                 return { foo: "bar", baz: 4 } |> values<any>;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertIn("bar", result.value._to_list())
@@ -681,7 +693,7 @@ class TestPipeline(TestCase):
             function() {
                 return [ 3, 4, 5 ] |> max;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 5)
@@ -691,7 +703,7 @@ class TestPipeline(TestCase):
             function() {
                 return { foo: 3, bar: 4, baz: 5 } |> values<int> |> length;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 3)
@@ -701,7 +713,7 @@ class TestPipeline(TestCase):
             function() {
                 return { foo: 3, bar: 4, baz: 5 } |> values<int> |> sum;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 12)
@@ -712,7 +724,7 @@ class TestMapPipeline(TestCase):
             function() {
                 return [ 4, 6, 2 ] *|> { continue value + 1; };
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value._to_list(), [ 5, 7, 3 ])
@@ -722,7 +734,7 @@ class TestMapPipeline(TestCase):
             function() {
                 return [ 4, 6, 2 ] *|> { continue index; };
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value._to_list(), [ 0, 1, 2 ])
@@ -732,7 +744,7 @@ class TestMapPipeline(TestCase):
             function() {
                 return { foo: 3, bar: 5 } *|> { continue key; };
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value._to_list(), [ "foo", "bar" ])
@@ -832,7 +844,7 @@ class TestFunctionVarArgs(TestCase):
                 };
                 return func(3, 4, 8);
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code, check_safe_exit=False)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 4)
@@ -845,7 +857,7 @@ class TestFunctionVarArgs(TestCase):
                 };
                 return func(3, 4, 8);
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code, check_safe_exit=False)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value._to_list(), [ 3, 4, 8 ])
@@ -858,7 +870,7 @@ class TestFunctionVarArgs(TestCase):
                 };
                 return func(3, 4, 8);
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code, check_safe_exit=False)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value._to_list(), [ 8 ])
@@ -871,7 +883,7 @@ class TestFunctionVarArgs(TestCase):
                 };
                 return func(3, 4, "hello", "yes");
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code, check_safe_exit=False)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value._to_list(), [ "hello", "yes" ])
@@ -884,7 +896,7 @@ class TestObjectConstructing(TestCase):
                 var baz = { ...foo };
                 return baz;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value._to_dict(), { "bar": 5 })
@@ -896,7 +908,7 @@ class TestObjectConstructing(TestCase):
                 var baz = { bam: 10, ...foo };
                 return baz;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value._to_dict(), { "bar": 5, "bam": 10 })
@@ -908,7 +920,7 @@ class TestObjectConstructing(TestCase):
                 var baz = { bar: 10, ...foo };
                 return baz;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value._to_dict(), { "bar": 5 })
@@ -920,7 +932,7 @@ class TestObjectConstructing(TestCase):
                 var baz = { ...foo, bar: 10 };
                 return baz;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value._to_dict(), { "bar": 10 })
@@ -933,7 +945,7 @@ class TestObjectConstructing(TestCase):
                 var baz = { bar: 3, ...foo, bar: 10 };
                 return baz;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value._to_dict(), { "bar": 10 })
@@ -946,7 +958,7 @@ class TestObjectConstructing(TestCase):
                 var baz = { ...foo, ...fam };
                 return baz;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value._to_dict(), { "bar": 9 })
@@ -958,7 +970,7 @@ class TestObjectConstructing(TestCase):
                 var baz = { ...foo.bar };
                 return baz;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value._to_dict(), { "bam": 42 })
@@ -970,7 +982,7 @@ class TestObjectConstructing(TestCase):
                 var baz = { bam: 10, ...foo.bar };
                 return baz;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value._to_dict(), { "bam": 42 })
@@ -982,7 +994,7 @@ class TestObjectConstructing(TestCase):
                 var baz = { ...foo.bar, bam: 10 };
                 return baz;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value._to_dict(), { "bam": 10 })
@@ -995,7 +1007,7 @@ class TestObjectDestructuring(TestCase):
                 { int foo } = { foo: 42 };
                 return foo;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 42)
@@ -1006,7 +1018,7 @@ class TestObjectDestructuring(TestCase):
                 { int foo, int bar } = { foo: 12, bar: 30 };
                 return foo + bar;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 42)
@@ -1018,7 +1030,7 @@ class TestObjectDestructuring(TestCase):
                 { foo } = { foo: 12, bar: 30 };
                 return foo;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 12)
@@ -1030,7 +1042,7 @@ class TestObjectDestructuring(TestCase):
                 { foo, bar } = { foo: 12, bar: 30 };
                 return foo + bar;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 42)
@@ -1042,7 +1054,7 @@ class TestObjectDestructuring(TestCase):
                 { foo, int bar } = { foo: 12, bar: 30 };
                 return foo + bar;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 42)
@@ -1067,7 +1079,7 @@ class TestListDestructuring(TestCase):
                 [ int foo ] = [ 42 ];
                 return foo;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 42)
@@ -1078,7 +1090,7 @@ class TestListDestructuring(TestCase):
                 [ int foo, int bar ] = [ 12, 30 ];
                 return foo + bar;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 42)
@@ -1090,7 +1102,7 @@ class TestListDestructuring(TestCase):
                 [ foo ] = [ 12, 30 ];
                 return foo;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 12)
@@ -1102,7 +1114,7 @@ class TestListDestructuring(TestCase):
                 [ foo, bar ] = [ 12, 30 ];
                 return foo + bar;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 42)
@@ -1114,7 +1126,7 @@ class TestListDestructuring(TestCase):
                 [ foo, int bar ] = [ 12, 30 ];
                 return foo + bar;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 42)
@@ -1156,7 +1168,7 @@ class TestLoops(TestCase):
                 };
                 return result;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 1 + 2 + 3 + 4)
@@ -1297,7 +1309,7 @@ class TestParserMisc(TestCase):
                 return foo[0].bar;
             }
         """)
-        with self.assertRaises(PreparationException):
+        with self.assertRaises(BootstrapException):
             bootstrap_function(code)
 
     def test_dynamic_assignment(self):
@@ -1310,6 +1322,18 @@ class TestParserMisc(TestCase):
         """)
         _, result = bootstrap_function(code, check_safe_exit=False)
         self.assertEqual(result.value, 54)
+
+    def test_1(self):
+        code = parse("""
+            function() {
+                var x = function(y: int) { return y + 1; };
+                return x[5];
+            }
+        """)
+        try:
+            _, result = bootstrap_function(code, check_safe_exit=False)
+        except BootstrapException as e:
+            self.assertEqual(e.value._get("type"), "DereferenceOp: invalid_of")
 
 class TestDynamic(TestCase):
     def test_local(self):
@@ -1366,7 +1390,7 @@ class TestSpeed(TestCase):
                 };
                 return i * j;
             }
-        """, debug=True)
+        """)
         with environment(transpile=True, return_value_optimization=True):
             _, result = bootstrap_function(code)
         self.assertEqual(result.value, 20 * 20)
@@ -1390,7 +1414,7 @@ class TestSpeed(TestCase):
                 };
                 return i * j;
             }
-        """, debug=True)
+        """)
         with environment(**fastest):
             _, result = bootstrap_function(code)
         self.assertEqual(result.value, 100 * 100)
@@ -1403,7 +1427,7 @@ class TestError(TestCase):
             function(foo: int) => int {
                 return foo;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(
             code,
             argument=PythonList([ 5 ])
@@ -1415,7 +1439,7 @@ class TestError(TestCase):
             function(foo: any) {
                 return foo.bar;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(
             code,
             argument=PythonList([ PythonObject({ "bar" : 5 }, bind=DEFAULT_READONLY_COMPOSITE_TYPE) ]),
@@ -1428,7 +1452,7 @@ class TestError(TestCase):
             function(foo: any) {
                 return foo + 3;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(
             code,
             argument=PythonList([ 5 ]),
@@ -1442,7 +1466,7 @@ class TestError(TestCase):
                 foo = "hello";
                 return foo;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(
             code,
             argument=PythonList([ 5 ]),
@@ -1468,7 +1492,7 @@ class TestEuler(TestCase):
                 };
                 return result;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 233168)
@@ -1482,7 +1506,7 @@ class TestEuler(TestCase):
                     };
                 });
             }
-        """, debug=True)
+        """)
  
         _, result = bootstrap_function(code)
         self.assertEqual(result.value, 233168)
@@ -1545,7 +1569,7 @@ class TestEuler(TestCase):
                 };
                 return bestResult;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.value, 906609)
 
@@ -1561,7 +1585,7 @@ class TestEuler(TestCase):
                 };
                 return solve(20);
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.value, 232792560)
 
@@ -1575,7 +1599,7 @@ class TestEuler(TestCase):
                 };
                 return sum * sum - sumSquares;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.value, 25164150)
 
@@ -1602,7 +1626,7 @@ class TestEuler(TestCase):
                     test = test + 2;
                 };
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.value, 71)
 
@@ -1629,7 +1653,7 @@ class TestEuler(TestCase):
                     test = test + 2;
                 };
             }
-        """, debug=True)
+        """)
         with environment(**fastest):
             _, result = bootstrap_function(code)
         self.assertEqual(result.value, 541)
@@ -1656,7 +1680,7 @@ class TestEuler(TestCase):
                  };
              }
 
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.value, 31875000)
 
@@ -1681,7 +1705,7 @@ class TestEuler(TestCase):
                 };
                 return triangleNumber;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.value, 120)
 
@@ -1739,7 +1763,7 @@ class TestEuler(TestCase):
                 Tuple<int...> results = for(var test in list<int><range(1, 10)>) { continue testNumber(test); };
                 return max(results);
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.value, 20)
 
@@ -1751,7 +1775,7 @@ class TestEuler(TestCase):
                 };
                 return binomial(40, 20);
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.value, 1378465288200)
 
@@ -1805,7 +1829,7 @@ class TestEuler(TestCase):
                 };
                 return sum;
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code)
         self.assertEqual(result.value, 669171001)
 
@@ -1824,7 +1848,7 @@ class TestEuler(TestCase):
                 };
                 return ways[ [ length(COINS), TOTAL ] ];
             }
-        """, debug=True)
+        """)
         _, result = bootstrap_function(code, check_safe_exit=False)
         self.assertEqual(result.value, 73682)
 

@@ -5,9 +5,13 @@ import functools
 from time import time
 
 from lockdown.executor.context import Context
+from lockdown.executor.exceptions import PreparationException
 from lockdown.executor.flow_control import FrameManager, \
     break_exception_to_string
 from lockdown.executor.function import prepare
+from lockdown.executor.messages import format_unhandled_break_type, \
+    format_unhandled_break, format_stacktrace_from_frames, \
+    format_preparation_exception
 from lockdown.executor.opcodes import get_context_type
 from lockdown.executor.raw_code_factories import function_lit, list_type, \
     int_type, infer_all, dereference, prepared_function, loop_op, condition_op, \
@@ -46,11 +50,11 @@ def load(filename):
             data = parse(code)
             function = prepare(
                 data,
-                NO_VALUE, FrameManager(), None
+                NO_VALUE, FrameManager(), None, code, None
             ).close(NO_VALUE)
 
         if capture_preparation.caught_break_mode is not None:
-            raise_unhandled_break(capture_preparation.caught_break_mode, capture_preparation.value, None, capture_preparation.opcode, data)
+            raise_unhandled_break(capture_preparation, data)
 
         with frame_manager.capture("export") as capture_export:
             capture_export.attempt_capture_or_raise(
@@ -71,30 +75,6 @@ def get_default_global_context():
         static=load("./lockdown/executor/builtins.lkdn")
     )
 
-def format_unhandled_break_type(break_type, raw_code):
-    if not raw_code:
-        return str(break_type) + " (no raw code)"
-
-    out_break_type = break_type["out"]
-
-    opcode = break_type["opcode"]
-    if not opcode:
-        return str(break_type) + " <!! break_type has no from_opcode !!>"
-
-    start, _ = opcode.get_start_and_end()
-
-    if start is None:
-        return str(break_type) + " (no line and column)"
-
-    lines = raw_code.split("\n")
-
-    padding = " " * start["column"]
-
-    return """
-{}
-{}^
-{}| {}""".format(lines[start["line"] - 1], padding, padding, str(out_break_type))
-
 def raise_unhandled_break_types(open_function, data):
     function_break_types = open_function.get_type().break_types
 
@@ -102,7 +82,7 @@ def raise_unhandled_break_types(open_function, data):
 
     for mode, break_types in function_break_types.items():
         if mode not in ("exit", "return", "value"):
-            breaks_messages = [format_unhandled_break_type(break_type, getattr(data, "raw_code", None)) for break_type in break_types]
+            breaks_messages = [format_unhandled_break_type(break_type, getattr(get_manager(data), "raw_code", None)) for break_type in break_types]
             for break_message in breaks_messages:
                 error_msgs.append("""---- break mode {} is not safe ----
 
@@ -112,33 +92,19 @@ def raise_unhandled_break_types(open_function, data):
     if error_msgs:
         raise BootstrapException("\n\n".join(error_msgs))
 
-def format_unhandled_break(mode, value, caused_by, opcode, data):
-    raw_code = getattr(data, "raw_code", None)
+def raise_unhandled_break(capturer, data):
+    mode = capturer.caught_break_mode
+    value = capturer.value
+    opcode = capturer.opcode
+    caught_break_exception = capturer.caught_break_exception
 
-    break_str = break_exception_to_string(mode, value, caused_by)
+    unhandled_break_description = format_unhandled_break(mode, value, None, opcode, data)
+    stack_trace = ""
 
-    if not raw_code:
-        return break_str + " (no raw code)"
+    if caught_break_exception:
+        stack_trace = format_stacktrace_from_frames(getattr(get_manager(data), "raw_code", None), caught_break_exception.frames)
 
-    if not opcode:
-        return break_str + " (break_exception has no from_opcode)"
-
-    start, _ = opcode.get_start_and_end()
-
-    if not start:
-        return break_str + " (no line and column)"
-
-    lines = raw_code.split("\n")
-
-    padding = " " * start["column"]
-
-    return """
-{}
-{}^
-{}| {}""".format(lines[start["line"] - 1], padding, padding, break_str)
-
-def raise_unhandled_break(mode, value, caused_by, opcode, data):
-    raise BootstrapException(format_unhandled_break(mode, value, caused_by, opcode, data))
+    raise BootstrapException("{}\n\n{}".format(unhandled_break_description, stack_trace))
 
 def bootstrap_function(data, argument=None, outer_context=None, check_safe_exit=True, print_ast=False):
     if argument is None:
@@ -146,7 +112,6 @@ def bootstrap_function(data, argument=None, outer_context=None, check_safe_exit=
     if outer_context is None:
         outer_context = get_default_global_context()
 
-#    get_manager(outer_context).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
     add_composite_type(get_manager(outer_context), DEFAULT_READONLY_COMPOSITE_TYPE)
 
     frame_manager = FrameManager()
@@ -154,15 +119,19 @@ def bootstrap_function(data, argument=None, outer_context=None, check_safe_exit=
     with frame_manager.capture() as capture_preparation:
         if print_ast:
             print_code(data)
-        open_function = prepare(
-            data,
-            outer_context,
-            frame_manager,
-            None,
-            immediate_context={
-                "suggested_outer_type": get_context_type(outer_context)
-            }
-        )
+        try:
+            open_function = prepare(
+                data,
+                outer_context,
+                frame_manager,
+                None,
+                getattr(get_manager(data), "raw_code", None),
+                immediate_context={
+                    "suggested_outer_type": get_context_type(outer_context)
+                }
+            )
+        except PreparationException as e:
+            raise BootstrapException("\n{}".format(format_preparation_exception(e)))
 
         if check_safe_exit:
             raise_unhandled_break_types(open_function, data)
@@ -170,7 +139,7 @@ def bootstrap_function(data, argument=None, outer_context=None, check_safe_exit=
         closed_function = open_function.close(outer_context)
 
     if capture_preparation.caught_break_mode is not None:
-        raise_unhandled_break(capture_preparation.caught_break_mode, capture_preparation.value, None, capture_preparation.opcode, data)
+        raise_unhandled_break(capture_preparation, data)
 
     with frame_manager.capture() as capture_result:
         if get_environment().transpile:

@@ -41,9 +41,10 @@ class Opcode(object):
     """
     Base class for all Opcodes used in Lockdown. 
     """
-    def __init__(self, data, visitor):
+    def __init__(self, data, visitor, raw_code):
         self.data = data
         self.break_types = None
+        self.raw_code = raw_code
 
     @abstractmethod
     def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
@@ -81,7 +82,7 @@ class Opcode(object):
         raise NotImplementedError()
 
     def get_start_and_end(self):
-        return (getattr(self.data, "start", None), getattr(self.data, "end", None))
+        return (self.data._get("start", None), self.data._get("end", None))
 
     def return_value_jump(self, context, frame_manager, hooks, immediate_context=None):
         return evaluate(self, context, frame_manager, hooks, immediate_context)
@@ -108,8 +109,8 @@ class Nop(Opcode):
 
 
 class LiteralOp(Opcode):
-    def __init__(self, data, visitor):
-        super(LiteralOp, self).__init__(data, visitor)
+    def __init__(self, data, visitor, raw_code):
+        super(LiteralOp, self).__init__(data, visitor, raw_code)
         self.value = data._get("value")
 
     def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
@@ -137,8 +138,8 @@ class LiteralOp(Opcode):
 class TemplateOp(OpcodeOperandMixin, Opcode):
     NO_VALUE_ASSIGNMENT = OpcodeErrorType("TemplateOp: no_value_assignment")
 
-    def __init__(self, data, visitor):
-        super(TemplateOp, self).__init__(data, visitor)
+    def __init__(self, data, visitor, raw_code):
+        super(TemplateOp, self).__init__(data, visitor, raw_code)
         if not isinstance(data._get("opcodes", MISSING), PythonList):
             raise PreparationException("TemplateOp: missing opcodes")
 
@@ -150,14 +151,14 @@ class TemplateOp(OpcodeOperandMixin, Opcode):
                 BoundOperand(
                     "{}-key".format(index),
                     self,
-                    enrich_opcode(key, visitor),
+                    enrich_opcode(key, visitor, raw_code),
                     ValueType(),
                     self.NO_VALUE_ASSIGNMENT
                 ),
                 BoundOperand(
                     "{}-value".format(index),
                     self,
-                    enrich_opcode(opcode, visitor),
+                    enrich_opcode(opcode, visitor, raw_code),
                     ValueType(),
                     self.NO_VALUE_ASSIGNMENT
                 )
@@ -262,8 +263,8 @@ class MergeOp(OpcodeOperandMixin, Opcode):
     left = Operand(CompositeType({}, "MergeOp"), INVALID)
     right = Operand(CompositeType({}, "MergeOp"), INVALID)
 
-    def __init__(self, data, visitor):
-        super(MergeOp, self).__init__(data, visitor)
+    def __init__(self, data, visitor, raw_code):
+        super(MergeOp, self).__init__(data, visitor, raw_code)
         self.left_iter_micro_op = self.right_iter_micro_op = None
 
     def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
@@ -378,8 +379,8 @@ class DereferenceOp(OpcodeOperandMixin, Opcode):
     of = Operand(CompositeType({}, "DereferenceOp"), INVALID_OF)
     reference = Operand(AnyType(), None)
 
-    def __init__(self, data, visitor):
-        super(DereferenceOp, self).__init__(data, visitor)
+    def __init__(self, data, visitor, raw_code):
+        super(DereferenceOp, self).__init__(data, visitor, raw_code)
         self.binder = MicroOpBinder()
         self.generates_exceptions = True
 
@@ -511,11 +512,11 @@ class AssignmentOp(Opcode):
     INVALID_RVALUE = OpcodeErrorType("AssignmentOp: invalid_rvalue")
     INVALID_ASSIGNMENT = OpcodeErrorType("AssignmentOp: invalid_assignment")
 
-    def __init__(self, data, visitor):
-        super(AssignmentOp, self).__init__(data, visitor)
-        self.of = enrich_opcode(data._get("of"), visitor)
-        self.reference = enrich_opcode(data._get("reference"), visitor)
-        self.rvalue = enrich_opcode(data._get("rvalue"), visitor)
+    def __init__(self, data, visitor, raw_code):
+        super(AssignmentOp, self).__init__(data, visitor, raw_code)
+        self.of = enrich_opcode(data._get("of"), visitor, raw_code)
+        self.reference = enrich_opcode(data._get("reference"), visitor, raw_code)
+        self.rvalue = enrich_opcode(data._get("rvalue"), visitor, raw_code)
         self.binder = MicroOpBinder()
         self.generates_exceptions = True
 
@@ -637,8 +638,8 @@ class AssignmentOp(Opcode):
 class DynamicDereferenceOp(Opcode):
     INVALID_DEREFERENCE = OpcodeErrorType("DynamicDereferenceOp: invalid_dereference", reference=StringType())
 
-    def __init__(self, data, visitor):
-        super(DynamicDereferenceOp, self).__init__(data, visitor)
+    def __init__(self, data, visitor, raw_code):
+        super(DynamicDereferenceOp, self).__init__(data, visitor, raw_code)
         self.reference = data._get("reference")
 
     def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
@@ -686,8 +687,8 @@ class DynamicAssignmentOp(OpcodeOperandMixin, Opcode):
 
     rvalue = Operand(AnyType(), INVALID_ASSIGNMENT)
 
-    def __init__(self, data, visitor):
-        super(DynamicAssignmentOp, self).__init__(data, visitor)
+    def __init__(self, data, visitor, raw_code):
+        super(DynamicAssignmentOp, self).__init__(data, visitor, raw_code)
         self.reference = data._get("reference")
 
     def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
@@ -756,11 +757,11 @@ class InsertOp(Opcode):
     INVALID_RVALUE = OpcodeErrorType("InsertOp: invalid_rvalue")
     INVALID_ASSIGNMENT = OpcodeErrorType("InsertOp: invalid_assignment")
 
-    def __init__(self, data, visitor):
-        super(InsertOp, self).__init__(data, visitor)
-        self.of = enrich_opcode(data._get("of"), visitor)
-        self.reference = enrich_opcode(data._get("reference"), visitor)
-        self.rvalue = enrich_opcode(data._get("rvalue"), visitor)
+    def __init__(self, data, visitor, raw_code):
+        super(InsertOp, self).__init__(data, visitor, raw_code)
+        self.of = enrich_opcode(data._get("of"), visitor, raw_code)
+        self.reference = enrich_opcode(data._get("reference"), visitor, raw_code)
+        self.rvalue = enrich_opcode(data._get("rvalue"), visitor, raw_code)
         self.micro_ops = {}
 
     def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
@@ -880,8 +881,8 @@ class MapOp(OpcodeOperandMixin, Opcode):
     composite = Operand(CompositeType({}, "MapOp"), MISSING_COMPOSITE_TYPE)
     mapper = Operand(TOP_CLOSED_FUNCTION_TYPE, MISSING_MAPPER_FUNCTION)
 
-    def __init__(self, data, visitor):
-        super(MapOp, self).__init__(data, visitor)
+    def __init__(self, data, visitor, raw_code):
+        super(MapOp, self).__init__(data, visitor, raw_code)
         self.iter_micro_op = None
 
     def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
@@ -1084,10 +1085,10 @@ def BinaryOp(name, func, argument_type, result_type, number_op=None, cmp_op=None
 
 
 class TransformOp(Opcode):
-    def __init__(self, data, visitor):
-        super(TransformOp, self).__init__(data, visitor)
+    def __init__(self, data, visitor, raw_code):
+        super(TransformOp, self).__init__(data, visitor, raw_code)
         if self.data._contains("code"):
-            self.expression = enrich_opcode(self.data._get("code"), visitor)
+            self.expression = enrich_opcode(self.data._get("code"), visitor, raw_code)
             if not self.data._contains("input"):
                 raise PreparationException("input missing in transform opcode")
             self.input = self.data._get("input")
@@ -1201,10 +1202,10 @@ def TransformOpTryCatcher{opcode_id}({context_name}, _frame_manager, _hooks):
 
 
 class ShiftOp(Opcode):
-    def __init__(self, data, visitor):
-        super(ShiftOp, self).__init__(data, visitor)
-        self.opcode = enrich_opcode(data._get("code"), visitor)
-        self.restart_type = enrich_opcode(data._get("restart_type"), visitor)
+    def __init__(self, data, visitor, raw_code):
+        super(ShiftOp, self).__init__(data, visitor, raw_code)
+        self.opcode = enrich_opcode(data._get("code"), visitor, raw_code)
+        self.restart_type = enrich_opcode(data._get("restart_type"), visitor, raw_code)
 
     def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
         break_types = BreakTypesFactory(self)
@@ -1243,20 +1244,20 @@ class ResetOp(Opcode):
     MISSING_IN_BREAK_TYPE = OpcodeErrorType("ResetOp: missing_in_break_type")
     MISSING_FUNCTION = OpcodeErrorType("ResetOp: missing_function")
 
-    def __init__(self, data, visitor):
-        super(ResetOp, self).__init__(data, visitor)
+    def __init__(self, data, visitor, raw_code):
+        super(ResetOp, self).__init__(data, visitor, raw_code)
         if data._contains("code"):
-            self.opcode = enrich_opcode(data._get("code"), visitor)
+            self.opcode = enrich_opcode(data._get("code"), visitor, raw_code)
             self.function = None
             self.argument = None
         else:
             self.opcode = None
             try:
-                self.function = enrich_opcode(data._get("function"), visitor)
+                self.function = enrich_opcode(data._get("function"), visitor, raw_code)
             except IndexError:
                 raise PreparationException("Missing function: {}".format(data))
             try:
-                self.argument = enrich_opcode(data._get("argument"), visitor)
+                self.argument = enrich_opcode(data._get("argument"), visitor, raw_code)
             except IndexError:
                 raise PreparationException("Missing argument: {}".format(data))
 
@@ -1368,13 +1369,13 @@ class ResetOp(Opcode):
 
 
 class CommaOp(OpcodeOperandMixin, Opcode):
-    def __init__(self, data, visitor):
-        super(CommaOp, self).__init__(data, visitor)
+    def __init__(self, data, visitor, raw_code):
+        super(CommaOp, self).__init__(data, visitor, raw_code)
         self.operands = [
             BoundOperand(
                 i,
                 self,
-                enrich_opcode(o, visitor),
+                enrich_opcode(o, visitor, raw_code),
                 AnyType(),
                 None
             ) for i, o in enumerate([ opcode for opcode in data._get("opcodes")._to_list() ])
@@ -1428,8 +1429,8 @@ class CommaOp(OpcodeOperandMixin, Opcode):
 
 
 class LoopOp(Opcode):
-    def __init__(self, data, visitor):
-        self.code = enrich_opcode(data._get("code"), visitor)
+    def __init__(self, data, visitor, raw_code):
+        self.code = enrich_opcode(data._get("code"), visitor, raw_code)
         self.has_continues = True
         self.has_ends = True
         self.has_breaks = True  # TODO remove - this can be achieved with a outer TransformOp
@@ -1565,9 +1566,9 @@ else:
 class PrepareOp(Opcode):
     PREPARATION_ERROR = OpcodeErrorType("Prepare: preparation_error", exception=StringType())
 
-    def __init__(self, data, visitor):
-        super(PrepareOp, self).__init__(data, visitor)
-        self.code = enrich_opcode(data._get("code"), visitor)
+    def __init__(self, data, visitor, raw_code):
+        super(PrepareOp, self).__init__(data, visitor, raw_code)
+        self.code = enrich_opcode(data._get("code"), visitor, raw_code)
 
     def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
         break_types = BreakTypesFactory(self)
@@ -1594,9 +1595,9 @@ class PrepareOp(Opcode):
             immediate_context["suggested_outer_type"] = get_context_type(context)
 
             try:
-                function = prepare(function_data, context, frame_manager, hooks, immediate_context)
+                function = prepare(function_data, context, frame_manager, hooks, self.raw_code, immediate_context)
             except PreparationException as e:
-                return frame.exception(self, self.PREPARATION_ERROR(exception=str(e)))
+                return frame.exception(self, self.PREPARATION_ERROR(exception=str(e)), e)
 
             return frame.value(self, function)
 
@@ -1605,10 +1606,10 @@ class CloseOp(Opcode):
     INVALID_FUNCTION = OpcodeErrorType("Close: invalid_function")
     INVALID_OUTER_CONTEXT = OpcodeErrorType("Close: invalid_outer_context")
 
-    def __init__(self, data, visitor):
-        super(CloseOp, self).__init__(data, visitor)
-        self.function = enrich_opcode(data._get("function"), visitor)
-        self.outer_context = enrich_opcode(data._get("outer_context"), visitor)
+    def __init__(self, data, visitor, raw_code):
+        super(CloseOp, self).__init__(data, visitor, raw_code)
+        self.function = enrich_opcode(data._get("function"), visitor, raw_code)
+        self.outer_context = enrich_opcode(data._get("outer_context"), visitor, raw_code)
 
         self.outer_context_type_error = True
 
@@ -1692,9 +1693,9 @@ def create_readonly_static_type(value):
 
 
 class StaticOp(Opcode):
-    def __init__(self, data, visitor):
-        super(StaticOp, self).__init__(data, visitor)
-        self.code = enrich_opcode(data._get("code"), visitor)
+    def __init__(self, data, visitor, raw_code):
+        super(StaticOp, self).__init__(data, visitor, raw_code)
+        self.code = enrich_opcode(data._get("code"), visitor, raw_code)
         self.value = MISSING
 
     def lazy_initialize(self, context, frame_manager, hooks, immediate_context):
@@ -1727,89 +1728,81 @@ class InvokeOp(Opcode):
     INVALID_ARGUMENT_TYPE = OpcodeErrorType("Invoke: invalid_argument_type")
     INVALID_BREAK_TYPE = OpcodeErrorType("Invoke: invalid_break_type", break_mode=StringType(), break_value=AnyType())
 
-    def __init__(self, data, visitor):
-        super(InvokeOp, self).__init__(data, visitor)
-        self.function = enrich_opcode(data._get("function"), visitor)
-        self.argument = enrich_opcode(data._get("argument"), visitor)
+    def __init__(self, data, visitor, raw_code):
+        super(InvokeOp, self).__init__(data, visitor, raw_code)
+        self.function = enrich_opcode(data._get("function"), visitor, raw_code)
+        self.argument = enrich_opcode(data._get("argument"), visitor, raw_code)
         self.invalid_argument_type_exception_is_possible = True
         self.known_function_type = False
         self.allowed_break_modes = data._get("allowed_break_modes")._to_list()
 
     def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
-        try:
-            break_types = BreakTypesFactory(self)
+        break_types = BreakTypesFactory(self)
 
-            immediate_context = {}
-            argument_type, other_argument_break_types = get_expression_break_types(self.argument, context, frame_manager, hooks)
-            if argument_type is not MISSING:
-                argument_type = flatten_out_types(argument_type)
-                immediate_context["suggested_argument_type"] = argument_type
-            break_types.merge(other_argument_break_types)
+        immediate_context = {}
+        argument_type, other_argument_break_types = get_expression_break_types(self.argument, context, frame_manager, hooks)
+        if argument_type is not MISSING:
+            argument_type = flatten_out_types(argument_type)
+            immediate_context["suggested_argument_type"] = argument_type
+        break_types.merge(other_argument_break_types)
 
-            function_type, other_function_break_types = get_expression_break_types(
-                self.function, context, frame_manager, hooks, immediate_context=immediate_context
-            )
-            break_types.merge(other_function_break_types)
+        function_type, other_function_break_types = get_expression_break_types(
+            self.function, context, frame_manager, hooks, immediate_context=immediate_context
+        )
+        break_types.merge(other_function_break_types)
 
-            if function_type is not MISSING and argument_type is not MISSING:
-                function_type = flatten_out_types(function_type)
+        if function_type is not MISSING and argument_type is not MISSING:
+            function_type = flatten_out_types(function_type)
 
-                if isinstance(function_type, ClosedFunctionType):
-                    self.known_function_type = True
-                    break_types.merge({
-                        break_mode: [{
-                            **break_type,
-                            "opcode": self
-                        } for break_type in sub_break_types]
-                        for break_mode, sub_break_types in function_type.break_types.items()
-                    })
-                    reasoner = Reasoner()
-                    if function_type.argument_type.is_copyable_from(argument_type, reasoner):
-                        self.invalid_argument_type_exception_is_possible = False
-                else:
-                    break_types.add(self, "exception", self.INVALID_FUNCTION_TYPE.get_type())
-                    break_types.add(self, "exception", self.INVALID_BREAK_TYPE.get_type())
+            if isinstance(function_type, ClosedFunctionType):
+                self.known_function_type = True
+                break_types.merge({
+                    break_mode: [{
+                        **break_type,
+                        "opcode": self
+                    } for break_type in sub_break_types]
+                    for break_mode, sub_break_types in function_type.break_types.items()
+                })
+                reasoner = Reasoner()
+                if function_type.argument_type.is_copyable_from(argument_type, reasoner):
+                    self.invalid_argument_type_exception_is_possible = False
+            else:
+                break_types.add(self, "exception", self.INVALID_FUNCTION_TYPE.get_type())
+                break_types.add(self, "exception", self.INVALID_BREAK_TYPE.get_type())
 
-                    for allowed_break_mode in self.allowed_break_modes:
-                        break_types.add(self, allowed_break_mode, AnyType())
+                for allowed_break_mode in self.allowed_break_modes:
+                    break_types.add(self, allowed_break_mode, AnyType())
 
-                if self.invalid_argument_type_exception_is_possible:
-                    break_types.add(self, "exception", self.INVALID_ARGUMENT_TYPE.get_type())
+            if self.invalid_argument_type_exception_is_possible:
+                break_types.add(self, "exception", self.INVALID_ARGUMENT_TYPE.get_type())
 
-            return break_types.build()
-        except BreakException as e:
-            e.add_stack(self)
-            raise
+        return break_types.build()
 
     def jump(self, context, frame_manager, hooks, immediate_context=None):
         from lockdown.executor.function import LockdownFunction
 
-        try:
-            with frame_manager.get_next_frame(self) as frame:
-                function = frame.step("function", lambda: evaluate(self.function, context, frame_manager, hooks))
-                argument = frame.step("argument", lambda: evaluate(self.argument, context, frame_manager, hooks))
+        with frame_manager.get_next_frame(self) as frame:
+            function = frame.step("function", lambda: evaluate(self.function, context, frame_manager, hooks))
+            argument = frame.step("argument", lambda: evaluate(self.argument, context, frame_manager, hooks))
 
-                if not isinstance(function, LockdownFunction):
-                    return frame.exception(self, self.INVALID_FUNCTION_TYPE())
-                if self.invalid_argument_type_exception_is_possible and not does_value_fit_through_type(argument, function.get_type().argument_type):
-                    return frame.exception(self, self.INVALID_ARGUMENT_TYPE()) 
+            if not isinstance(function, LockdownFunction):
+                return frame.exception(self, self.INVALID_FUNCTION_TYPE())
+            if self.invalid_argument_type_exception_is_possible and not does_value_fit_through_type(argument, function.get_type().argument_type):
+                return frame.exception(self, self.INVALID_ARGUMENT_TYPE()) 
 
-                with frame_manager.capture() as capture_result:
-                    capture_result.attempt_capture_or_raise(*function.invoke(argument, frame_manager, hooks))
+            with frame_manager.capture() as capture_result:
+                capture_result.attempt_capture_or_raise(*function.invoke(argument, frame_manager, hooks))
 
-                if not self.known_function_type:
-                    if capture_result.caught_break_mode not in self.allowed_break_modes:
-                        return frame.exception(self, self.INVALID_BREAK_TYPE(
-                            break_mode=capture_result.caught_break_mode,
-                            break_value=capture_result.value
-                        ))
+            if not self.known_function_type:
+                if capture_result.caught_break_mode not in self.allowed_break_modes:
+                    return frame.exception(self, self.INVALID_BREAK_TYPE(
+                        break_mode=capture_result.caught_break_mode,
+                        break_value=capture_result.value
+                    ), cause=capture_result.caught_break_exception)
 
-                return frame.unwind(*capture_result.reraise(opcode=self))
+            return frame.unwind(*capture_result.reraise(opcode=self))
 
-            raise FatalError()
-        except BreakException as e:
-            e.add_stack(self)
-            raise
+        raise FatalError()
 
     def to_ast(self, context_name, dependency_builder, will_ignore_return_value=False):
         from lockdown.executor.function import OpenFunction
@@ -1860,10 +1853,10 @@ class TypeofOp(OpcodeOperandMixin, Opcode):
 class MatchOp(Opcode):
     NO_MATCH = OpcodeErrorType("Match: no_match")
 
-    def __init__(self, data, visitor):
-        super(MatchOp, self).__init__(data, visitor)
-        self.value = enrich_opcode(data._get("value"), visitor)
-        self.matchers = [ enrich_opcode(m, visitor) for m in data._get("matchers")._to_list() ]
+    def __init__(self, data, visitor, raw_code):
+        super(MatchOp, self).__init__(data, visitor, raw_code)
+        self.value = enrich_opcode(data._get("value"), visitor, raw_code)
+        self.matchers = [ enrich_opcode(m, visitor, raw_code) for m in data._get("matchers")._to_list() ]
 
         if not get_environment().rtti:
             raise FatalError("RTTI is required for MatchOp")
@@ -1912,9 +1905,9 @@ class MatchOp(Opcode):
 
 
 class PrintOp(Opcode):
-    def __init__(self, data, visitor):
-        super(PrintOp, self).__init__(data, visitor)
-        self.expression = enrich_opcode(data._get("expression"), visitor)
+    def __init__(self, data, visitor, raw_code):
+        super(PrintOp, self).__init__(data, visitor, raw_code)
+        self.expression = enrich_opcode(data._get("expression"), visitor, raw_code)
 
     def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
         break_types = BreakTypesFactory(self)
@@ -2041,7 +2034,7 @@ OPCODES = spread_dict(
 )
 
 
-def enrich_opcode(data, visitor):
+def enrich_opcode(data, visitor, raw_code):
     if visitor:
         data = visitor(data)
 
@@ -2051,5 +2044,5 @@ def enrich_opcode(data, visitor):
     if opcode not in OPCODES:
         raise PreparationException("Unknown opcode {} in {}".format(opcode, data))
 
-    return OPCODES[opcode](data, visitor)
+    return OPCODES[opcode](data, visitor, raw_code)
 

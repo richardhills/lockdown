@@ -86,14 +86,17 @@ class OpcodeErrorType(object):
             if not key in self.params:
                 raise FatalError("{} not in {}".format(key, self.params))
             data[key] = value
+        for param in self.params.keys():
+            if param not in kwargs:
+                raise FatalError("{} not in  {}".format(param, kwargs))
         return PythonObject(data, debug_reason="type-error")
 
     def get_type(self, **param_values):
         properties = {
-            "type": Const(UnitType(self.name))
+            "type": UnitType(self.name)
         }
         for name, type in self.params.items():
-            properties[name] = Const(type)
+            properties[name] = type
         for name, value in param_values.items():
             properties[name] = UnitType(value)
         return UniversalObjectType(properties, name="TypeError")

@@ -52,7 +52,7 @@ def prepare_piece_of_context(declared_type, suggested_type):
     return final_type
 
 
-def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
+def prepare(data, outer_context, frame_manager, hooks, raw_code, immediate_context):
     if not isinstance(data, Composite):
         raise FatalError()
 
@@ -73,7 +73,8 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
     static = evaluate(
         enrich_opcode(
             data._get("static"),
-            combine(type_conditional_converter, UnboundDereferenceBinder(context))
+            combine(type_conditional_converter, UnboundDereferenceBinder(context)),
+            raw_code
         ),
         context, frame_manager, hooks
     )
@@ -92,12 +93,12 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
 
     try:
         argument_type = prepare_piece_of_context(argument_type, suggested_argument_type)
-    except DanglingInferredType:
-        raise PreparationException("Failed to infer argument types in {} from {}".format(argument_type, suggested_argument_type))
+    except DanglingInferredType as e:
+        raise PreparationException("Failed to infer argument types in {} from {}".format(argument_type, suggested_argument_type)) from e
     try:
         outer_type = prepare_piece_of_context(outer_type, suggested_outer_type)
-    except DanglingInferredType:
-        raise PreparationException("Failed to infer outer types in {} from {}".format(argument_type, suggested_argument_type))
+    except DanglingInferredType as e:
+        raise PreparationException("Failed to infer outer types in {} from {}".format(argument_type, suggested_argument_type)) from e
 
     declared_local_type = enrich_type(static._get("local"))
 
@@ -123,7 +124,8 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
 
     local_initializer = enrich_opcode(
         data._get("local_initializer"),
-        combine(type_conditional_converter, UnboundDereferenceBinder(context))
+        combine(type_conditional_converter, UnboundDereferenceBinder(context)),
+        raw_code
     )
 
     declared_break_types = PythonDict({
@@ -142,7 +144,7 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
             hooks
         )
     except BreakException as e:
-        raise PreparationException(e)
+        raise PreparationException() from e
 
     actual_break_types_factory.merge(local_other_break_types)
 
@@ -183,13 +185,14 @@ def prepare(data, outer_context, frame_manager, hooks, immediate_context=None):
 
         code = enrich_opcode(
             data._get("code"),
-            combine(type_conditional_converter, UnboundDereferenceBinder(context))
+            combine(type_conditional_converter, UnboundDereferenceBinder(context)),
+            raw_code
         )
 
         try:
             code_break_types = code.get_break_types(context, frame_manager, hooks)
         except BreakException as e:
-            raise PreparationException(e)
+            raise PreparationException() from e
 
         actual_break_types_factory.merge(code_break_types)
 

@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 
 from _collections import defaultdict
 
+from lockdown.executor.messages import break_exception_to_string
 from lockdown.type_system.composites import is_type_bindable_to_value, \
     CompositeType, does_value_fit_through_type
 from lockdown.type_system.core_types import Type
@@ -32,19 +33,13 @@ class BreakException(Exception):
         self.opcode = opcode
         self.restart_type = restart_type
         self.caused_by = caused_by
-        self.stack_trace = [ opcode ]
+        self.frames = []
 
-    def add_stack(self, invocation_opcode):
-        self.stack_trace.append(invocation_opcode)
+    def capture_frame(self, frame):
+        self.frames.insert(0, frame)
 
     def __str__(self):
         return break_exception_to_string(self.mode, self.value, self.caused_by)
-
-def break_exception_to_string(mode, value, caused_by):
-    result = "BreakException<{}: {}>".format(mode, value)
-    if caused_by:
-        result = "{}\n{}".format(result, caused_by)
-    return result
 
 class BreakTypesFactory(object):
     """
@@ -81,7 +76,7 @@ class BreakTypesFactory(object):
         return result
 
 class Capturer(object):
-    __slots__ = [ "frame_manager", "break_mode", "opcode", "top_level", "value", "caught_break_mode", "caught_restart_type", "caught_frames", "caught_opcode" ]
+    __slots__ = [ "frame_manager", "break_mode", "opcode", "top_level", "value", "caught_break_mode", "caught_restart_type", "caught_frames", "caught_opcode", "caught_break_exception" ]
 
     def __init__(self, frame_manager, break_mode=None, opcode=None, top_level=False):
         self.frame_manager = frame_manager
@@ -94,8 +89,9 @@ class Capturer(object):
         self.caught_restart_type = None
         self.caught_frames = None
         self.caught_opcode = None
+        self.caught_break_exception = None
 
-    def attempt_capture(self, mode, value, opcode, restart_type):
+    def attempt_capture(self, mode, value, opcode, restart_type, break_exception=None):
         if mode is None or value is None or opcode is None:
             raise ValueError()
 
@@ -104,6 +100,7 @@ class Capturer(object):
             self.value = value
             self.caught_break_mode = mode
             self.caught_opcode = opcode
+            self.caught_break_exception = break_exception
 
             if restart_type:
                 self.caught_restart_type = restart_type
@@ -138,7 +135,7 @@ class Capturer(object):
         if isinstance(exc_value, FatalError):
             return False
         if isinstance(exc_value, BreakException):
-            return self.attempt_capture(exc_value.mode, exc_value.value, exc_value.opcode, exc_value.restart_type)
+            return self.attempt_capture(exc_value.mode, exc_value.value, exc_value.opcode, exc_value.restart_type, exc_value)
         return False
 
 def is_restartable(thing):
@@ -194,7 +191,9 @@ class FrameManager(object):
         return self.index == len(self.frames)
 
     def pop_frame(self):
+        frame = self.frames[-1]
         del self.frames[-1]
+        return frame
 
     def capture(self, break_mode=None, opcode=None, top_level=False):
         return Capturer(self, break_mode, opcode, top_level)
@@ -234,7 +233,7 @@ class PassThroughFrame(object):
     def step(self, name, func):
         return func()
 
-    def unwind(self, opcode, mode, value, restart_type):
+    def unwind(self, opcode, mode, value, restart_type, cause=None):
         from lockdown.executor.opcodes import Opcode
         from lockdown.executor.function import ClosedFunction
 
@@ -246,13 +245,15 @@ class PassThroughFrame(object):
         if get_environment().return_value_optimization and mode == "value" and restart_type is None:
             return mode, value, opcode, None
 
-        raise BreakException(mode, value, opcode, restart_type)
+        break_exception = BreakException(mode, value, opcode, restart_type)
+        break_exception.__cause__ = cause
+        raise break_exception
 
     def value(self, opcode, value):
         return self.unwind(opcode, "value", value, None)
 
-    def exception(self, opcode, value):
-        return self.unwind(opcode, "exception", value, None)
+    def exception(self, opcode, value, cause=None):
+        return self.unwind(opcode, "exception", value, None, cause=cause)
 
     def yield_(self, opcode, value, restart_type):
         return self.unwind(opcode, "yield", value, restart_type)
@@ -279,7 +280,7 @@ class Frame(object):
             initial_locals=dict(self.locals)
         )
 
-    def unwind(self, opcode, mode, value, restart_type):
+    def unwind(self, opcode, mode, value, restart_type, cause=None):
         from lockdown.executor.opcodes import Opcode
         from lockdown.executor.function import ClosedFunction
 
@@ -298,13 +299,15 @@ class Frame(object):
         if get_environment().return_value_optimization and restart_type is None:
             return mode, value, opcode, None
 
-        raise BreakException(mode, value, self.target, restart_type)
+        break_exception = BreakException(mode, value, self.target, restart_type)
+        break_exception.__cause__ = cause
+        raise break_exception
 
     def value(self, opcode, value):
         return self.unwind(opcode, "value", value, None)
 
-    def exception(self, opcode, value):
-        return self.unwind(opcode, "exception", value, None)
+    def exception(self, opcode, value, cause=None):
+        return self.unwind(opcode, "exception", value, None, cause=cause)
 
     def yield_(self, opcode, value, restart_type):
         return self.unwind(opcode, "yield", value, restart_type)
@@ -389,7 +392,9 @@ class Frame(object):
             raise FatalError()
 
         if not exc_type_allows_restart and self.manager.fully_wound():
-            self.manager.pop_frame()
+            frame = self.manager.pop_frame()
+            if isinstance(exc_value, BreakException):
+                exc_value.capture_frame(frame)
         else:
             if get_environment().validate_flow_control and exc_type_allows_restart:
                 if self.manager.mode not in ("shift",):
