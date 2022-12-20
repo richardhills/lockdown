@@ -173,7 +173,7 @@ def enrich_type_with_cache(data, cache):
     if not data._contains("type"):
         raise PreparationException("Missing type in data {}".format(data))
     if data._get("type") not in TYPES:
-        raise PreparationException("Unknown type {}".format(data.type))
+        raise PreparationException("Unknown type {}".format(data))
 
     new_type = TYPES[data._get("type")](data, cache)
     if not isinstance(new_type, Type):

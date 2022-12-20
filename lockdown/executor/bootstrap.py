@@ -82,7 +82,7 @@ def raise_unhandled_break_types(open_function, data):
 
     for mode, break_types in function_break_types.items():
         if mode not in ("exit", "return", "value"):
-            breaks_messages = [format_unhandled_break_type(break_type, getattr(get_manager(data), "raw_code", None)) for break_type in break_types]
+            breaks_messages = [format_unhandled_break_type(break_type) for break_type in break_types]
             for break_message in breaks_messages:
                 error_msgs.append("""---- break mode {} is not safe ----
 
@@ -102,7 +102,7 @@ def raise_unhandled_break(capturer, data):
     stack_trace = ""
 
     if caught_break_exception:
-        stack_trace = format_stacktrace_from_frames(getattr(get_manager(data), "raw_code", None), caught_break_exception.frames)
+        stack_trace = format_stacktrace_from_frames(caught_break_exception.frames)
 
     raise BootstrapException("{}\n\n{}".format(unhandled_break_description, stack_trace))
 

@@ -143,9 +143,10 @@ class TemplateOp(OpcodeOperandMixin, Opcode):
         if not isinstance(data._get("opcodes", MISSING), PythonList):
             raise PreparationException("TemplateOp: missing opcodes")
 
-        for e in data._get("opcodes"):
-            if not isinstance(e, tuple) and len(e) != 2:
-                raise PreparationException("TemplateOp: invalid opcodes {}".format(e))
+        for e in data._get("opcodes")._to_list():
+            e = e._to_list()
+            if not isinstance(e, list) or len(e) != 2:
+                raise PreparationException("TemplateOp: invalid opcodes {} {}".format(data, e))
 
         self.operands = [(
                 BoundOperand(
@@ -180,6 +181,7 @@ class TemplateOp(OpcodeOperandMixin, Opcode):
             all_value_types = []
 
             for key_operand, value_operand in self.operands:
+                key = None
                 try:
                     allowed_keys = key_operand.value_type.get_all_permitted_values()
                     if len(allowed_keys) == 1:
@@ -189,8 +191,10 @@ class TemplateOp(OpcodeOperandMixin, Opcode):
 
                 all_key_types.extend(unwrap_types(key_operand.value_type))
                 all_value_types.extend(unwrap_types(value_operand.value_type))
-                micro_ops[("get", key)] = GetterMicroOpType(key, value_operand.value_type)
-                micro_ops[("set", key)] = SetterMicroOpType(key, AnyType())
+
+                if key is not None:
+                    micro_ops[("get", key)] = GetterMicroOpType(key, value_operand.value_type)
+                    micro_ops[("set", key)] = SetterMicroOpType(key, AnyType())
 
             combined_key_types = merge_types([ BottomType() ] + all_key_types, "exact")
             combined_value_types = merge_types([ BottomType() ] + all_value_types, "exact")

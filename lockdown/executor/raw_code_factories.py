@@ -9,7 +9,7 @@ from lockdown.utils.utils import spread_dict, ANY
 
 def is_opcode(data):
     if not isinstance(data, Universal):
-        raise FatalError(data)
+        return False
     return data._contains("opcode")
 
 def check_is_opcode(data):

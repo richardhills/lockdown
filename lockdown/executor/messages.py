@@ -12,7 +12,7 @@ def format_unhandled_break_type(break_type):
 
     opcode = break_type["opcode"]
 
-    return format_code(opcode, out_break_type)
+    return format_code(opcode, str(out_break_type))
 
 def format_unhandled_break(mode, value, caused_by, opcode, data):
     break_str = break_exception_to_string(mode, value, caused_by)

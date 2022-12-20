@@ -6,6 +6,7 @@ import json
 from antlr4.CommonTokenStream import CommonTokenStream
 from antlr4.InputStream import InputStream
 from antlr4.error.ErrorListener import ConsoleErrorListener
+from antlr4.error.Errors import ParseCancellationException
 
 from lockdown.executor.raw_code_factories import function_lit, nop, comma_op, \
     literal_op, dereference_op, unbound_dereference, addition_op, \
@@ -23,10 +24,10 @@ from lockdown.parser.grammar.langLexer import langLexer
 from lockdown.parser.grammar.langParser import langParser
 from lockdown.parser.grammar.langVisitor import langVisitor
 from lockdown.type_system.exceptions import FatalError
+from lockdown.type_system.managers import get_manager
 from lockdown.type_system.universal_type import DEFAULT_READONLY_COMPOSITE_TYPE, \
     PythonObject, PythonDict, Universal
 from lockdown.utils.utils import MISSING, default, spread_dict
-from lockdown.type_system.managers import get_manager
 
 
 class RDHLang5Visitor(langVisitor):
@@ -79,7 +80,7 @@ class RDHLang5Visitor(langVisitor):
 
         if arguments:
             if final_splat:
-                raise FatalError
+                raise ParseCancellationException
 
             argument_types = []
             local_variable_types = {}
@@ -90,11 +91,11 @@ class RDHLang5Visitor(langVisitor):
             for index, (is_splat, lhs_value, lhs_mode, rhs) in enumerate(arguments):
                 if lhs_mode == "literal-key":
                     if not isinstance(lhs_value, str):
-                        raise FatalError()
+                        raise ParseCancellationException()
 
                     if is_splat:
                         if index != len(arguments) - 1:
-                            raise FatalError()
+                            raise ParseCancellationException()
 
                         wildcard_argument_type = rhs
                         local_variable_types[lhs_value] = inferred_type()
@@ -119,9 +120,9 @@ class RDHLang5Visitor(langVisitor):
                     if rhs is None:
                         raw_argument_type = lhs_value
                     else:
-                        raise FatalError()
+                        raise ParseCancellationException()
                 if lhs_mode == "computed-expression-key":
-                    raise FatalError()
+                    raise ParseCancellationException()
 
             if raw_argument_type is None:
                 raw_argument_type = list_type(argument_types, wildcard_argument_type)
@@ -348,6 +349,10 @@ class RDHLang5Visitor(langVisitor):
 
         return builder
 
+    def visitToPrepareExpression(self, ctx):
+        expression = self.visit(ctx.expression())
+        return prepare_op(expression)
+
     def visitToPrintStatement(self, ctx):
         expr = self.visit(ctx.expression())
 
@@ -385,7 +390,7 @@ class RDHLang5Visitor(langVisitor):
         properties, splat = self.visit(ctx.objectProperties())
 
         if splat:
-            raise FatalError()
+            raise ParseCancellationException()
 
         arguments = []
 
@@ -395,7 +400,7 @@ class RDHLang5Visitor(langVisitor):
             if is_splat:
                 raise NotImplementedError()
             if rhs is not None:
-                raise FatalError()
+                raise ParseCancellationException()
             if lhs_mode == "literal-key":
                 if isinstance(lhs_value, str):
                     extra_argument = unbound_dereference(lhs_value)
@@ -404,7 +409,7 @@ class RDHLang5Visitor(langVisitor):
             if lhs_mode == "expression-key":
                 extra_argument = lhs_value
             if lhs_mode == "computed-expression-key":
-                raise FatalError()
+                raise ParseCancellationException()
 
             arguments.append(extra_argument)
 
@@ -778,7 +783,7 @@ class RDHLang5Visitor(langVisitor):
         properties, splat = self.visit(ctx.objectProperties())
 
         if splat:
-            raise FatalError()
+            raise ParseCancellationException()
 
         for is_splat, lhs_value, lhs_mode, rhs in properties:
             if lhs_mode == "literal-key":
@@ -835,7 +840,7 @@ class RDHLang5Visitor(langVisitor):
         properties, splat = self.visit(ctx.objectProperties())
 
         if splat:
-            raise FatalError()
+            raise ParseCancellationException()
 
         for is_splat, lhs_value, lhs_mode, rhs in properties:
             if is_splat:
@@ -843,9 +848,9 @@ class RDHLang5Visitor(langVisitor):
             if lhs_mode == "literal-key":
                 lhs_value = literal_op(lhs_value)
             if lhs_mode == "expression-key":
-                raise FatalError()
+                raise ParseCancellationException()
             if lhs_mode == "computed-expression-key":
-                raise FatalError()
+                raise ParseCancellationException()
 
             result[lhs_value] = rhs
         return object_type(result, any_type())
@@ -855,7 +860,7 @@ class RDHLang5Visitor(langVisitor):
         properties, splat = self.visit(ctx.objectProperties())
 
         if splat:
-            raise FatalError()
+            raise ParseCancellationException()
 
         for is_splat, lhs_value, lhs_mode, rhs in properties:
             value_type = None
@@ -863,7 +868,7 @@ class RDHLang5Visitor(langVisitor):
             if is_splat:
                 raise NotImplementedError()
             if rhs is not None:
-                raise FatalError()
+                raise ParseCancellationException("RHS found in list template")
             if lhs_mode == "literal-key":
                 if isinstance(lhs_value, str):
                     value_type = unbound_dereference(lhs_value)
@@ -872,7 +877,7 @@ class RDHLang5Visitor(langVisitor):
             if lhs_mode == "expression-key":
                 value_type = lhs_value
             if lhs_mode == "computed-expression-key":
-                raise FatalError()
+                raise ParseCancellationException()
 
             result.append(value_type)
 

@@ -314,6 +314,44 @@ class TestBasicFunction(TestCase):
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 6)
 
+class TestDynamicCode(TestCase):
+    def test_1(self):
+        code = parse("""
+            function() {
+                return json(lockdown(5));
+            }
+        """)
+        func, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 5)
+
+    def test_2(self):
+        code = parse("""
+            function() {
+                return json({
+                    "opcode": "literal",
+                    "value": 5
+                });
+            }
+        """)
+        func, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 5)
+
+    def test_3(self):
+        code = parse("""
+            function() {
+                return json({
+                    "opcode": "addition",
+                    "lvalue": lockdown(5),
+                    "rvalue": lockdown(3)
+                });
+            }
+        """)
+        func, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 8)
+
 
 class TestBuiltIns(TestCase):
     def test_list_from_range(self):

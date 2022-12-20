@@ -93,21 +93,6 @@ static List = function(type: any) {
   };
 };
 
-static tuple = function(type: any, number: int) {
-  return dynamic function(repeatedValue: prepare.local.type) {
-    var opcodes = list<int>(range(0, number)) *|> {
-      continue json({
-        "opcode": "literal",
-        "value": lockdown(repeatedValue)
-      });
-    };
-    return json({
-      "opcode": "template",
-      "opcodes": lockdown(opcodes)
-    });
-  };
-};
-
 static range = function(start: int, end: int) => Yielder<int> {
 	return function() {
 		int i = start;
@@ -188,6 +173,53 @@ static factorial = function(a: int) {
     result = result * i;
   };
   return result;
+};
+
+static tuple = function(type: any, number: int) {
+  return json({
+    "opcode": "close",
+    "outer_context": { "opcode": "context" },
+    "function": {
+      "opcode": "prepare",
+      "code": lockdown({
+        "static": {
+          opcode: "literal",
+          value: {
+            argument: {
+              type: "Universal",
+              micro_ops: [{
+                type: "get",
+                index: 0,
+                params: [ 0, type ]
+              }]
+            },
+            local: { type: "NoValue" },
+            outer: { type: "Any" },
+            break_types: { "infer-all": [ { "out": { type: "Inferred" } } ] }
+          }
+        },
+        local_initializer: { opcode: "nop" },
+        code: {
+          opcode: "template",
+          opcodes: list<int>(range(0, number)) *|> {
+            continue [ {
+              opcode: "literal", value: index
+            }, {
+              opcode: "dereference",
+              reference: { opcode: "literal", value: 0 },
+              of: {
+                opcode: "dereference",
+                reference: { opcode: "literal", value: "argument" },
+                of: {
+                  opcode: "context"
+                }
+              }
+            } ];
+          }
+        }
+      })
+    }
+  });
 };
 
 export {

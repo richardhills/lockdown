@@ -286,13 +286,15 @@ class UnboundDereferenceBinder(ContextSearcher):
         return expression
 
 def type_conditional_converter(expression):
-    is_conditional = expression._get("opcode") == "conditional"
+    if not isinstance(expression, Universal):
+        return expression
+    is_conditional = expression._get("opcode", None) == "conditional"
     if not is_conditional:
         return expression
-    condition_is_type_check = expression._get_in("condition", "opcode") == "is"
+    condition_is_type_check = expression._get_in("condition", "opcode", default=None) == "is"
     if not condition_is_type_check:
         return expression
-    lvalue_of_condition_is_dereference = expression._get_in("condition", "expression", "opcode") == "unbound_dereference"
+    lvalue_of_condition_is_dereference = expression._get_in("condition", "expression", "opcode", default=None) == "unbound_dereference"
     if not lvalue_of_condition_is_dereference:
         return expression
 
@@ -329,7 +331,7 @@ def combine(*funcs):
         for func in funcs:
             expression = func(expression)
             if not is_opcode(expression):
-                raise FatalError()
+                raise PreparationException("Opcode not found {}".format(expression))
         return expression
     return wrapped
 
