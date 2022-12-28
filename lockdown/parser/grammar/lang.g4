@@ -30,9 +30,9 @@ value
    | 'false'
    | 'null'
    // Where our language extends json...
-   | function
-   | codeBlockAsFunction
-   | lockdownJsonExpression
+   | function /* Used to run scripts */
+   | codeBlockAsFunction /* Used by the cli */
+   | lockdownJsonExpression /* Used in inline json to break back into a lockdown expression */ 
    ;
 
 STRING
@@ -77,6 +77,10 @@ fragment EXP
 WS
    : [ \t\n\r] + -> skip
    ;
+
+COMMENT
+  : '/*' .*? '*/' -> skip
+  ;
 
 function
    : dynamic='dynamic'? 'function' SYMBOL? '(' objectProperties ')' (functionBreakTypes=expression)? '{' codeBlock '}'
@@ -164,6 +168,8 @@ expression
    | tupleType				# toTupleType
    | functionType			# toFunctionType
    | dynamic='dynamic'? function # toFunctionExpression
+   | 'defer' '(' expression ')' # toDefer
+   | 'eval' '(' expression ')' # toDynamicEval
    | 'print' expression     # toPrintStatement  
    | 'return' expression    # returnStatement  
    | 'yield' expression     # yieldStatement  

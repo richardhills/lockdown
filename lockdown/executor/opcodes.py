@@ -1141,7 +1141,10 @@ class TransformOp(Opcode):
                 with frame_manager.capture(break_mode=self.input, opcode=opcode) as capture_result:
                     capture_result.attempt_capture_or_raise(*self.expression.jump(context, frame_manager, hooks))
 
-                return frame.unwind(*capture_result.reraise(opcode=self, break_mode=self.output))
+                return frame.unwind(
+                    *capture_result.reraise(opcode=self, break_mode=self.output),
+                    cause=capture_result.caught_break_exception
+                )
             else:
                 return frame.unwind(self, self.output, NO_VALUE, None)
         raise FatalError()
@@ -1601,7 +1604,7 @@ class PrepareOp(Opcode):
             try:
                 function = prepare(function_data, context, frame_manager, hooks, self.raw_code, immediate_context)
             except PreparationException as e:
-                return frame.exception(self, self.PREPARATION_ERROR(exception=str(e)), e)
+                return frame.exception(self, self.PREPARATION_ERROR(exception=str(e)), cause=e)
 
             return frame.value(self, function)
 
@@ -1658,8 +1661,6 @@ class CloseOp(Opcode):
             if (get_environment().opcode_bindings or self.outer_context_type_error):
                 reasoner = Reasoner()
                 if not does_value_fit_through_type(outer_context, open_function.outer_type, reasoner):
-                    print(reasoner)
-                    does_value_fit_through_type(outer_context, open_function.outer_type, reasoner)
                     return frame.exception(self, self.INVALID_OUTER_CONTEXT())
 
             return frame.value(self, open_function.close(outer_context))
@@ -1804,7 +1805,10 @@ class InvokeOp(Opcode):
                         break_value=capture_result.value
                     ), cause=capture_result.caught_break_exception)
 
-            return frame.unwind(*capture_result.reraise(opcode=self))
+            return frame.unwind(
+                *capture_result.reraise(opcode=self),
+                cause=capture_result.caught_break_exception
+            )
 
         raise FatalError()
 
@@ -1918,7 +1922,7 @@ class PrintOp(Opcode):
         break_types.add(self, "value", NoValueType())
 
         expression_types, expression_break_types = get_expression_break_types(self.expression, context, frame_manager, hooks)
-        # Todo verify that expression_types is string
+        # Todo verify that expression_types is string, probably should use Operand class
         break_types.merge(expression_break_types)
 
         return break_types.build()
@@ -1928,6 +1932,45 @@ class PrintOp(Opcode):
             print(evaluate(self.expression, context, frame_manager, hooks))
             return frame.value(self, NO_VALUE)
 
+class DynamicEvalOp(Opcode):
+    INVALID_BREAK_TYPE = OpcodeErrorType("Invoke: invalid_break_type", break_mode=StringType(), break_value=AnyType())
+
+    def __init__(self, data, visitor, raw_code):
+        super(DynamicEvalOp, self).__init__(data, visitor, raw_code)
+        self.expression = enrich_opcode(data._get("expression"), visitor, raw_code)
+        self.visitor = visitor
+
+    def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
+        break_types = BreakTypesFactory(self)
+
+        expression_value_type, expression_break_types = get_expression_break_types(self.expression, context, frame_manager, hooks)
+        break_types.merge(expression_break_types)
+
+        raw_opcode = None
+
+        if isinstance(self.expression, StaticOp):
+            raw_opcode = self.expression.value
+
+        if raw_opcode:
+            opcode = enrich_opcode(raw_opcode, self.visitor, None)
+            opcode_types, opcode_break_types = get_expression_break_types(opcode, context, frame_manager, hooks)
+
+            break_types.merge(opcode_break_types)
+            for opcode_type in opcode_types:
+                break_types.add(self, "value", opcode_type["out"])
+        else:
+            break_types.add(self, "exception", self.INVALID_BREAK_TYPE.get_type())
+            if expression_value_type is not MISSING:
+                break_types.add(self, "value", AnyType())
+
+        return break_types.build()
+
+    @abstractmethod
+    def jump(self, context, frame_manager, hooks, immediate_context=None):
+        with frame_manager.get_next_frame(self) as frame:
+            raw_opcode = evaluate(self.expression, context, frame_manager, hooks)
+            opcode = enrich_opcode(raw_opcode, self.visitor, None)
+            return frame.value(self, evaluate(opcode, context, frame_manager, hooks, immediate_context))
 
 FLOW_CONTROL_OPCODES = {
     "nop": Nop,
@@ -1937,6 +1980,7 @@ FLOW_CONTROL_OPCODES = {
     "comma": CommaOp,
     "loop": LoopOp,
     "conditional": ConditionalOp,
+    "dynamic_eval": DynamicEvalOp
 }
 
 MATH_AND_LOGIC_OPCODES = {

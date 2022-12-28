@@ -352,6 +352,37 @@ class TestDynamicCode(TestCase):
         self.assertEqual(result.caught_break_mode, "value")
         self.assertEqual(result.value, 8)
 
+    def test_4(self):
+        code = parse("""
+            function() {
+                return eval(<defer(8)>);
+            }
+        """)
+        func, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 8)
+
+    def test_5(self):
+        code = parse("""
+            function() {
+                return eval(<{ opcode: "literal", value: 8 }>);
+            }
+        """)
+        func, result = bootstrap_function(code)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 8)
+
+    def test_6(self):
+        code = parse("""
+            function() {
+                return eval({ opcode: "literal", value: 8 });
+            }
+        """)
+        func, result = bootstrap_function(code, check_safe_exit=False)
+        if hasattr(func, "break_types"):
+            self.assertIn("exception", func.break_types)
+        self.assertEqual(result.caught_break_mode, "value")
+        self.assertEqual(result.value, 8)
 
 class TestBuiltIns(TestCase):
     def test_list_from_range(self):
@@ -1373,6 +1404,27 @@ class TestParserMisc(TestCase):
             _, result = bootstrap_function(code, check_safe_exit=False)
         except BootstrapException as e:
             self.assertEqual(e.value._get("type"), "DereferenceOp: invalid_of")
+
+    def test_2(self):
+        return # Currently fails, constructor is an any instead of var in builtins.lkdn
+        code = parse("""
+            function() {
+                static tupleTest = function(type: any, number: int) {
+                    var constructor = {
+                        opcode: "template",
+                        opcodes: list<int>(range(0, number)) *|> {
+                            continue [ { opcode: "literal", value: index }, defer(local.value) ];
+                        }
+                    };
+                    return dynamic function(value: prepare.outer.local.type) {
+                        return eval(<prepare.local.constructor>);
+                    };
+                };
+                return tupleTest<int, 5>(4);
+            }
+        """)
+        _, result = bootstrap_function(code, check_safe_exit=False)
+        self.assertEqual(result.value._to_list(), [ 4, 4, 4, 4, 4 ])
 
 class TestDynamic(TestCase):
     def test_local(self):

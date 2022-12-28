@@ -19,7 +19,7 @@ from lockdown.executor.raw_code_factories import function_lit, nop, comma_op, \
     continue_op, check_is_opcode, is_op, function_type, \
     composite_type, static_op, map_op, insert_op, prepared_function, int_type, \
     any_type, print_op, shift_op, prepare_op, close_op, rich_type, typeof_op, \
-    merge_op, unary_op
+    merge_op, unary_op, dynamic_eval_op
 from lockdown.parser.grammar.langLexer import langLexer
 from lockdown.parser.grammar.langParser import langParser
 from lockdown.parser.grammar.langVisitor import langVisitor
@@ -993,6 +993,14 @@ class RDHLang5Visitor(langVisitor):
         function = close_op(function, context_op())
 
         return function
+
+    def visitToDynamicEval(self, ctx):
+        expression = self.visit(ctx.expression())
+        return dynamic_eval_op(expression)
+
+    def visitToDefer(self, ctx):
+        expression = self.visit(ctx.expression())
+        return literal_op(expression)
 
 class ObjectTemplateBuilder(object):
     def __init__(self, previous_op=None):

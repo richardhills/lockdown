@@ -176,50 +176,15 @@ static factorial = function(a: int) {
 };
 
 static tuple = function(type: any, number: int) {
-  return json({
-    "opcode": "close",
-    "outer_context": { "opcode": "context" },
-    "function": {
-      "opcode": "prepare",
-      "code": lockdown({
-        "static": {
-          opcode: "literal",
-          value: {
-            argument: {
-              type: "Universal",
-              micro_ops: [{
-                type: "get",
-                index: 0,
-                params: [ 0, type ]
-              }]
-            },
-            local: { type: "NoValue" },
-            outer: { type: "Any" },
-            break_types: { "infer-all": [ { "out": { type: "Inferred" } } ] }
-          }
-        },
-        local_initializer: { opcode: "nop" },
-        code: {
-          opcode: "template",
-          opcodes: list<int>(range(0, number)) *|> {
-            continue [ {
-              opcode: "literal", value: index
-            }, {
-              opcode: "dereference",
-              reference: { opcode: "literal", value: 0 },
-              of: {
-                opcode: "dereference",
-                reference: { opcode: "literal", value: "argument" },
-                of: {
-                  opcode: "context"
-                }
-              }
-            } ];
-          }
-        }
-      })
+  any constructor = {
+    opcode: "template",
+    opcodes: list<int>(range(0, number)) *|> {
+      continue [ { opcode: "literal", value: index }, defer(local.value) ];
     }
-  });
+  };
+  return dynamic function(value: prepare.outer.local.type) {
+    return eval(<prepare.local.constructor>);
+  };
 };
 
 export {

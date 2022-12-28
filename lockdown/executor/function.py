@@ -12,7 +12,7 @@ from lockdown.executor.flow_control import BreakTypesFactory, FrameManager, \
 from lockdown.executor.function_type import enrich_break_type, OpenFunctionType, \
     ClosedFunctionType
 from lockdown.executor.opcodes import enrich_opcode, get_context_type, evaluate, \
-    get_expression_break_types, flatten_out_types
+    get_expression_break_types, flatten_out_types, Nop
 from lockdown.executor.raw_code_factories import dynamic_dereference_op, \
     static_op, match_op, prepared_function, inferred_type, invoke_op, \
     object_template_op, object_type, dereference, no_value_type, nop, is_opcode, \
@@ -682,8 +682,13 @@ class ClosedFunction(LockdownFunction):
                     reasoner=code_context_binding_reasoner
                 ):
                     get_manager(new_context)._context_type = self.open_function.execution_context_type
-                    result = frame.step("code", lambda: evaluate(self.open_function.code, new_context, frame_manager, hooks))
-                    return frame.value(self, result)
+                    with frame_manager.capture("value") as result:
+                        result.attempt_capture_or_raise(*self.open_function.code.jump(new_context, frame_manager, hooks))
+
+                    return frame.unwind(
+                        *result.reraise(opcode=self),
+                        cause=result.caught_break_exception
+                    )
             except CompositeTypeIncompatibleWithTarget:
                 raise FatalError(code_context_binding_reasoner.to_message())
             except CompositeTypeIsInconsistent as e:

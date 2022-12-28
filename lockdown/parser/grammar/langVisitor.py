@@ -179,6 +179,11 @@ class langVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by langParser#toDefer.
+    def visitToDefer(self, ctx:langParser.ToDeferContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by langParser#yieldStatement.
     def visitYieldStatement(self, ctx:langParser.YieldStatementContext):
         return self.visitChildren(ctx)
@@ -286,6 +291,11 @@ class langVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by langParser#lte.
     def visitLte(self, ctx:langParser.LteContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by langParser#toDynamicEval.
+    def visitToDynamicEval(self, ctx:langParser.ToDynamicEvalContext):
         return self.visitChildren(ctx)
 
 

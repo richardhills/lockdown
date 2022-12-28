@@ -561,6 +561,12 @@ def prepare_op(function_expression, **kwargs):
         "code": function_expression
     }, **kwargs), debug_reason="code")
 
+def dynamic_eval_op(expression, **kwargs):
+    check_is_opcode(expression)
+    return PythonObject(spread_dict({
+        "opcode": "dynamic_eval",
+        "expression": expression
+    }, **kwargs), debug_reason="code")
 
 def close_op(function, context, **kwargs):
     check_is_opcode(function)

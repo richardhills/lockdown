@@ -314,6 +314,15 @@ class langListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by langParser#toDefer.
+    def enterToDefer(self, ctx:langParser.ToDeferContext):
+        pass
+
+    # Exit a parse tree produced by langParser#toDefer.
+    def exitToDefer(self, ctx:langParser.ToDeferContext):
+        pass
+
+
     # Enter a parse tree produced by langParser#yieldStatement.
     def enterYieldStatement(self, ctx:langParser.YieldStatementContext):
         pass
@@ -509,6 +518,15 @@ class langListener(ParseTreeListener):
 
     # Exit a parse tree produced by langParser#lte.
     def exitLte(self, ctx:langParser.LteContext):
+        pass
+
+
+    # Enter a parse tree produced by langParser#toDynamicEval.
+    def enterToDynamicEval(self, ctx:langParser.ToDynamicEvalContext):
+        pass
+
+    # Exit a parse tree produced by langParser#toDynamicEval.
+    def exitToDynamicEval(self, ctx:langParser.ToDynamicEvalContext):
         pass
 
 

@@ -112,6 +112,8 @@ class Capturer(object):
     def reraise(self, opcode=MISSING, break_mode = MISSING):
         if self.caught_frames:
             self.frame_manager.splice_frames(self.caught_frames)
+        if opcode:
+            self.caught_opcode._previous = opcode
         return (
             default(opcode, self.caught_opcode),
             default(break_mode, self.caught_break_mode),
