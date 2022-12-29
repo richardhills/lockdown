@@ -115,13 +115,6 @@ def prepare(data, outer_context, frame_manager, hooks, raw_code, immediate_conte
         debug_reason="local-enrichment-context"
     )
 
-    # optimization to avoid generating context_type lazily
-    get_manager(context)._context_type = UniversalObjectType({
-        "outer": outer_type,
-        "argument": argument_type,
-#        "local": local_type
-    }, wildcard_type=AnyType(), name="local-prepare-context-type")
-
     local_initializer = enrich_opcode(
         data._get("local_initializer"),
         combine(type_conditional_converter, UnboundDereferenceBinder(context)),
@@ -133,8 +126,6 @@ def prepare(data, outer_context, frame_manager, hooks, raw_code, immediate_conte
             enrich_break_type(break_type) for break_type in break_types._values()
         ]) for mode, break_types in static._get("break_types")._items()
     })
-
-    #get_manager(declared_break_types).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
 
     try:
         actual_local_type, local_other_break_types = get_expression_break_types(
@@ -176,12 +167,6 @@ def prepare(data, outer_context, frame_manager, hooks, raw_code, immediate_conte
             static=static,
             debug_reason="code-enrichment-context"
         )
-
-        get_manager(context)._context_type = UniversalObjectType({
-            "outer": outer_type,
-            "argument": argument_type,
-            "local": local_type
-        }, wildcard_type=AnyType(), name="code-prepare-context-type")
 
         code = enrich_opcode(
             data._get("code"),
@@ -262,11 +247,9 @@ class UnboundDereferenceBinder(ContextSearcher):
                 new_dereference = dereference_op(bound_context_op, literal_op(reference), **debug_info)
                 if is_static:
                     new_dereference = static_op(new_dereference)
-#                get_manager(new_dereference).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
                 return new_dereference
             else:
                 new_dereference = dynamic_dereference_op(reference, **debug_info)
-#                get_manager(new_dereference).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
                 return new_dereference
 
         if expression._get("opcode", None) == "unbound_assignment":
@@ -275,13 +258,9 @@ class UnboundDereferenceBinder(ContextSearcher):
 
             if context_links is not None:
                 bound_context_op = dereference(*context_links)
-                new_assignment = assignment_op(bound_context_op, literal_op(reference), expression._get("rvalue"), **debug_info)
-                #get_manager(new_assignment).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
-                return new_assignment
+                return assignment_op(bound_context_op, literal_op(reference), expression._get("rvalue"), **debug_info)
             else:
-                new_assignment = dynamic_assignment_op(reference, expression._get("rvalue"), **debug_info)
-                #get_manager(new_assignment).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
-                return new_assignment
+                return dynamic_assignment_op(reference, expression._get("rvalue"), **debug_info)
 
         return expression
 
@@ -322,7 +301,6 @@ def type_conditional_converter(expression):
             )
         ]
     )
-#    get_manager(new_match).add_composite_type(DEFAULT_READONLY_COMPOSITE_TYPE)
     return new_match
 
 
@@ -436,14 +414,6 @@ class {open_function_id}(object):
                 static={static}
             )
 
-#            {context_name} = Universal(True, initial_wrapped={{
-#                "prepare": {prepare_context},
-#                "outer": self.outer_context,
-#                "argument": {context_name}_argument,
-#                "static": {static},
-#                "_types": {local_initialization_context_type}
-#            }}, debug_reason="local-initialization-transpiled-context")
-
             local = None
     
             with scoped_bind(
@@ -461,15 +431,6 @@ class {open_function_id}(object):
                 static={static},
                 local=local
             )
-
-            # {context_name} = Universal(True, initial_wrapped={{
-            #     "prepare": {prepare_context},
-            #     "outer": self.outer_context,
-            #     "argument": {context_name}_argument,
-            #     "static": {static},
-            #     "local": local,
-            #     "_types": {execution_context_type}
-            # }}, debug_reason="code-execution-transpiled-context")
             """ \
             +(
                 """

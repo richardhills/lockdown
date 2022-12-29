@@ -112,8 +112,6 @@ def bootstrap_function(data, argument=None, outer_context=None, check_safe_exit=
     if outer_context is None:
         outer_context = get_default_global_context()
 
-    add_composite_type(get_manager(outer_context), DEFAULT_READONLY_COMPOSITE_TYPE)
-
     frame_manager = FrameManager()
 
     with frame_manager.capture() as capture_preparation:

@@ -26,9 +26,7 @@ class Context(Universal):
 
         get_manager(self)._context_type = static_type
 
-        initial = {
-            #"_types": static_type
-        }
+        initial = {}
         if prepare is not MISSING:
             initial["prepare"] = prepare
         if static is not MISSING:
