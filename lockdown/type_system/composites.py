@@ -426,18 +426,25 @@ def resolve_micro_op_conflicts(type, results):
     wildcard_getter = finished_type.get_micro_op_type(( "get-wildcard", ))
 
     if wildcard_setter and wildcard_getter:
-        finished_type.set_micro_op_type(( "get-wildcard", ), wildcard_getter.clone(
-            value_type=wildcard_setter.value_type
-        ))
+        if not wildcard_setter.value_type.is_nominally_the_same(wildcard_getter.value_type):
+            finished_type.set_micro_op_type(( "get-wildcard", ), wildcard_getter.clone(
+                value_type=wildcard_setter.value_type
+            ))
 
     wildcard_getter = finished_type.get_micro_op_type(( "get-wildcard", ))
     iter = finished_type.get_micro_op_type(( "iter", ))
 
     if wildcard_getter and iter:
-        finished_type.set_micro_op_type(( "iter", ), iter.clone(
-            key_type=wildcard_getter.key_type,
-            value_type=wildcard_getter.value_type
-        ))
+        if (
+            not iter.key_type.is_copyable_from(wildcard_getter.key_type, DUMMY_REASONER)
+            or not wildcard_getter.key_type.is_copyable_from(iter.key_type, DUMMY_REASONER)
+            or not iter.value_type.is_copyable_from(wildcard_getter.value_type, DUMMY_REASONER)
+            or not wildcard_getter.value_type.is_copyable_from(iter.value_type, DUMMY_REASONER)
+        ):
+            finished_type.set_micro_op_type(( "iter", ), iter.clone(
+                key_type=wildcard_getter.key_type,
+                value_type=wildcard_getter.value_type
+            ))
 
     for tag, micro_op in list(finished_type.get_micro_op_types().items()):
         if tag[0] in ("get", "get-wildcard") and not micro_op.key_error:
