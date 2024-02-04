@@ -52,6 +52,7 @@ class CompositeType(Type):
         self._is_self_consistent = None
         self.is_copyable_cache = WeakIdentityKeyDictionary()
         self.delegate = delegate
+        self.frozen = False
 
     def clone(self, name):
         if self.delegate:
@@ -71,6 +72,8 @@ class CompositeType(Type):
         return self._micro_op_types.get(tag, None)
 
     def set_micro_op_type(self, tag, micro_op):
+        if self.frozen:
+            raise FatalError()
         if not isinstance(tag, tuple):
             raise FatalError()
 
@@ -80,6 +83,8 @@ class CompositeType(Type):
         self._micro_op_types[tag] = micro_op
 
     def remove_micro_op_type(self, tag):
+        if self.frozen:
+            raise FatalError()
         if tag not in self._micro_op_types:
             return
 
@@ -131,6 +136,10 @@ class CompositeType(Type):
             return self.delegate.get_delegate()
         return self
 
+    def freeze(self):
+        self.frozen = True
+        return self
+
     def is_copyable_from(self, other, reasoner):
         if self.delegate:
             return self.delegate.is_copyable_from(other, reasoner)
@@ -138,7 +147,7 @@ class CompositeType(Type):
         if isinstance(other, BottomType):
             return True
         if self is other:
-            return True        
+            return True
         if isinstance(other, OneOfType):
             return other.is_copyable_to(self, reasoner)
         if not isinstance(other, CompositeType):
@@ -192,7 +201,8 @@ class CompositeObjectManager(object):
 
         self.on_gc_callback = on_gc_callback
 
-        self.cached_effective_composite_type = None
+        from lockdown.type_system.universal_type import EMPTY_COMPOSITE_TYPE
+        self.cached_effective_composite_type = EMPTY_COMPOSITE_TYPE
 
         self.default_factory = None
         self.debug_reason = None
@@ -257,13 +267,16 @@ class CompositeObjectManager(object):
         effective_composite_type = self.get_effective_composite_type()
         return effective_composite_type.get_micro_op_type(tag)    
 
+class InferredTypeFound(Exception):
+    pass
+
 class InferredType(Type):
     """
     A placeholder Type that should be replaced by a real type before getting new the actual verification
     or run time systems.
     """
     def is_copyable_from(self, other, reasoner):
-        raise FatalError()
+        raise InferredTypeFound()
 
     def __repr__(self):
         return "Inferred"
@@ -397,6 +410,14 @@ def resolve_micro_op_conflicts(type, results):
     if not isinstance(type, CompositeType):
         return type
 
+# Trying to optimize by avoiding creating the new type if we know it's consistent
+#    try:
+#        # If we are self consistent, there can be no micro_op conflicts to fix!
+#        if type.is_self_consistent(DUMMY_REASONER):
+#            return type
+#    except InferredTypeFound:
+#        pass
+
     finished_type = type.clone("({})<pcr>".format(type.name))
 
     results[id(type)] = finished_type
@@ -426,7 +447,8 @@ def resolve_micro_op_conflicts(type, results):
     wildcard_getter = finished_type.get_micro_op_type(( "get-wildcard", ))
 
     if wildcard_setter and wildcard_getter:
-        if not wildcard_setter.value_type.is_nominally_the_same(wildcard_getter.value_type):
+        if not wildcard_getter.value_type.is_copyable_from(wildcard_setter.value_type, DUMMY_REASONER):       
+#        if not wildcard_setter.value_type.is_nominally_the_same(wildcard_getter.value_type):
             finished_type.set_micro_op_type(( "get-wildcard", ), wildcard_getter.clone(
                 value_type=wildcard_setter.value_type
             ))
@@ -452,7 +474,14 @@ def resolve_micro_op_conflicts(type, results):
             finished_type.remove_micro_op_type(( "insert-wildcard", ))
             finished_type.remove_micro_op_type(( "remove-wildcard", ))
 
-    return finished_type
+#    if type.is_self_consistent(DUMMY_REASONER) and not finished_type.is_nominally_the_same(type):
+#        import ipdb
+#        ipdb.set_trace()
+#        print("NO")
+#        del results[id(type)]
+#        resolve_micro_op_conflicts(type, results)
+
+    return finished_type.freeze()
 
 def replace_setter_value_type_with_getter(setter, getter):
     # Identify those cases where we can get away without replacing the setter value_type with
@@ -521,52 +550,6 @@ def does_value_fit_through_type(value, type, reasoner=DUMMY_REASONER):
     builder = NetworkVerifierAndBuilder(value, type, False)
     succeeded, _ = builder.build(MISSING, MISSING, DUMMY_REASONER)
     return succeeded
-
-# def rebind_networks(manager):
-#     for attached_node in manager.get_attached_nodes():
-#         old_network = attached_node.network
-#         old_network.detach()
-#
-#         builder = NetworkVerifierAndBuilder(True)
-#         succeeded = verify_and_or_build_network(
-#             old_network.top_node.type,
-#             old_network.top_node.target_manager().get_obj(),
-#             old_network.top_node.target_manager(),
-#             None, None,
-#             MISSING, MISSING, builder, DUMMY_REASONER
-#         )
-#
-#         if not succeeded:
-#             raise CompositeTypeIncompatibleWithTarget()
-#
-#         new_network = builder.build()
-#         print("Rebinding {} to {} on {}".format(id(old_network), id(new_network), id(old_network.top_node.target_manager())))
-#         new_network.attach()
-#
-#         old_network.bind_context.network = new_network
-#         new_network.bind_context = old_network.bind_context
-#
-# class Network(object):
-#     def __init__(self):
-#         self.top_node = None
-#         self.bind_context = NetworkBindContext(self)
-#
-#     def walk(self):
-#         yield from self.top_node.walk()
-#
-#     def attach(self):
-#         target_manager = self.top_node.target_manager()
-#         if target_manager:
-#             nodes = list(self.walk())
-#             print("attaching {} nodes".format(len(nodes)))
-#             for node in nodes:
-#                 node.attach()
-#
-#     def detach(self):
-#         target_manager = self.top_node.target_manager()
-#         if target_manager:
-#             for node in self.walk():
-#                 node.detach()
 
 class Node(object):
     def __init__(self, target_manager, type):

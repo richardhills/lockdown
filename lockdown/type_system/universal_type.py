@@ -1335,7 +1335,7 @@ def UniversalObjectType(properties, wildcard_type=None, has_default_factory=Fals
     if name is None:
         name = "UniversalObjectType"
 
-    return CompositeType(micro_ops, name)
+    return CompositeType(micro_ops, name).freeze()
 
 
 def UniversalTupleType(properties, name=None):
@@ -1359,7 +1359,7 @@ def UniversalTupleType(properties, name=None):
     if name is None:
         name = "UniversalTupleType"
 
-    return CompositeType(micro_ops, name)
+    return CompositeType(micro_ops, name).freeze()
 
 
 def UniversalListType(child_type, is_sparse=False, name=None):
@@ -1389,7 +1389,7 @@ def UniversalListType(child_type, is_sparse=False, name=None):
     if name is None:
         name = "UniversalListType"
 
-    return CompositeType(micro_ops, name)
+    return CompositeType(micro_ops, name).freeze()
 
 def UniversalLupleType(properties, element_type, is_sparse=False, name=None):
     micro_ops = {}
@@ -1429,7 +1429,7 @@ def UniversalLupleType(properties, element_type, is_sparse=False, name=None):
     if name is None:
         name = "UniversalLupleType"
 
-    return CompositeType(micro_ops, name)
+    return CompositeType(micro_ops, name).freeze()
 
 
 def UniversalDictType(key_type, value_type, name=None):
@@ -1442,7 +1442,7 @@ def UniversalDictType(key_type, value_type, name=None):
     if name is None:
         name = "UniversalDictType"
 
-    return CompositeType(micro_ops, name)
+    return CompositeType(micro_ops, name).freeze()
 
 def UniversalDefaultDictType(key_type, value_type, name=None):
     micro_ops = {}
@@ -1454,15 +1454,17 @@ def UniversalDefaultDictType(key_type, value_type, name=None):
     if name is None:
         name = "UniversalDefaultDictType"
 
-    return CompositeType(micro_ops, name)
+    return CompositeType(micro_ops, name).freeze()
 
 # A Composite Type that does not support any operations, and does not conflict with any other Composite Types
 EMPTY_COMPOSITE_TYPE = CompositeType({}, "EmptyCompositeType")
+EMPTY_COMPOSITE_TYPE.freeze()
 
 DEFAULT_READONLY_COMPOSITE_TYPE = CompositeType({}, "DefaultReadonlyUniversalType")
 RICH_READONLY_TYPE = OneOfType([ AnyType(), DEFAULT_READONLY_COMPOSITE_TYPE ])
 DEFAULT_READONLY_COMPOSITE_TYPE.set_micro_op_type(("get-wildcard",), GetterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), RICH_READONLY_TYPE, True))
 DEFAULT_READONLY_COMPOSITE_TYPE.set_micro_op_type(("iter",), IterMicroOpType(OneOfType([ StringType(), IntegerType() ]), RICH_READONLY_TYPE))
+DEFAULT_READONLY_COMPOSITE_TYPE.freeze()
 
 # A reasonable default composite type, with the goal of:
 # 1. Supporting as wide a range of operations as possible (even if not safe)
@@ -1476,6 +1478,7 @@ DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("remove-wildcard",), RemoverWildcardMi
 DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("insert-end",), InsertEndMicroOpType(RICH_TYPE, True))
 DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("insert-wildcard",), InserterWildcardMicroOpType(RICH_TYPE, True, True))
 DEFAULT_COMPOSITE_TYPE.set_micro_op_type(("iter",), IterMicroOpType(OneOfType([ StringType(), IntegerType() ]), RICH_TYPE))
+DEFAULT_COMPOSITE_TYPE.freeze()
 
 # A Type that you can always set values on without any errors
 # Similar to how a standard unsafe Python Object works
@@ -1484,3 +1487,4 @@ NO_SETTER_ERROR_TYPE = OneOfType([ AnyType(), NO_SETTER_ERROR_COMPOSITE_TYPE ])
 NO_SETTER_ERROR_COMPOSITE_TYPE.set_micro_op_type(("get-wildcard",), GetterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), NO_SETTER_ERROR_TYPE, True))
 NO_SETTER_ERROR_COMPOSITE_TYPE.set_micro_op_type(("set-wildcard",), SetterWildcardMicroOpType(OneOfType([ StringType(), IntegerType() ]), NO_SETTER_ERROR_TYPE, False, False))
 NO_SETTER_ERROR_COMPOSITE_TYPE.set_micro_op_type(("iter",), IterMicroOpType(OneOfType([ StringType(), IntegerType() ]), NO_SETTER_ERROR_TYPE))
+NO_SETTER_ERROR_COMPOSITE_TYPE.freeze()

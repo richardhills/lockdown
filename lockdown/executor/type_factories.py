@@ -8,10 +8,11 @@ from lockdown.executor.function_type import enrich_break_type, \
     ClosedFunctionType
 from lockdown.executor.raw_code_factories import one_of_type
 from lockdown.type_system.composites import InferredType, CompositeType, \
-    Composite
+    Composite, InferredTypeFound
 from lockdown.type_system.core_types import UnitType, OneOfType, Const, AnyType, \
     IntegerType, BooleanType, NoValueType, StringType, Type, BottomType
 from lockdown.type_system.exceptions import FatalError
+from lockdown.type_system.micro_ops import MicroOpType
 from lockdown.type_system.universal_type import GetterMicroOpType, \
     SetterMicroOpType, InsertStartMicroOpType, InsertEndMicroOpType, \
     GetterWildcardMicroOpType, SetterWildcardMicroOpType, \
@@ -100,9 +101,12 @@ def build_list_type(data, cache):
 def inferred_opcode_factory(*args, **kwargs):
     return None
 
-class InferRemainerPlaceholder(object):
+class InferRemainderPlaceholder(MicroOpType):
     def __init__(self, base_type):
         self.base_type = base_type
+
+    def conflicts_with(self, our_type, other_type, reasoner):
+        raise InferredTypeFound()
 
 MICRO_OP_FACTORIES = {
     "get": lambda c, k, v: GetterMicroOpType(k, enrich_type_with_cache(v, c)),
@@ -115,7 +119,7 @@ MICRO_OP_FACTORIES = {
     "remove-wildcard": lambda c, ke, te: RemoverWildcardMicroOpType(ke, te),
     "insert-wildcard": lambda c, vt, ke, te: InserterWildcardMicroOpType(enrich_type_with_cache(vt, c), ke, te),
     "iter": lambda c, kt, vt: IterMicroOpType(enrich_type_with_cache(kt, c), enrich_type_with_cache(vt, c)),
-    "infer-remainder": lambda c, base_type: InferRemainerPlaceholder(enrich_type_with_cache(base_type, c))
+    "infer-remainder": lambda c, base_type: InferRemainderPlaceholder(enrich_type_with_cache(base_type, c))
 }
 
 def build_universal_type(data, cache):
@@ -145,7 +149,7 @@ def build_universal_type(data, cache):
         except TypeError:
             raise PreparationException("build_universal_type: {} {}".format(micro_op._get("type"), micro_op._get("params")))
 
-    return cache[data_id]
+    return cache[data_id].freeze()
 
 TYPES = {
     "Any": lambda data, cache: AnyType(),

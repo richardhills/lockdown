@@ -210,7 +210,7 @@ class TemplateOp(OpcodeOperandMixin, Opcode):
             micro_ops[("insert-start",)] = InsertStartMicroOpType(AnyType(), False)
             micro_ops[("insert-end",)] = InsertEndMicroOpType(AnyType(), False)
 
-            value_type = CompositeType(micro_ops, name="TemplateOp")
+            value_type = CompositeType(micro_ops, name="TemplateOp").freeze()
 
             break_types.add(self, "value", value_type)
 
@@ -264,8 +264,8 @@ class TemplateOp(OpcodeOperandMixin, Opcode):
 class MergeOp(OpcodeOperandMixin, Opcode):
     INVALID = OpcodeErrorType("MergeOp: invalid")
 
-    left = Operand(CompositeType({}, "MergeOp"), INVALID)
-    right = Operand(CompositeType({}, "MergeOp"), INVALID)
+    left = Operand(CompositeType({}, "MergeOp").freeze(), INVALID)
+    right = Operand(CompositeType({}, "MergeOp").freeze(), INVALID)
 
     def __init__(self, data, visitor, raw_code):
         super(MergeOp, self).__init__(data, visitor, raw_code)
@@ -316,7 +316,7 @@ class MergeOp(OpcodeOperandMixin, Opcode):
         micro_ops[("insert-start",)] = InsertStartMicroOpType(AnyType(), False)
         micro_ops[("insert-end",)] = InsertEndMicroOpType(AnyType(), False)
 
-        value_type = CompositeType(micro_ops, name="MergeOp")
+        value_type = CompositeType(micro_ops, name="MergeOp").freeze()
 
         break_types.add(self, "value", value_type)
 
@@ -380,7 +380,7 @@ class DereferenceOp(OpcodeOperandMixin, Opcode):
     INVALID_OF = OpcodeErrorType("DereferenceOp: invalid_of")
     INVALID_DEREFERENCE = OpcodeErrorType("DereferenceOp: invalid_dereference", reference=AnyType())
 
-    of = Operand(CompositeType({}, "DereferenceOp"), INVALID_OF)
+    of = Operand(CompositeType({}, "DereferenceOp").freeze(), INVALID_OF)
     reference = Operand(AnyType(), None)
 
     def __init__(self, data, visitor, raw_code):
@@ -882,7 +882,7 @@ class MapOp(OpcodeOperandMixin, Opcode):
     MISSING_MAPPER_FUNCTION = OpcodeErrorType("{}: missing_mapper_function")
     MISSING_ITER = OpcodeErrorType("{}: missing_iter")
 
-    composite = Operand(CompositeType({}, "MapOp"), MISSING_COMPOSITE_TYPE)
+    composite = Operand(CompositeType({}, "MapOp").freeze(), MISSING_COMPOSITE_TYPE)
     mapper = Operand(TOP_CLOSED_FUNCTION_TYPE, MISSING_MAPPER_FUNCTION)
 
     def __init__(self, data, visitor, raw_code):
@@ -952,7 +952,7 @@ class MapOp(OpcodeOperandMixin, Opcode):
             micro_ops[("insert-end",)] = InsertEndMicroOpType(AnyType(), False)
             micro_ops[("delete-wildcard",)] = DeletterWildcardMicroOpType(IntegerType(), True)
 
-            result = CompositeType(micro_ops, name="MapOp")
+            result = CompositeType(micro_ops, name="MapOp").freeze()
             break_types.add(self, "value", result)
 
         return break_types.build()
@@ -991,7 +991,7 @@ class MapOp(OpcodeOperandMixin, Opcode):
 
 class LengthOp(OpcodeOperandMixin, Opcode):
     INVALID_COMPOSITE_TYPE = OpcodeErrorType("{}: invalid_composite_type")
-    composite = Operand(CompositeType({}, "LengthOp"), INVALID_COMPOSITE_TYPE)
+    composite = Operand(CompositeType({}, "LengthOp").freeze(), INVALID_COMPOSITE_TYPE)
 
     def get_break_types(self, context, frame_manager, hooks, immediate_context=None):
         break_types = BreakTypesFactory(self)
@@ -1692,7 +1692,7 @@ def create_readonly_static_type(value):
 
             result.set_micro_op_type(("get-wildcard",), GetterWildcardMicroOpType(IntegerType(), merged_types, True))
             result.set_micro_op_type(("iter",), IterMicroOpType(IntegerType(), merged_types))
-        return result
+        return result.freeze()
     else:
         return get_type_of_value(value)
 

@@ -612,7 +612,6 @@ class ClosedFunction(LockdownFunction):
                     bind=get_environment().rtti,
                     reasoner=local_initializer_context_binding_reasoner
                 ):
-                    #get_manager(new_context)._context_type = self.open_function.local_initialization_context_type
                     local = frame.step("local", lambda: evaluate(self.open_function.local_initializer, new_context, frame_manager, hooks))
 
                 if get_environment().opcode_bindings and not is_type_bindable_to_value(local, self.open_function.local_type):

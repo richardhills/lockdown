@@ -47,7 +47,7 @@ class MicroOpType(object):
         """
         raise NotImplementedError(self)
 
-    def conflicts_with(self, our_type, other_type):
+    def conflicts_with(self, our_type, other_type, reasoner):
         """
         Returns True if the MicroOp would conflict with the other_type CompositeType - meaning that
         the MicroOp could not be added to the CompositeType without risking some data corruption.
@@ -134,7 +134,10 @@ def merge_composite_types(types, name=None):
     if len(types_with_opcodes) == 0:
         return EMPTY_COMPOSITE_TYPE
     if len(types_with_opcodes) == 1:
-        return types_with_opcodes[0].clone(name=name)
+        singular = types_with_opcodes[0]
+        if singular.frozen:
+            return singular
+        return singular.clone(name=name)
 
     result = {}
     for type in types_with_opcodes:
@@ -144,5 +147,5 @@ def merge_composite_types(types, name=None):
             else:
                 result[tag] = micro_op_type
 
-    return CompositeType(result, name=name)
+    return CompositeType(result, name=name).freeze()
 

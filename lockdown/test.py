@@ -5,6 +5,7 @@ import argparse
 import sys
 import unittest
 
+import lockdown
 from lockdown.utils.utils import profile, environment
 from sys import setrecursionlimit
 
